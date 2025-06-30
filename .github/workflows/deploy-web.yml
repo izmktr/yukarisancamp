@@ -1,0 +1,30 @@
+name: Deploy Web App
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'web-app-ts/**'
+      - 'schema/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build and Deploy to Firebase Hosting
+        run: |
+          cd web-app-ts
+          npm ci
+          npm run build
+          # firebase deploy ...
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}

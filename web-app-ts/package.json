@@ -1,0 +1,16 @@
+{
+  "name": "web-app-ts",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "generate-types": "npx json2ts --input ../schema/*.schema.json --output src/types.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "json-schema-to-typescript": "^14.0.5"
+  }
+}

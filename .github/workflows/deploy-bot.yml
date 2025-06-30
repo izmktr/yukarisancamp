@@ -1,0 +1,29 @@
+name: Deploy Discord Bot
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'discord-bot-py/**'
+      - 'schema/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Deploy to Google Cloud
+        run: |
+          cd discord-bot-py
+          pip install -r requirements.txt
+          # gcloud functions deploy ... or gcloud run deploy ...
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}

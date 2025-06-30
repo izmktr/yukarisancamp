@@ -19,3 +19,7 @@ Thumbs.db
 
 # その他
 *.log
+
+# Node.js
+node_modules/
+
