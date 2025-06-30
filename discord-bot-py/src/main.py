@@ -18,4 +18,7 @@ async def on_message(message):
     if message.content.startswith('$hello'):
         await message.channel.send('Hello!')
 
-client.run(os.getenv('DISCORD_TOKEN'))
+token = os.getenv('DISCORD_TOKEN')
+if not token:
+    raise RuntimeError('DISCORD_TOKEN が環境変数に設定されていません')
+client.run(token)
