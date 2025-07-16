@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "globalSetting",
+  "description": "A global setting stored in Firebase.",
+  "type": "object",
+  "properties": {
+    "max_sortie": {
+      "description": "プレイヤーが一度に攻撃できる最大数",
+      "type": "integer"
+    },
+    "enemy_list": {
+      "description": "敵のリスト",
+      "type": "array",
+        "enemy": {
+            "type": "string",
+            "description": "敵の名前"
+        },
+        "wave_hp":{
+            "description": "敵のHP",
+            "type": "array",
+            "hp": {
+                "type": "integer"
+            }
+        }
+    }
+  }
+}

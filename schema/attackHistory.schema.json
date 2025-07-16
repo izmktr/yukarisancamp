@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AttackHistory",
+  "description": "A history record of attack data.",
+  "type": "object",
+  "properties": {
+    "member": {
+      "description": "The member who performed the attack.",
+      "$ref": "clanMember.schema.json"
+    },
+    "day": {
+      "description": "The day of the attack.",
+      "type": "integer"
+    },
+    "sortie": {
+      "description": "The sortie information.",
+      "type": "integer"
+    },
+    "messageid": {
+      "description": "The message ID related to the attack.",
+      "type": "string"
+    },
+    "boss": {
+      "description": "The boss that was attacked.",
+      "type": "integer"
+    },
+    "overtime": {
+      "description": "Whether the attack was during overtime.",
+      "type": "boolean"
+    },
+    "defeat": {
+      "description": "Whether the boss was defeated.",
+      "type": "boolean"
+    },
+    "sortiecount": {
+      "description": "The number of sorties.",
+      "type": "integer"
+    },
+    "updatetime": {
+      "description": "The timestamp when the record was updated.",
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": ["member", "day", "sortie", "messageid", "boss", "overtime", "defeat", "sortiecount", "updatetime"]
+}
