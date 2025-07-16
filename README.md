@@ -28,6 +28,11 @@
    npm run generate-types
    ```
 
+4. **開発サーバーを起動します:**
+   ```bash
+   npm run dev
+   ```
+
 ### Discordボット
 
 1. **ボットのディレクトリに移動します:**
@@ -44,3 +49,14 @@
    ```bash
    datamodel-codegen --input ../schema/userProfile.schema.json --input-file-type jsonschema --output src/models.py
    ```
+
+4. **Discordボットを起動します:**
+   ```bash
+   python src/main.py
+   ```
+
+## 開発時の注意点
+
+- 環境変数 `DISCORD_TOKEN` を設定してからDiscordボットを起動してください
+- Webアプリケーションは通常 `http://localhost:3000` で起動します
+- スキーマファイルを変更した場合は、両方のプロジェクトで型定義/モデルの再生成が必要です
