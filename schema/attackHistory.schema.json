@@ -5,8 +5,8 @@
   "type": "object",
   "properties": {
     "member": {
-      "description": "The member who performed the attack.",
-      "$ref": "clanMember.schema.json"
+      "description": "The member ID who performed the attack.",
+      "type": "integer"
     },
     "day": {
       "description": "The day of the attack.",

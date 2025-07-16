@@ -24,7 +24,7 @@
       "description": "The attack history list.",
       "type": "array",
       "items": {
-        "$ref": "attackHistory.json"
+        "$ref": "attackHistory.schema.json"
       }
     },
     "plan": {

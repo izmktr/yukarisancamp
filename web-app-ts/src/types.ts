@@ -27,3 +27,101 @@ export interface UserProfile {
   favoriteThings?: string[];
   [k: string]: unknown;
 }
+
+/**
+ * A history record of attack data.
+ */
+export interface AttackHistory {
+  /**
+   * The member ID who performed the attack.
+   */
+  member: number;
+  /**
+   * The day of the attack.
+   */
+  day: number;
+  /**
+   * The sortie information.
+   */
+  sortie: number;
+  /**
+   * The message ID related to the attack.
+   */
+  messageid: string;
+  /**
+   * The boss that was attacked.
+   */
+  boss: number;
+  /**
+   * Whether the attack was during overtime.
+   */
+  overtime: boolean;
+  /**
+   * Whether the boss was defeated.
+   */
+  defeat: boolean;
+  /**
+   * The number of sorties.
+   */
+  sortiecount: number;
+  /**
+   * The timestamp when the record was updated.
+   */
+  updatetime: string;
+  [k: string]: unknown;
+}
+
+/**
+ * A clan member data structure for Discord bot.
+ */
+export interface ClanMember {
+  /**
+   * The unique ID of the user.
+   */
+  id: number;
+  /**
+   * The user's name.
+   */
+  name: string;
+  /**
+   * The mention name for the user.
+   */
+  mention: string;
+  /**
+   * The number of task kills performed.
+   */
+  taskkill: number;
+  /**
+   * The attack history list.
+   */
+  history: AttackHistory[];
+  /**
+   * The attack plan list.
+   */
+  plan: number[];
+  /**
+   * Attack management flags (None: not attacked, number: overtime seconds).
+   */
+  attacktime: (number | null)[];
+  /**
+   * Attack in progress flag (-1: not attacking, other: sortie number).
+   */
+  sortie: number;
+  /**
+   * The boss being attacked.
+   */
+  boss: number;
+  /**
+   * The attack declaration message (Discord Message object).
+   */
+  attackmessage?: { [k: string]: unknown } | null;
+  /**
+   * The deadline for reminders.
+   */
+  reportlimit?: string | null;
+  /**
+   * The timestamp of the last activity.
+   */
+  lastactive: string;
+  [k: string]: unknown;
+}
