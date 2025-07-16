@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "generate-types": "npx json2ts --input ../schema/*.schema.json --output src/types.ts"
+    "generate-types": "npx json-schema-to-typescript --input ../schema/userProfile.schema.json --output src/types.ts",
+    "build": "npm run generate-types && echo 'Build completed'"
   },
   "keywords": [],
   "author": "",
