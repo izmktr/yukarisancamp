@@ -4,14 +4,19 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "dev": "ts-node src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc && npm run generate-types",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "generate-types": "npx json-schema-to-typescript --input ../schema/userProfile.schema.json --output src/types.ts",
-    "build": "npm run generate-types && echo 'Build completed'"
+    "generate-types": "cd ../schema && npx json-schema-to-typescript --input userProfile.schema.json --output ../web-app-ts/src/types.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "json-schema-to-typescript": "^14.0.5"
+    "@types/node": "^24.0.14",
+    "json-schema-to-typescript": "^14.0.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
   }
 }
