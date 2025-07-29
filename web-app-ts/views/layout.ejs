@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <link rel="stylesheet" href="/styles/main.css">
+</head>
+<body>
+    <!-- ヘッダー -->
+    <header class="header">
+        <div class="header-content">
+            <div class="header-left">
+                <h1 class="title"><%= title %></h1>
+            </div>
+            <div class="header-right">
+                <div class="info-space">
+                    <span id="current-time"></span>
+                </div>
+                <div class="auth-buttons">
+                    <% if (isLoggedIn) { %>
+                        <span class="user-name">こんにちは、<%= userName %>さん</span>
+                        <button class="btn btn-logout" onclick="logout()">ログアウト</button>
+                    <% } else { %>
+                        <button class="btn btn-login" onclick="loginWithGoogle()">Googleでログイン</button>
+                    <% } %>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- タブナビゲーション -->
+    <nav class="tabs">
+        <div class="tab-content">
+            <a href="/users" class="tab <%= currentPage === 'users' ? 'active' : '' %>">ユーザー情報</a>
+            <a href="/board" class="tab <%= currentPage === 'board' ? 'active' : '' %>">掲示板</a>
+            <a href="/settings" class="tab <%= currentPage === 'settings' ? 'active' : '' %>">設定</a>
+        </div>
+    </nav>
+
+    <!-- メインコンテンツ -->
+    <main class="main-content">
+        <%- body %>
+    </main>
+
+    <script src="/scripts/main.js"></script>
+</body>
+</html>

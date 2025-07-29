@@ -1,0 +1,20 @@
+<div class="page-content">
+    <h2>ユーザー情報</h2>
+    <p>クランメンバーの情報を管理します。</p>
+    
+    <% if (typeof sampleUser !== 'undefined') { %>
+    <div class="user-info-card">
+        <h3>サンプルユーザー</h3>
+        <p><strong>ユーザーID:</strong> <%= sampleUser.userId %></p>
+        <p><strong>表示名:</strong> <%= sampleUser.displayName %></p>
+        <p><strong>作成日:</strong> <%= new Date(sampleUser.createdAt).toLocaleDateString('ja-JP') %></p>
+        <p><strong>好きなもの:</strong> <%= sampleUser.favoriteThings.join(', ') %></p>
+    </div>
+    <% } %>
+    
+    <div class="placeholder-content">
+        <div class="loading-message">
+            ユーザー一覧機能は準備中です...
+        </div>
+    </div>
+</div>
