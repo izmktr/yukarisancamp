@@ -23,3 +23,8 @@ Thumbs.db
 # Node.js
 node_modules/
 
+# firebase
+firebase.setting*
+
+#work
+work/

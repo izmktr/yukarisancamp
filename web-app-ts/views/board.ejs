@@ -2,9 +2,22 @@
     <h2>掲示板</h2>
     <p>クランメンバーとの情報共有スペースです。</p>
     
-    <div class="placeholder-content">
-        <div class="loading-message">
-            掲示板機能は準備中です...
-        </div>
+    <div class="board-header">
+        <a href="/board/post" class="btn btn-primary">新規投稿</a>
+    </div>
+    <div class="board-list">
+        <% if (typeof articles !== 'undefined' && articles.length > 0) { %>
+            <ul>
+                <% articles.forEach(function(article) { %>
+                    <li>
+                        <a href="/board/<%= article.id %>"><%= article.title %></a>
+                        <span class="author">by <%= article.author %></span>
+                        <span class="date"><%= article.date %></span>
+                    </li>
+                <% }); %>
+            </ul>
+        <% } else { %>
+            <div class="no-articles">記事がありません。</div>
+        <% } %>
     </div>
 </div>

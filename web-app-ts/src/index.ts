@@ -1,10 +1,19 @@
 import express from 'express';
+import session from 'express-session';
 import path from 'path';
 import expressLayouts from 'express-ejs-layouts';
 import { UserProfile } from './types';
+import boardApi from './api/board';
 
 const app = express();
 const port = 3000;
+
+// セッションミドルウェア追加
+app.use(session({
+  secret: 'yukarisan-secret',
+  resave: false,
+  saveUninitialized: true
+}));
 
 // EJSレイアウトの設定
 app.use(expressLayouts);
@@ -15,6 +24,9 @@ app.set('views', path.join(__dirname, '../views'));
 // 静的ファイルの設定
 app.use(express.static(path.join(__dirname, '../public')));
 app.use(express.json());
+
+// APIルーティング
+app.use('/api/board', boardApi);
 
 // 型定義のテスト用サンプルデータ
 const sampleUser: UserProfile = {
@@ -47,14 +59,8 @@ app.get('/users', (req, res) => {
   });
 });
 
-app.get('/board', (req, res) => {
-  res.render('board', { 
-    title: 'ゆかりさん△',
-    currentPage: 'board',
-    isLoggedIn: false,
-    userName: ''
-  });
-});
+import boardRouter from './routes/board';
+app.use('/board', boardRouter);
 
 app.get('/settings', (req, res) => {
   res.render('settings', { 

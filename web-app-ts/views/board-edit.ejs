@@ -1,0 +1,10 @@
+<div class="page-content">
+    <h2>記事編集</h2>
+    <form action="/board/save" method="post">
+        <div class="form-group">
+            <label for="timelog">投稿内容（timelog形式）</label>
+            <textarea id="timelog" name="timelog" rows="15" class="form-control"><%= typeof timelog !== 'undefined' ? timelog : '' %></textarea>
+        </div>
+        <button type="submit" class="btn btn-success">保存</button>
+    </form>
+</div>

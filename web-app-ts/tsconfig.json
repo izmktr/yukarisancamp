@@ -12,6 +12,8 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true
+    , "jsx": "react-jsx"
+    , "types": ["node", "express", "express-session", "../src/types"]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
