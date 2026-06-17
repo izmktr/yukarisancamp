@@ -1,0 +1,1 @@
+{"version":3,"file":"BoardEdit.d.ts","sourceRoot":"","sources":["../../../src/components/board/BoardEdit.tsx"],"names":[],"mappings":"AAAA,OAAO,KAAmB,MAAM,OAAO,CAAC;AACxC,OAAO,EAAE,eAAe,EAAE,MAAM,eAAe,CAAC;AAEhD,QAAA,MAAM,SAAS,EAAE,KAAK,CAAC,EAAE,CAAC;IAAE,OAAO,EAAE,eAAe,CAAC;IAAC,EAAE,CAAC,EAAE,MAAM,CAAC;IAAC,KAAK,CAAC,EAAE,OAAO,CAAA;CAAE,CAmCnF,CAAC;AAEF,eAAe,SAAS,CAAC"}

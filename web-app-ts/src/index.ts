@@ -8,6 +8,23 @@ import boardApi from './api/board';
 const app = express();
 const port = 3000;
 
+function getFirebaseConfigValue(key: string, fallback: string): string {
+  const value = process.env[key];
+  return value && value.trim().length > 0 ? value : fallback;
+}
+
+const firebaseConfig = {
+  apiKey: getFirebaseConfigValue('FIREBASE_API_KEY', 'AIzaSyDcD3rAJd8ayXudkYatnEdnzEga-V32rVQ'),
+  authDomain: getFirebaseConfigValue('FIREBASE_AUTH_DOMAIN', 'yukarisan-f3b06.firebaseapp.com'),
+  projectId: getFirebaseConfigValue('FIREBASE_PROJECT_ID', 'yukarisan-f3b06'),
+  storageBucket: getFirebaseConfigValue('FIREBASE_STORAGE_BUCKET', 'yukarisan-f3b06.firebasestorage.app'),
+  messagingSenderId: getFirebaseConfigValue('FIREBASE_MESSAGING_SENDER_ID', '995628919608'),
+  appId: getFirebaseConfigValue('FIREBASE_APP_ID', '1:995628919608:web:42683b4de1c4de6d5fefcd'),
+  measurementId: getFirebaseConfigValue('FIREBASE_MEASUREMENT_ID', 'G-PL9YLWJY76')
+};
+
+app.locals.firebaseConfig = firebaseConfig;
+
 // セッションミドルウェア追加
 app.use(session({
   secret: 'yukarisan-secret',
@@ -41,7 +58,7 @@ console.log('Sample user:', sampleUser);
 
 // ルート定義
 app.get('/', (req, res) => {
-  res.render('index', { 
+  res.render('index', {
     title: 'ゆかりさん△',
     currentPage: 'home',
     isLoggedIn: false,
@@ -50,7 +67,7 @@ app.get('/', (req, res) => {
 });
 
 app.get('/users', (req, res) => {
-  res.render('users', { 
+  res.render('users', {
     title: 'ゆかりさん△',
     currentPage: 'users',
     isLoggedIn: false,
@@ -63,7 +80,7 @@ import boardRouter from './routes/board';
 app.use('/board', boardRouter);
 
 app.get('/settings', (req, res) => {
-  res.render('settings', { 
+  res.render('settings', {
     title: 'ゆかりさん△',
     currentPage: 'settings',
     isLoggedIn: false,

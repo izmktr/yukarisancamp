@@ -43,6 +43,11 @@
         <%- body %>
     </main>
 
+    <script>
+        window.__FIREBASE_CONFIG__ = <%- JSON.stringify(typeof firebaseConfig !== 'undefined' ? firebaseConfig : {}) %>;
+    </script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
     <script src="/scripts/main.js"></script>
 </body>
 </html>

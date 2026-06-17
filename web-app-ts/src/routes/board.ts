@@ -2,6 +2,13 @@ import { Router } from 'express';
 import path from 'path';
 import fs from 'fs';
 
+// Session型拡張（TypeScriptエラー回避）
+declare module 'express-session' {
+  interface SessionData {
+    editingArticle?: any;
+  }
+}
+
 const router = Router();
 const DATA_DIR = path.join(__dirname, '../../data/board');
 
