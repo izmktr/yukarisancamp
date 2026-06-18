@@ -63,6 +63,50 @@ body {
     background: rgba(255, 255, 255, 0.3);
 }
 
+.btn {
+    border: none;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.btn-login {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: #ffffff;
+}
+
+.btn-login:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.btn-logout {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: #ffffff;
+}
+
+.btn-logout:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.btn-primary {
+    background: #667eea;
+    color: #ffffff;
+}
+
+.btn-primary:hover:not(:disabled) {
+    background: #5568ca;
+}
+
 /* タブナビゲーション */
 .tabs {
     background: #f8f9fa;
@@ -187,6 +231,92 @@ body {
     font-style: italic;
 }
 
+.settings-login-required {
+    margin-top: 1rem;
+    padding: 1rem;
+    border-radius: 8px;
+    background: #f6f8ff;
+    border: 1px solid #dde3ff;
+    color: #4a5480;
+}
+
+.settings-firebase-error {
+    margin-top: 1rem;
+    padding: 1rem;
+    border-radius: 8px;
+    background: #fff5f5;
+    border: 1px solid #f7c9c9;
+    color: #8d1b1b;
+}
+
+.settings-card {
+    margin-top: 1rem;
+    background: #ffffff;
+    border: 1px solid #e7ebf2;
+    border-radius: 12px;
+    padding: 1.5rem;
+}
+
+.settings-row {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #f1f3f8;
+}
+
+.settings-row:last-of-type {
+    border-bottom: none;
+}
+
+.settings-row label {
+    font-weight: 600;
+    color: #3d4666;
+}
+
+.settings-row input {
+    width: 100%;
+    max-width: 420px;
+    height: 40px;
+    border-radius: 8px;
+    border: 1px solid #c8d0e1;
+    padding: 0 0.75rem;
+    font-size: 14px;
+}
+
+.settings-row input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+}
+
+.settings-row.readonly span {
+    color: #2f3650;
+    word-break: break-word;
+}
+
+.settings-actions {
+    margin-top: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.settings-status {
+    min-height: 24px;
+    font-size: 0.9rem;
+    color: #5f6a8a;
+}
+
+.settings-status.success {
+    color: #0b7a35;
+}
+
+.settings-status.error {
+    color: #b42318;
+}
+
 /* レスポンシブデザイン */
 @media (max-width: 768px) {
     .header-content {
@@ -220,6 +350,20 @@ body {
 
     .card {
         padding: 1rem;
+    }
+
+    .settings-row {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+    }
+
+    .settings-row input {
+        max-width: none;
+    }
+
+    .settings-actions {
+        flex-direction: column;
+        align-items: flex-start;
     }
 }
 

@@ -1,6 +1,202 @@
 let auth = null;
 let googleProvider = null;
+let db = null;
 let isAuthInitialized = false;
+let currentAuthUser = null;
+let currentUserProfile = null;
+let currentProfileLoadErrorMessage = '';
+
+const USER_PROFILE_COLLECTION = 'userProfiles';
+
+function escapeHtml(value) {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function getDefaultDisplayName(user) {
+    return user.displayName || user.email || 'ユーザー';
+}
+
+function normalizeUserProfile(user, rawProfile) {
+    const safeProfile = rawProfile || {};
+    return {
+        googleUserId: user.uid,
+        displayName: typeof safeProfile.displayName === 'string' && safeProfile.displayName.trim().length > 0
+            ? safeProfile.displayName.trim()
+            : getDefaultDisplayName(user),
+        discordId: safeProfile.discordId ?? null,
+        discordServer: safeProfile.discordServer ?? null,
+        createdAt: typeof safeProfile.createdAt === 'number' ? safeProfile.createdAt : Date.now()
+    };
+}
+
+function getUserProfileDocRef(user) {
+    if (!db || !user) {
+        return null;
+    }
+    return db.collection(USER_PROFILE_COLLECTION).doc(user.uid);
+}
+
+async function ensureUserProfile(user) {
+    const docRef = getUserProfileDocRef(user);
+    if (!docRef) {
+        return null;
+    }
+
+    const snap = await docRef.get();
+    if (snap.exists) {
+        const normalized = normalizeUserProfile(user, snap.data());
+        return normalized;
+    }
+
+    const createdProfile = normalizeUserProfile(user, null);
+    await docRef.set(createdProfile);
+    return createdProfile;
+}
+
+function getLinkedDisplayValue(value) {
+    if (value === null || value === undefined || value === '') {
+        return '[未連携]';
+    }
+    return String(value);
+}
+
+function updateSettingsSaveButtonState() {
+    const saveButton = document.getElementById('settings-save-button');
+    const displayNameInput = document.getElementById('settings-display-name');
+    if (!saveButton || !displayNameInput) {
+        return;
+    }
+
+    const originalValue = displayNameInput.dataset.originalValue || '';
+    const currentValue = displayNameInput.value.trim();
+    const isChanged = currentValue !== originalValue;
+    const canSave = isChanged && currentValue.length > 0;
+
+    saveButton.disabled = !canSave;
+}
+
+function renderSettingsStatus(message, type) {
+    const status = document.getElementById('settings-status');
+    if (!status) {
+        return;
+    }
+
+    status.textContent = message;
+    status.classList.remove('success', 'error');
+    if (type === 'success') {
+        status.classList.add('success');
+    }
+    if (type === 'error') {
+        status.classList.add('error');
+    }
+}
+
+function renderSettings(user, profile) {
+    const loginRequired = document.getElementById('settings-login-required');
+    const firebaseError = document.getElementById('settings-firebase-error');
+    const profileSection = document.getElementById('settings-profile');
+    const displayNameInput = document.getElementById('settings-display-name');
+    const googleIdValue = document.getElementById('settings-google-id');
+    const discordIdValue = document.getElementById('settings-discord-id');
+    const discordServerValue = document.getElementById('settings-discord-server');
+    const createdAtValue = document.getElementById('settings-created-at');
+
+    if (!loginRequired || !firebaseError || !profileSection || !displayNameInput || !googleIdValue || !discordIdValue || !discordServerValue || !createdAtValue) {
+        return;
+    }
+
+    if (!user) {
+        loginRequired.style.display = 'block';
+        firebaseError.style.display = 'none';
+        profileSection.style.display = 'none';
+        return;
+    }
+
+    if (!profile) {
+        loginRequired.style.display = 'none';
+        profileSection.style.display = 'none';
+        firebaseError.textContent = currentProfileLoadErrorMessage || 'Firebaseからユーザー情報を取得できませんでした。';
+        firebaseError.style.display = 'block';
+        return;
+    }
+
+    loginRequired.style.display = 'none';
+    firebaseError.style.display = 'none';
+    profileSection.style.display = 'block';
+
+    displayNameInput.value = profile.displayName;
+    displayNameInput.dataset.originalValue = profile.displayName;
+    googleIdValue.textContent = profile.googleUserId;
+    discordIdValue.textContent = getLinkedDisplayValue(profile.discordId);
+    discordServerValue.textContent = getLinkedDisplayValue(profile.discordServer);
+    createdAtValue.textContent = new Date(profile.createdAt).toLocaleString('ja-JP');
+    renderSettingsStatus('', '');
+    updateSettingsSaveButtonState();
+}
+
+async function saveSettingsDisplayName() {
+    const displayNameInput = document.getElementById('settings-display-name');
+    const saveButton = document.getElementById('settings-save-button');
+
+    if (!displayNameInput || !saveButton || !currentAuthUser || !currentUserProfile) {
+        return;
+    }
+
+    const newDisplayName = displayNameInput.value.trim();
+    if (newDisplayName.length === 0) {
+        renderSettingsStatus('表示名を入力してください。', 'error');
+        return;
+    }
+
+    const docRef = getUserProfileDocRef(currentAuthUser);
+    if (!docRef) {
+        renderSettingsStatus('保存先に接続できませんでした。', 'error');
+        return;
+    }
+
+    try {
+        saveButton.disabled = true;
+        await docRef.update({ displayName: newDisplayName });
+
+        currentUserProfile = {
+            ...currentUserProfile,
+            displayName: newDisplayName
+        };
+
+        displayNameInput.dataset.originalValue = newDisplayName;
+        renderAuthState(currentAuthUser, currentUserProfile);
+        renderSettingsStatus('表示名を保存しました。', 'success');
+        updateSettingsSaveButtonState();
+    } catch (error) {
+        console.error('表示名の保存に失敗しました:', error);
+        renderSettingsStatus('保存に失敗しました。時間をおいて再試行してください。', 'error');
+    }
+}
+
+function initializeSettingsPage() {
+    const displayNameInput = document.getElementById('settings-display-name');
+    const saveButton = document.getElementById('settings-save-button');
+
+    if (!displayNameInput || !saveButton) {
+        return;
+    }
+
+    displayNameInput.addEventListener('input', () => {
+        updateSettingsSaveButtonState();
+        renderSettingsStatus('', '');
+    });
+
+    saveButton.addEventListener('click', async () => {
+        await saveSettingsDisplayName();
+    });
+
+    renderSettings(currentAuthUser, currentUserProfile);
+}
 
 function getFirebaseConfig() {
     return window.__FIREBASE_CONFIG__ || {};
@@ -10,16 +206,16 @@ function hasRequiredFirebaseConfig(config) {
     return Boolean(config.apiKey && config.authDomain && config.projectId && config.appId);
 }
 
-function renderAuthState(user) {
+function renderAuthState(user, profile = null) {
     const authButtons = document.querySelector('.auth-buttons');
     if (!authButtons) {
         return;
     }
 
     if (user) {
-        const userName = user.displayName || user.email || 'ユーザー';
+        const displayName = profile && profile.displayName ? profile.displayName : getDefaultDisplayName(user);
         authButtons.innerHTML = `
-            <span class="user-name">こんにちは、${userName}さん</span>
+            <span class="user-name">こんにちは、${escapeHtml(displayName)}さん</span>
             <button class="btn btn-logout" onclick="logout()">ログアウト</button>
         `;
         return;
@@ -52,9 +248,33 @@ function initializeFirebaseAuth() {
 
     auth = window.firebase.auth();
     googleProvider = new window.firebase.auth.GoogleAuthProvider();
+    db = typeof window.firebase.firestore === 'function' ? window.firebase.firestore() : null;
 
-    auth.onAuthStateChanged((user) => {
-        renderAuthState(user);
+    if (!db) {
+        console.error('Firestore SDK が読み込まれていません。');
+    }
+
+    auth.onAuthStateChanged(async (user) => {
+        currentAuthUser = user;
+        currentProfileLoadErrorMessage = '';
+
+        if (user && db) {
+            try {
+                currentUserProfile = await ensureUserProfile(user);
+            } catch (error) {
+                console.error('userProfile の取得または作成に失敗しました:', error);
+                currentProfileLoadErrorMessage = 'Firebaseからユーザー情報を取得できませんでした。権限設定またはネットワーク状態を確認してください。';
+                currentUserProfile = null;
+            }
+        } else if (user && !db) {
+            currentProfileLoadErrorMessage = 'Firestore SDKの初期化に失敗したため、ユーザー情報を取得できません。';
+            currentUserProfile = null;
+        } else {
+            currentUserProfile = null;
+        }
+
+        renderAuthState(user, currentUserProfile);
+        renderSettings(user, currentUserProfile);
     });
 
     isAuthInitialized = true;
@@ -83,6 +303,8 @@ async function logout() {
 
     try {
         await auth.signOut();
+        currentAuthUser = null;
+        currentUserProfile = null;
     } catch (error) {
         console.error('ログアウト失敗:', error);
         alert('ログアウトに失敗しました。');
@@ -166,6 +388,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Firebase初期化に失敗しても画面自体は利用可能にする
     initializeFirebaseAuth();
+    initializeSettingsPage();
 
     const currentPath = window.location.pathname;
     switch (currentPath) {

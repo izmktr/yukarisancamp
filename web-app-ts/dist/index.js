@@ -44,6 +44,7 @@ app.use(express_1.default.json());
 app.use('/api/board', board_1.default);
 // 型定義のテスト用サンプルデータ
 const sampleUser = {
+    googleUserId: "123456789",
     userId: "123456789",
     displayName: "テストユーザー",
     createdAt: Date.now(),

@@ -1,10 +1,42 @@
 <div class="page-content">
     <h2>設定</h2>
-    <p>アプリケーションの設定を管理できます。</p>
-    
-    <div class="placeholder-content">
-        <div class="loading-message">
-            設定画面は準備中です...
+    <p>Googleログインしたユーザーのプロフィールを管理します。</p>
+
+    <div id="settings-login-required" class="settings-login-required">
+        Googleログイン後に設定を編集できます。
+    </div>
+
+    <div id="settings-firebase-error" class="settings-firebase-error" style="display: none;"></div>
+
+    <div id="settings-profile" class="settings-card" style="display: none;">
+        <div class="settings-row">
+            <label for="settings-display-name">表示名</label>
+            <input id="settings-display-name" type="text" maxlength="100" />
+        </div>
+
+        <div class="settings-row readonly">
+            <label>Google ID</label>
+            <span id="settings-google-id"></span>
+        </div>
+
+        <div class="settings-row readonly">
+            <label>Discord ID</label>
+            <span id="settings-discord-id"></span>
+        </div>
+
+        <div class="settings-row readonly">
+            <label>Discord Server</label>
+            <span id="settings-discord-server"></span>
+        </div>
+
+        <div class="settings-row readonly">
+            <label>作成日時</label>
+            <span id="settings-created-at"></span>
+        </div>
+
+        <div class="settings-actions">
+            <button id="settings-save-button" class="btn btn-primary" disabled>保存</button>
+            <span id="settings-status" class="settings-status"></span>
         </div>
     </div>
 </div>

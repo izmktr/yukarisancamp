@@ -10,9 +10,17 @@
  */
 export interface UserProfile {
   /**
+   * The unique ID of the user (from Google).
+   */
+  googleUserId: string;
+  /**
    * The unique ID of the user (from Discord).
    */
-  userId: string;
+  discordId?: string | null;
+  /**
+   * The unique ID of the Discord server the user belongs to.
+   */
+  discordServer?: string | null;
   /**
    * The user's display name.
    */
@@ -21,9 +29,5 @@ export interface UserProfile {
    * The timestamp when the profile was created.
    */
   createdAt: number;
-  /**
-   * A list of the user's favorite things.
-   */
-  favoriteThings?: string[];
   [k: string]: unknown;
 }

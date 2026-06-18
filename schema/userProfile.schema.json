@@ -4,9 +4,17 @@
   "description": "A user profile stored in Firebase.",
   "type": "object",
   "properties": {
-    "userId": {
-      "description": "The unique ID of the user (from Discord).",
+    "googleUserId": {
+      "description": "The unique ID of the user (from Google).",
       "type": "string"
+    },
+    "discordId": {
+      "description": "The unique ID of the user (from Discord).",
+      "type": ["string", "null"]
+    },
+    "discordServer": {
+      "description": "The unique ID of the Discord server the user belongs to.",
+      "type": ["string", "null"]
     },
     "displayName": {
       "description": "The user's display name.",
@@ -15,14 +23,7 @@
     "createdAt": {
       "description": "The timestamp when the profile was created.",
       "type": "number"
-    },
-    "favoriteThings": {
-      "description": "A list of the user's favorite things.",
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
     }
   },
-  "required": ["userId", "displayName", "createdAt"]
+  "required": ["googleUserId", "displayName", "createdAt"]
 }

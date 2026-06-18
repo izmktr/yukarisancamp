@@ -50,6 +50,7 @@ app.use('/api/board', boardApi);
 
 // 型定義のテスト用サンプルデータ
 const sampleUser: UserProfile = {
+  googleUserId: "123456789",
   userId: "123456789",
   displayName: "テストユーザー",
   createdAt: Date.now(),
