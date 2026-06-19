@@ -5,6 +5,7 @@ let isAuthInitialized = false;
 let currentAuthUser = null;
 let currentUserProfile = null;
 let currentProfileLoadErrorMessage = '';
+let currentAuthInitErrorMessage = '';
 
 const USER_PROFILE_COLLECTION = 'userProfiles';
 
@@ -206,6 +207,11 @@ function hasRequiredFirebaseConfig(config) {
     return Boolean(config.apiKey && config.authDomain && config.projectId && config.appId);
 }
 
+function getMissingFirebaseConfigKeys(config) {
+    const requiredKeys = ['apiKey', 'authDomain', 'projectId', 'appId'];
+    return requiredKeys.filter((key) => !config || !config[key]);
+}
+
 function renderAuthState(user, profile = null) {
     const authButtons = document.querySelector('.auth-buttons');
     if (!authButtons) {
@@ -228,27 +234,37 @@ function renderAuthState(user, profile = null) {
 
 function initializeFirebaseAuth() {
     if (isAuthInitialized) {
+        currentAuthInitErrorMessage = '';
         return true;
     }
 
-    if (!window.firebase) {
+    if (!window.firebase || typeof window.firebase.initializeApp !== 'function') {
+        currentAuthInitErrorMessage = 'Firebase SDK の読み込みに失敗しました。CSP または外部 CDN 接続設定を確認してください。';
         console.error('Firebase SDK が読み込まれていません。');
         return false;
     }
 
     const firebaseConfig = getFirebaseConfig();
+    const missingKeys = getMissingFirebaseConfigKeys(firebaseConfig);
     if (!hasRequiredFirebaseConfig(firebaseConfig)) {
+        currentAuthInitErrorMessage = `Firebase 設定が不足しています。未設定: ${missingKeys.join(', ')}`;
         console.error('Firebase 設定が不足しています。', firebaseConfig);
         return false;
     }
 
-    if (!window.firebase.apps.length) {
-        window.firebase.initializeApp(firebaseConfig);
-    }
+    try {
+        if (!window.firebase.apps.length) {
+            window.firebase.initializeApp(firebaseConfig);
+        }
 
-    auth = window.firebase.auth();
-    googleProvider = new window.firebase.auth.GoogleAuthProvider();
-    db = typeof window.firebase.firestore === 'function' ? window.firebase.firestore() : null;
+        auth = window.firebase.auth();
+        googleProvider = new window.firebase.auth.GoogleAuthProvider();
+        db = typeof window.firebase.firestore === 'function' ? window.firebase.firestore() : null;
+    } catch (error) {
+        currentAuthInitErrorMessage = 'Firebase 初期化時に例外が発生しました。ブラウザコンソールを確認してください。';
+        console.error('Firebase 初期化例外:', error);
+        return false;
+    }
 
     if (!db) {
         console.error('Firestore SDK が読み込まれていません。');
@@ -278,12 +294,13 @@ function initializeFirebaseAuth() {
     });
 
     isAuthInitialized = true;
+    currentAuthInitErrorMessage = '';
     return true;
 }
 
 async function loginWithGoogle() {
     if (!initializeFirebaseAuth()) {
-        alert('Googleログインの初期化に失敗しました。設定を確認してください。');
+        alert(`Googleログインの初期化に失敗しました。\n${currentAuthInitErrorMessage || '設定を確認してください。'}`);
         return;
     }
 
