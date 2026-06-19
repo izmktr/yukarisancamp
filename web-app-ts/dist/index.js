@@ -4,10 +4,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const dotenv_1 = __importDefault(require("dotenv"));
-dotenv_1.default.config({ path: '.env.local' });
+const path_1 = __importDefault(require("path"));
+const envLocalPath = path_1.default.resolve(__dirname, '../.env.local');
+const envPath = path_1.default.resolve(__dirname, '../.env');
+dotenv_1.default.config({ path: envLocalPath });
+dotenv_1.default.config({ path: envPath });
 const express_1 = __importDefault(require("express"));
 const express_session_1 = __importDefault(require("express-session"));
-const path_1 = __importDefault(require("path"));
 const express_ejs_layouts_1 = __importDefault(require("express-ejs-layouts"));
 const board_1 = __importDefault(require("./api/board"));
 const app = (0, express_1.default)();

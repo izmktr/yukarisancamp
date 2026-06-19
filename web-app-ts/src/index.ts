@@ -1,9 +1,14 @@
 import dotenv from 'dotenv';
-dotenv.config({ path: '.env.local' });
+import path from 'path';
+
+const envLocalPath = path.resolve(__dirname, '../.env.local');
+const envPath = path.resolve(__dirname, '../.env');
+
+dotenv.config({ path: envLocalPath });
+dotenv.config({ path: envPath });
 
 import express from 'express';
 import session from 'express-session';
-import path from 'path';
 import expressLayouts from 'express-ejs-layouts';
 import { UserProfile } from './types';
 import boardApi from './api/board';
