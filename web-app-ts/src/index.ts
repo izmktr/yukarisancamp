@@ -49,6 +49,7 @@ app.set('views', path.join(__dirname, '../views'));
 // 静的ファイルの設定
 app.use(express.static(path.join(__dirname, '../public')));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // APIルーティング
 app.use('/api/board', boardApi);

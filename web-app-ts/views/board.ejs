@@ -10,9 +10,9 @@
             <ul>
                 <% articles.forEach(function(article) { %>
                     <li>
-                        <a href="/board/<%= article.id %>"><%= article.title %></a>
-                        <span class="author">by <%= article.author %></span>
-                        <span class="date"><%= article.date %></span>
+                        <a href="/board/<%= article.id %>"><%= article.mode %></a>
+                        <span class="author"><%= article.damage %></span>
+                        <span class="date"><%= article.battleDate %> <%= article.battleTime %></span>
                     </li>
                 <% }); %>
             </ul>

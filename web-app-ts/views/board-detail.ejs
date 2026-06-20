@@ -1,0 +1,36 @@
+<div class="page-content">
+    <h2>記事詳細</h2>
+    <div class="board-detail">
+        <p><strong>モード:</strong> <%= article.mode || '' %></p>
+        <p><strong>ダメージ:</strong> <%= article.damage || '' %></p>
+        <p><strong>バトル時間:</strong> <%= article.battleTime || '' %></p>
+        <p><strong>バトル日時:</strong> <%= article.battleDate || '' %></p>
+
+        <h3>パーティ編成</h3>
+        <% if (article.party && article.party.length > 0) { %>
+            <ul>
+                <% article.party.forEach(function(member) { %>
+                    <li><%= member %></li>
+                <% }); %>
+            </ul>
+        <% } else { %>
+            <p>未登録</p>
+        <% } %>
+
+        <h3>ユニオンバースト発動時間</h3>
+        <% if (article.ubTimes && article.ubTimes.length > 0) { %>
+            <ul>
+                <% article.ubTimes.forEach(function(ub) { %>
+                    <li><%= ub %></li>
+                <% }); %>
+            </ul>
+        <% } else { %>
+            <p>未登録</p>
+        <% } %>
+
+        <p>
+            <a href="/board/<%= id %>/edit" class="btn btn-primary">編集</a>
+            <a href="/board" class="btn">一覧へ戻る</a>
+        </p>
+    </div>
+</div>

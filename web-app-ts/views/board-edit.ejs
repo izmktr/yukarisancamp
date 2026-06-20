@@ -1,10 +1,39 @@
 <div class="page-content">
     <h2>記事編集</h2>
     <form action="/board/save" method="post">
+        <% if (typeof id !== 'undefined' && id) { %>
+            <input type="hidden" name="id" value="<%= id %>">
+        <% } %>
         <div class="form-group">
-            <label for="timelog">投稿内容（timelog形式）</label>
-            <textarea id="timelog" name="timelog" rows="15" class="form-control"><%= typeof timelog !== 'undefined' ? timelog : '' %></textarea>
+            <label for="mode">モード</label>
+            <input id="mode" name="mode" class="form-control" value="<%= article && article.mode ? article.mode : '' %>">
         </div>
+        <div class="form-group">
+            <label for="damage">ダメージ</label>
+            <input id="damage" name="damage" class="form-control" value="<%= article && article.damage ? article.damage : '' %>">
+        </div>
+        <div class="form-group">
+            <label for="battleTime">バトル時間</label>
+            <input id="battleTime" name="battleTime" class="form-control" value="<%= article && article.battleTime ? article.battleTime : '' %>">
+        </div>
+        <div class="form-group">
+            <label for="battleDate">バトル日時</label>
+            <input id="battleDate" name="battleDate" class="form-control" value="<%= article && article.battleDate ? article.battleDate : '' %>">
+        </div>
+        <div class="form-group">
+            <label for="party">パーティ編成（1行1件）</label>
+            <textarea id="party" name="party" rows="6" class="form-control"><%= article && article.party ? article.party.join('\n') : '' %></textarea>
+        </div>
+        <div class="form-group">
+            <label for="ubTimes">ユニオンバースト発動時間（1行1件）</label>
+            <textarea id="ubTimes" name="ubTimes" rows="6" class="form-control"><%= article && article.ubTimes ? article.ubTimes.join('\n') : '' %></textarea>
+        </div>
+        <% if (typeof timelog !== 'undefined' && timelog) { %>
+            <details>
+                <summary>元の timelog を表示</summary>
+                <pre><%= timelog %></pre>
+            </details>
+        <% } %>
         <button type="submit" class="btn btn-success">保存</button>
     </form>
 </div>
