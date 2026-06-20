@@ -98,6 +98,15 @@ app.get('/settings', (req, res) => {
   });
 });
 
+app.get('/clanbattle-settings', (req, res) => {
+  res.render('clanbattle-settings', {
+    title: 'ゆかりさん△',
+    currentPage: 'clanbattle-settings',
+    isLoggedIn: false,
+    userName: ''
+  });
+});
+
 // API時刻取得
 app.get('/api/time', (req, res) => {
   res.json({ time: new Date().toLocaleTimeString('ja-JP') });

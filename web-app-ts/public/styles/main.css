@@ -317,6 +317,51 @@ body {
     color: #b42318;
 }
 
+.cb-grid-header {
+    margin-top: 1rem;
+    padding: 0.5rem 0;
+    display: grid;
+    grid-template-columns: 60px 1fr 220px;
+    gap: 0.75rem;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #4a5480;
+}
+
+.cb-grid-row {
+    display: grid;
+    grid-template-columns: 60px 1fr 220px;
+    gap: 0.75rem;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #f1f3f8;
+}
+
+.cb-grid-row:last-of-type {
+    border-bottom: none;
+    margin-bottom: 0.5rem;
+}
+
+.cb-grid-row span {
+    font-weight: 600;
+    color: #3d4666;
+}
+
+.cb-grid-row input {
+    width: 100%;
+    height: 40px;
+    border-radius: 8px;
+    border: 1px solid #c8d0e1;
+    padding: 0 0.75rem;
+    font-size: 14px;
+}
+
+.cb-grid-row input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+}
+
 /* レスポンシブデザイン */
 @media (max-width: 768px) {
     .header-content {
@@ -365,6 +410,11 @@ body {
         flex-direction: column;
         align-items: flex-start;
     }
+
+    .cb-grid-header,
+    .cb-grid-row {
+        grid-template-columns: 48px 1fr 1fr;
+    }
 }
 
 @media (max-width: 480px) {
@@ -398,6 +448,16 @@ body {
 
     .page-content h2 {
         font-size: 1.3rem;
+    }
+
+    .cb-grid-header,
+    .cb-grid-row {
+        grid-template-columns: 36px 1fr;
+    }
+
+    .cb-grid-header span:nth-child(3),
+    .cb-grid-row input:nth-child(3) {
+        grid-column: 2;
     }
 }
 

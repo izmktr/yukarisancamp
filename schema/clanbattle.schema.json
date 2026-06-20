@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ClanBattle",
+  "description": "A clan battle setting schema.",
+  "type": "object",
+  "properties": {
+    "yearmonth": {
+      "description": "The year and month in YYYYMM format.",
+      "type": "string",
+      "pattern": "^[0-9]{6}$"
+    },
+    "bossname": {
+      "description": "The boss names for each round.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 5,
+      "maxItems": 5
+    },
+    "bossHp": {
+      "description": "The boss HP values for each round.",
+      "type": "array",
+      "items": {
+        "type": "integer"
+      },
+      "minItems": 5,
+      "maxItems": 5
+    },
+    "startDate": {
+      "description": "The start date of the clan battle.",
+      "type": "string",
+      "format": "date"
+    },
+    "endDate": {
+      "description": "The end date of the clan battle.",
+      "type": "string",
+      "format": "date"
+    }
+  },
+  "required": ["yearmonth", "bossname", "bossHp", "startDate", "endDate"]
+}

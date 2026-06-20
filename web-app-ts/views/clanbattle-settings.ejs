@@ -1,0 +1,64 @@
+<div class="page-content">
+    <h2>クラバト設定</h2>
+    <p>当月(YYYYMM)のクラバト設定を Firebase に保存します。未作成の場合は前月の値をコピーして作成します。</p>
+
+    <div id="cb-login-required" class="settings-login-required">
+        Googleログイン後にクラバト設定を編集できます。
+    </div>
+
+    <div id="cb-firebase-error" class="settings-firebase-error" style="display: none;"></div>
+
+    <div id="cb-settings" class="settings-card" style="display: none;">
+        <div class="settings-row readonly">
+            <label>対象年月(YYYYMM)</label>
+            <span id="cb-yearmonth"></span>
+        </div>
+
+        <div class="cb-grid-header">
+            <span>ボス</span>
+            <span>名前</span>
+            <span>HP</span>
+        </div>
+
+        <div class="cb-grid-row">
+            <span>1</span>
+            <input id="cb-bossname-1" type="text" maxlength="100" placeholder="ボス名" />
+            <input id="cb-bosshp-1" type="number" min="0" step="1" placeholder="HP" />
+        </div>
+        <div class="cb-grid-row">
+            <span>2</span>
+            <input id="cb-bossname-2" type="text" maxlength="100" placeholder="ボス名" />
+            <input id="cb-bosshp-2" type="number" min="0" step="1" placeholder="HP" />
+        </div>
+        <div class="cb-grid-row">
+            <span>3</span>
+            <input id="cb-bossname-3" type="text" maxlength="100" placeholder="ボス名" />
+            <input id="cb-bosshp-3" type="number" min="0" step="1" placeholder="HP" />
+        </div>
+        <div class="cb-grid-row">
+            <span>4</span>
+            <input id="cb-bossname-4" type="text" maxlength="100" placeholder="ボス名" />
+            <input id="cb-bosshp-4" type="number" min="0" step="1" placeholder="HP" />
+        </div>
+        <div class="cb-grid-row">
+            <span>5</span>
+            <input id="cb-bossname-5" type="text" maxlength="100" placeholder="ボス名" />
+            <input id="cb-bosshp-5" type="number" min="0" step="1" placeholder="HP" />
+        </div>
+
+        <div class="settings-row">
+            <label for="cb-start-date">開始日</label>
+            <input id="cb-start-date" type="date" />
+        </div>
+
+        <div class="settings-row">
+            <label for="cb-end-date">終了日</label>
+            <input id="cb-end-date" type="date" />
+        </div>
+
+        <div class="settings-actions">
+            <button id="cb-save-button" class="btn btn-primary" disabled>保存</button>
+            <span id="cb-status" class="settings-status"></span>
+        </div>
+    </div>
+</div>

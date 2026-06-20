@@ -8,6 +8,12 @@ let currentProfileLoadErrorMessage = '';
 let currentAuthInitErrorMessage = '';
 
 const USER_PROFILE_COLLECTION = 'userProfiles';
+const CLAN_BATTLE_COLLECTION = 'clanBattles';
+const CLAN_BATTLE_BOSS_COUNT = 5;
+
+let currentClanBattleDocId = '';
+let currentClanBattleState = null;
+let currentClanBattleOriginalState = null;
 
 function escapeHtml(value) {
     return String(value)
@@ -199,6 +205,407 @@ function initializeSettingsPage() {
     renderSettings(currentAuthUser, currentUserProfile);
 }
 
+function getCurrentYearMonth() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    return `${year}${month}`;
+}
+
+function getPreviousYearMonth(yearmonth) {
+    if (!/^\d{6}$/.test(yearmonth)) {
+        return '';
+    }
+
+    const year = Number(yearmonth.slice(0, 4));
+    const month = Number(yearmonth.slice(4, 6));
+    const date = new Date(year, month - 2, 1);
+    const prevYear = date.getFullYear();
+    const prevMonth = String(date.getMonth() + 1).padStart(2, '0');
+    return `${prevYear}${prevMonth}`;
+}
+
+function formatDateAsIsoLocal(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function getClanBattleDefaultDates(baseDate = new Date()) {
+    const year = baseDate.getFullYear();
+    const month = baseDate.getMonth();
+    const lastDay = new Date(year, month + 1, 0);
+
+    const startDate = new Date(lastDay);
+    startDate.setDate(lastDay.getDate() - 5);
+
+    const endDate = new Date(lastDay);
+    endDate.setDate(lastDay.getDate() - 1);
+
+    return {
+        startDate: formatDateAsIsoLocal(startDate),
+        endDate: formatDateAsIsoLocal(endDate)
+    };
+}
+
+function applyClanBattleDateDefaults(state) {
+    const defaults = getClanBattleDefaultDates();
+    return {
+        ...state,
+        startDate: state.startDate && state.startDate.trim() ? state.startDate : defaults.startDate,
+        endDate: state.endDate && state.endDate.trim() ? state.endDate : defaults.endDate
+    };
+}
+
+function getEmptyClanBattleState(yearmonth) {
+    const defaults = getClanBattleDefaultDates();
+    return {
+        yearmonth,
+        bossname: Array.from({ length: CLAN_BATTLE_BOSS_COUNT }, () => ''),
+        bossHp: Array.from({ length: CLAN_BATTLE_BOSS_COUNT }, () => ''),
+        startDate: defaults.startDate,
+        endDate: defaults.endDate
+    };
+}
+
+function normalizeClanBattleState(yearmonth, rawValue) {
+    const source = rawValue || {};
+    const bossname = Array.isArray(source.bossname) ? source.bossname : [];
+    const bossHp = Array.isArray(source.bossHp) ? source.bossHp : [];
+
+    return {
+        yearmonth,
+        bossname: Array.from({ length: CLAN_BATTLE_BOSS_COUNT }, (_, index) => {
+            const value = bossname[index];
+            return value === null || value === undefined ? '' : String(value);
+        }),
+        bossHp: Array.from({ length: CLAN_BATTLE_BOSS_COUNT }, (_, index) => {
+            const value = bossHp[index];
+            if (value === null || value === undefined || value === '') {
+                return '';
+            }
+            const numericValue = Number(value);
+            if (!Number.isFinite(numericValue)) {
+                return '';
+            }
+            return String(Math.trunc(numericValue));
+        }),
+        startDate: typeof source.startDate === 'string' ? source.startDate : '',
+        endDate: typeof source.endDate === 'string' ? source.endDate : ''
+    };
+}
+
+function cloneClanBattleState(state) {
+    return {
+        yearmonth: state.yearmonth,
+        bossname: [...state.bossname],
+        bossHp: [...state.bossHp],
+        startDate: state.startDate,
+        endDate: state.endDate
+    };
+}
+
+function isClanBattleStateSame(left, right) {
+    if (!left || !right) {
+        return false;
+    }
+
+    if (left.yearmonth !== right.yearmonth || left.startDate !== right.startDate || left.endDate !== right.endDate) {
+        return false;
+    }
+
+    for (let i = 0; i < CLAN_BATTLE_BOSS_COUNT; i += 1) {
+        if (left.bossname[i] !== right.bossname[i]) {
+            return false;
+        }
+        if (left.bossHp[i] !== right.bossHp[i]) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+function renderClanBattleStatus(message, type) {
+    const status = document.getElementById('cb-status');
+    if (!status) {
+        return;
+    }
+
+    status.textContent = message;
+    status.classList.remove('success', 'error');
+    if (type === 'success') {
+        status.classList.add('success');
+    }
+    if (type === 'error') {
+        status.classList.add('error');
+    }
+}
+
+function collectClanBattleStateFromForm() {
+    const yearmonthElement = document.getElementById('cb-yearmonth');
+    const startDateInput = document.getElementById('cb-start-date');
+    const endDateInput = document.getElementById('cb-end-date');
+
+    if (!yearmonthElement || !startDateInput || !endDateInput) {
+        return null;
+    }
+
+    const bossname = [];
+    const bossHp = [];
+    for (let i = 1; i <= CLAN_BATTLE_BOSS_COUNT; i += 1) {
+        const bossnameInput = document.getElementById(`cb-bossname-${i}`);
+        const bosshpInput = document.getElementById(`cb-bosshp-${i}`);
+        if (!bossnameInput || !bosshpInput) {
+            return null;
+        }
+
+        bossname.push(bossnameInput.value.trim());
+        bossHp.push(bosshpInput.value.trim());
+    }
+
+    return {
+        yearmonth: yearmonthElement.textContent || '',
+        bossname,
+        bossHp,
+        startDate: startDateInput.value,
+        endDate: endDateInput.value
+    };
+}
+
+function updateClanBattleSaveButtonState() {
+    const saveButton = document.getElementById('cb-save-button');
+    if (!saveButton) {
+        return;
+    }
+
+    const currentState = collectClanBattleStateFromForm();
+    const hasChanged = currentState && currentClanBattleOriginalState
+        ? !isClanBattleStateSame(currentState, currentClanBattleOriginalState)
+        : false;
+
+    saveButton.disabled = !hasChanged;
+}
+
+function renderClanBattleState(state) {
+    const yearmonthElement = document.getElementById('cb-yearmonth');
+    const startDateInput = document.getElementById('cb-start-date');
+    const endDateInput = document.getElementById('cb-end-date');
+
+    if (!yearmonthElement || !startDateInput || !endDateInput) {
+        return;
+    }
+
+    yearmonthElement.textContent = state.yearmonth;
+    startDateInput.value = state.startDate;
+    endDateInput.value = state.endDate;
+
+    for (let i = 1; i <= CLAN_BATTLE_BOSS_COUNT; i += 1) {
+        const bossnameInput = document.getElementById(`cb-bossname-${i}`);
+        const bosshpInput = document.getElementById(`cb-bosshp-${i}`);
+        if (!bossnameInput || !bosshpInput) {
+            continue;
+        }
+        bossnameInput.value = state.bossname[i - 1] || '';
+        bosshpInput.value = state.bossHp[i - 1] || '';
+    }
+
+    currentClanBattleState = cloneClanBattleState(state);
+    currentClanBattleOriginalState = cloneClanBattleState(state);
+    updateClanBattleSaveButtonState();
+    renderClanBattleStatus('', '');
+}
+
+function getClanBattleDocRef(yearmonth) {
+    if (!db || !yearmonth) {
+        return null;
+    }
+    return db.collection(CLAN_BATTLE_COLLECTION).doc(yearmonth);
+}
+
+async function ensureClanBattleStateForCurrentMonth() {
+    const yearmonth = getCurrentYearMonth();
+    currentClanBattleDocId = yearmonth;
+
+    const currentDocRef = getClanBattleDocRef(yearmonth);
+    if (!currentDocRef) {
+        throw new Error('Firestore に接続できませんでした。');
+    }
+
+    const currentSnap = await currentDocRef.get();
+    if (currentSnap.exists) {
+        const normalizedCurrent = normalizeClanBattleState(yearmonth, currentSnap.data());
+        const withDefaultsCurrent = applyClanBattleDateDefaults(normalizedCurrent);
+
+        if (normalizedCurrent.startDate !== withDefaultsCurrent.startDate || normalizedCurrent.endDate !== withDefaultsCurrent.endDate) {
+            await currentDocRef.set({
+                startDate: withDefaultsCurrent.startDate,
+                endDate: withDefaultsCurrent.endDate
+            }, { merge: true });
+        }
+
+        return withDefaultsCurrent;
+    }
+
+    const prevYearmonth = getPreviousYearMonth(yearmonth);
+    const prevDocRef = getClanBattleDocRef(prevYearmonth);
+    const prevSnap = prevDocRef ? await prevDocRef.get() : null;
+
+    const initialState = prevSnap && prevSnap.exists
+        ? normalizeClanBattleState(yearmonth, prevSnap.data())
+        : getEmptyClanBattleState(yearmonth);
+
+    const initialStateWithDefaults = applyClanBattleDateDefaults(initialState);
+
+    await currentDocRef.set({
+        yearmonth: initialStateWithDefaults.yearmonth,
+        bossname: [...initialStateWithDefaults.bossname],
+        bossHp: initialStateWithDefaults.bossHp.map((value) => (value === '' ? null : Number(value))),
+        startDate: initialStateWithDefaults.startDate,
+        endDate: initialStateWithDefaults.endDate
+    });
+
+    return initialStateWithDefaults;
+}
+
+async function saveClanBattleSettings() {
+    if (!currentAuthUser || !db || !currentClanBattleDocId) {
+        return;
+    }
+
+    const saveButton = document.getElementById('cb-save-button');
+    const formState = collectClanBattleStateFromForm();
+    if (!saveButton || !formState) {
+        return;
+    }
+
+    if (!/^\d{6}$/.test(formState.yearmonth)) {
+        renderClanBattleStatus('対象年月が不正です。画面を再読み込みしてください。', 'error');
+        return;
+    }
+
+    try {
+        saveButton.disabled = true;
+
+        const docRef = getClanBattleDocRef(currentClanBattleDocId);
+        if (!docRef) {
+            throw new Error('Firestore に接続できませんでした。');
+        }
+
+        const payload = {
+            yearmonth: formState.yearmonth,
+            bossname: formState.bossname.map((value) => value.trim()),
+            bossHp: formState.bossHp.map((value) => {
+                const trimmed = value.trim();
+                if (trimmed === '') {
+                    return null;
+                }
+                const numericValue = Number(trimmed);
+                return Number.isFinite(numericValue) ? Math.trunc(numericValue) : null;
+            }),
+            startDate: formState.startDate,
+            endDate: formState.endDate
+        };
+
+        const payloadWithDefaults = applyClanBattleDateDefaults(payload);
+
+        await docRef.set(payloadWithDefaults, { merge: true });
+
+        const normalized = normalizeClanBattleState(formState.yearmonth, payloadWithDefaults);
+        currentClanBattleState = cloneClanBattleState(normalized);
+        currentClanBattleOriginalState = cloneClanBattleState(normalized);
+        renderClanBattleState(normalized);
+
+        renderClanBattleStatus('クラバト設定を保存しました。', 'success');
+        updateClanBattleSaveButtonState();
+    } catch (error) {
+        console.error('クラバト設定の保存に失敗しました:', error);
+        renderClanBattleStatus('保存に失敗しました。時間をおいて再試行してください。', 'error');
+        updateClanBattleSaveButtonState();
+    }
+}
+
+async function renderClanBattleSettings(user) {
+    const loginRequired = document.getElementById('cb-login-required');
+    const firebaseError = document.getElementById('cb-firebase-error');
+    const settingsSection = document.getElementById('cb-settings');
+
+    if (!loginRequired || !firebaseError || !settingsSection) {
+        return;
+    }
+
+    if (!user) {
+        loginRequired.style.display = 'block';
+        firebaseError.style.display = 'none';
+        settingsSection.style.display = 'none';
+        currentClanBattleState = null;
+        currentClanBattleOriginalState = null;
+        currentClanBattleDocId = '';
+        return;
+    }
+
+    if (!db) {
+        loginRequired.style.display = 'none';
+        settingsSection.style.display = 'none';
+        firebaseError.textContent = 'Firestore SDK の初期化に失敗したため、クラバト設定を読み込めません。';
+        firebaseError.style.display = 'block';
+        return;
+    }
+
+    try {
+        const state = await ensureClanBattleStateForCurrentMonth();
+        renderClanBattleState(state);
+        loginRequired.style.display = 'none';
+        firebaseError.style.display = 'none';
+        settingsSection.style.display = 'block';
+    } catch (error) {
+        console.error('クラバト設定の読み込みに失敗しました:', error);
+        loginRequired.style.display = 'none';
+        settingsSection.style.display = 'none';
+        firebaseError.textContent = 'クラバト設定を読み込めませんでした。権限設定またはネットワーク状態を確認してください。';
+        firebaseError.style.display = 'block';
+    }
+}
+
+function initializeClanBattleSettingsPage() {
+    const saveButton = document.getElementById('cb-save-button');
+    if (!saveButton) {
+        return;
+    }
+
+    const onInputChanged = () => {
+        renderClanBattleStatus('', '');
+        updateClanBattleSaveButtonState();
+    };
+
+    for (let i = 1; i <= CLAN_BATTLE_BOSS_COUNT; i += 1) {
+        const bossnameInput = document.getElementById(`cb-bossname-${i}`);
+        const bosshpInput = document.getElementById(`cb-bosshp-${i}`);
+        if (bossnameInput) {
+            bossnameInput.addEventListener('input', onInputChanged);
+        }
+        if (bosshpInput) {
+            bosshpInput.addEventListener('input', onInputChanged);
+        }
+    }
+
+    const startDateInput = document.getElementById('cb-start-date');
+    const endDateInput = document.getElementById('cb-end-date');
+    if (startDateInput) {
+        startDateInput.addEventListener('input', onInputChanged);
+    }
+    if (endDateInput) {
+        endDateInput.addEventListener('input', onInputChanged);
+    }
+
+    saveButton.addEventListener('click', async () => {
+        await saveClanBattleSettings();
+    });
+
+    renderClanBattleSettings(currentAuthUser);
+}
+
 function getFirebaseConfig() {
     return window.__FIREBASE_CONFIG__ || {};
 }
@@ -291,6 +698,7 @@ function initializeFirebaseAuth() {
 
         renderAuthState(user, currentUserProfile);
         renderSettings(user, currentUserProfile);
+        await renderClanBattleSettings(user);
     });
 
     isAuthInitialized = true;
@@ -406,6 +814,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Firebase初期化に失敗しても画面自体は利用可能にする
     initializeFirebaseAuth();
     initializeSettingsPage();
+    initializeClanBattleSettingsPage();
 
     const currentPath = window.location.pathname;
     switch (currentPath) {
@@ -417,6 +826,9 @@ document.addEventListener('DOMContentLoaded', function() {
             break;
         case '/settings':
             console.log('設定ページが読み込まれました');
+            break;
+        case '/clanbattle-settings':
+            console.log('クラバト設定ページが読み込まれました');
             break;
         default:
             console.log('ホームページが読み込まれました');

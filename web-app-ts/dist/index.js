@@ -43,6 +43,7 @@ app.set('views', path_1.default.join(__dirname, '../views'));
 // 静的ファイルの設定
 app.use(express_1.default.static(path_1.default.join(__dirname, '../public')));
 app.use(express_1.default.json());
+app.use(express_1.default.urlencoded({ extended: true }));
 // APIルーティング
 app.use('/api/board', board_1.default);
 // 型定義のテスト用サンプルデータ
@@ -79,6 +80,14 @@ app.get('/settings', (req, res) => {
     res.render('settings', {
         title: 'ゆかりさん△',
         currentPage: 'settings',
+        isLoggedIn: false,
+        userName: ''
+    });
+});
+app.get('/clanbattle-settings', (req, res) => {
+    res.render('clanbattle-settings', {
+        title: 'ゆかりさん△',
+        currentPage: 'clanbattle-settings',
         isLoggedIn: false,
         userName: ''
     });
