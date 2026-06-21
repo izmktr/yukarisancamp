@@ -212,6 +212,192 @@ function getCurrentYearMonth() {
     return `${year}${month}`;
 }
 
+function getCurrentTimestampId() {
+    return new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
+}
+
+function getTimelineErrorMessage(error) {
+    if (error instanceof Error && error.message) {
+        return error.message;
+    }
+    return '投稿内容の変換に失敗しました。';
+}
+
+async function loadCurrentClanBattleBossNamesForPosting() {
+    if (!db) {
+        throw new Error('Firestore に接続できませんでした。');
+    }
+
+    const yearmonth = getCurrentYearMonth();
+    const docRef = getClanBattleDocRef(yearmonth);
+    if (!docRef) {
+        throw new Error('クラバト設定を取得できませんでした。');
+    }
+
+    const snap = await docRef.get();
+    if (!snap.exists) {
+        throw new Error(`クラバト設定が見つかりませんでした。対象年月: ${yearmonth}`);
+    }
+
+    const normalizedState = normalizeClanBattleState(yearmonth, snap.data());
+    const bossNames = normalizedState.bossname.map((value) => value.trim()).filter((value) => value.length > 0);
+    if (bossNames.length === 0) {
+        throw new Error(`クラバト設定の boss 名が未設定です。対象年月: ${yearmonth}`);
+    }
+
+    return { yearmonth, bossNames };
+}
+
+function parseTimelinePartyMember(line) {
+    const match = line.match(/^(.*?)\s+★(\d+)\s+Lv(\d+)\s+RANK(\d+)$/);
+    if (!match) {
+        throw new Error(`パーティ編成の形式が不正です: ${line}`);
+    }
+
+    return {
+        name: match[1].trim(),
+        star: Number(match[2]),
+        level: Number(match[3]),
+        rank: Number(match[4])
+    };
+}
+
+function parseTimelineUbEvent(line) {
+    const match = line.match(/^([0-9]{2}:[0-9]{2})\s+(.+)$/);
+    if (!match) {
+        throw new Error(`ユニオンバースト発動時間の形式が不正です: ${line}`);
+    }
+
+    return {
+        time: match[1],
+        character: match[2].trim()
+    };
+}
+
+function convertTimelogToTimelineInfo(rawText, yearmonth, bossNames) {
+    const lines = rawText.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0);
+    if (lines.length < 4) {
+        throw new Error('投稿内容が不足しています。');
+    }
+
+    const mode = lines[0];
+    const matchedBossname = [...bossNames].sort((left, right) => right.length - left.length).find((bossname) => mode.includes(bossname));
+    if (!matchedBossname) {
+        throw new Error('1行目にクラバト設定の boss 名が見つかりませんでした。');
+    }
+
+    const damageMatch = lines[1].match(/(\d+)/);
+    if (!damageMatch) {
+        throw new Error('ダメージ行の形式が不正です。');
+    }
+
+    const battleTime = lines[2].replace(/^バトル時間\s*/, '').trim();
+    if (!/^\d{2}:\d{2}$/.test(battleTime)) {
+        throw new Error('バトル時間の形式が不正です。');
+    }
+
+    const battleDate = lines[3].replace(/^バトル日時\s*/, '').trim();
+    if (!/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}$/.test(battleDate)) {
+        throw new Error('バトル日時の形式が不正です。');
+    }
+
+    const party = [];
+    const ubTimeline = [];
+    let section = '';
+
+    for (let index = 4; index < lines.length; index += 1) {
+        const line = lines[index];
+
+        if (line === '----') {
+            section = '';
+            continue;
+        }
+        if (line.startsWith('◆パーティ編成')) {
+            section = 'party';
+            continue;
+        }
+        if (line.startsWith('◆ユニオンバースト発動時間')) {
+            section = 'ub';
+            continue;
+        }
+
+        if (section === 'party') {
+            party.push(parseTimelinePartyMember(line));
+            continue;
+        }
+
+        if (section === 'ub') {
+            ubTimeline.push(parseTimelineUbEvent(line));
+        }
+    }
+
+    if (party.length === 0) {
+        throw new Error('パーティ編成が見つかりませんでした。');
+    }
+    if (ubTimeline.length === 0) {
+        throw new Error('ユニオンバースト発動時間が見つかりませんでした。');
+    }
+
+    return {
+        uniqueId: getCurrentTimestampId(),
+        yearmonth,
+        bossname: matchedBossname,
+        mode,
+        damage: Number(damageMatch[1]),
+        battleTime,
+        battleDate,
+        party,
+        ubTimeline
+    };
+}
+
+function renderBoardPostError(message) {
+    const errorElement = document.getElementById('board-post-error');
+    if (!errorElement) {
+        return;
+    }
+
+    errorElement.textContent = message;
+    errorElement.style.display = message ? 'block' : 'none';
+}
+
+function initializeBoardPostPage() {
+    const form = document.getElementById('board-post-form');
+    const timelogInput = document.getElementById('timelog');
+    const timelineInfoInput = document.getElementById('timelineInfo');
+
+    if (!form || !timelogInput || !timelineInfoInput) {
+        return;
+    }
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        renderBoardPostError('');
+
+        const rawText = timelogInput.value.trim();
+        if (!rawText) {
+            renderBoardPostError('投稿内容を入力してください。');
+            return;
+        }
+
+        try {
+            if (!db) {
+                if (!initializeFirebaseAuth()) {
+                    throw new Error(currentAuthInitErrorMessage || 'Firebase の初期化に失敗しました。');
+                }
+            }
+
+            const { yearmonth, bossNames } = await loadCurrentClanBattleBossNamesForPosting();
+            const timelineInfo = convertTimelogToTimelineInfo(rawText, yearmonth, bossNames);
+            timelineInfoInput.value = JSON.stringify(timelineInfo);
+            form.submit();
+        } catch (error) {
+            console.error('投稿内容の変換に失敗しました:', error);
+            renderBoardPostError(getTimelineErrorMessage(error));
+        }
+    });
+}
+
 function getPreviousYearMonth(yearmonth) {
     if (!/^\d{6}$/.test(yearmonth)) {
         return '';
@@ -815,6 +1001,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeFirebaseAuth();
     initializeSettingsPage();
     initializeClanBattleSettingsPage();
+    initializeBoardPostPage();
 
     const currentPath = window.location.pathname;
     switch (currentPath) {

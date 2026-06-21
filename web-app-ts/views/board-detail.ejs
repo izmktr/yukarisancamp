@@ -1,6 +1,8 @@
 <div class="page-content">
     <h2>記事詳細</h2>
     <div class="board-detail">
+        <p><strong>年月:</strong> <%= article.yearmonth || '' %></p>
+        <p><strong>ボス名:</strong> <%= article.bossname || '' %></p>
         <p><strong>モード:</strong> <%= article.mode || '' %></p>
         <p><strong>ダメージ:</strong> <%= article.damage || '' %></p>
         <p><strong>バトル時間:</strong> <%= article.battleTime || '' %></p>
@@ -10,7 +12,13 @@
         <% if (article.party && article.party.length > 0) { %>
             <ul>
                 <% article.party.forEach(function(member) { %>
-                    <li><%= member %></li>
+                    <li>
+                        <% if (member && typeof member === 'object') { %>
+                            <%= member.name || '' %> ★<%= member.star || '' %> Lv<%= member.level || '' %> RANK<%= member.rank || '' %>
+                        <% } else { %>
+                            <%= member %>
+                        <% } %>
+                    </li>
                 <% }); %>
             </ul>
         <% } else { %>
@@ -18,7 +26,19 @@
         <% } %>
 
         <h3>ユニオンバースト発動時間</h3>
-        <% if (article.ubTimes && article.ubTimes.length > 0) { %>
+        <% if (article.ubTimeline && article.ubTimeline.length > 0) { %>
+            <ul>
+                <% article.ubTimeline.forEach(function(ub) { %>
+                    <li>
+                        <% if (ub && typeof ub === 'object') { %>
+                            <%= ub.time || '' %> <%= ub.character || '' %>
+                        <% } else { %>
+                            <%= ub %>
+                        <% } %>
+                    </li>
+                <% }); %>
+            </ul>
+        <% } else if (article.ubTimes && article.ubTimes.length > 0) { %>
             <ul>
                 <% article.ubTimes.forEach(function(ub) { %>
                     <li><%= ub %></li>

@@ -21,6 +21,68 @@ type ParsedArticle = {
   ubTimes: string[];
 };
 
+type TimelinePartyMember = {
+  name: string;
+  star: number;
+  level: number;
+  rank: number;
+};
+
+type TimelineUbEvent = {
+  time: string;
+  character: string;
+};
+
+type TimelineInfo = {
+  uniqueId: string;
+  yearmonth: string;
+  bossname: string;
+  mode: string;
+  damage: number;
+  battleTime: string;
+  battleDate: string;
+  party: TimelinePartyMember[];
+  ubTimeline: TimelineUbEvent[];
+};
+
+function isTimelinePartyMember(value: unknown): value is TimelinePartyMember {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const member = value as TimelinePartyMember;
+  return typeof member.name === 'string'
+    && Number.isInteger(member.star)
+    && Number.isInteger(member.level)
+    && Number.isInteger(member.rank);
+}
+
+function isTimelineUbEvent(value: unknown): value is TimelineUbEvent {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const event = value as TimelineUbEvent;
+  return typeof event.time === 'string' && typeof event.character === 'string';
+}
+
+function isTimelineInfo(value: unknown): value is TimelineInfo {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const article = value as TimelineInfo;
+  return typeof article.uniqueId === 'string'
+    && /^\d{6}$/.test(article.yearmonth)
+    && typeof article.bossname === 'string'
+    && typeof article.mode === 'string'
+    && Number.isInteger(article.damage)
+    && /^\d{2}:\d{2}$/.test(article.battleTime)
+    && /^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}$/.test(article.battleDate)
+    && Array.isArray(article.party) && article.party.every(isTimelinePartyMember)
+    && Array.isArray(article.ubTimeline) && article.ubTimeline.every(isTimelineUbEvent);
+}
+
 function parseTimelog(text: string): ParsedArticle {
   const lines = text.split(/\r?\n/);
   const result: ParsedArticle = {
@@ -124,6 +186,30 @@ router.get('/:id/edit', (req, res) => {
 
 // 編集保存（新規・既存）
 router.post('/save', (req, res) => {
+  const nowId = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
+  const timelineInfoRaw = req.body.timelineInfo;
+
+  if (typeof timelineInfoRaw === 'string' && timelineInfoRaw.trim().length > 0) {
+    try {
+      const parsedTimelineInfo = JSON.parse(timelineInfoRaw);
+      if (!isTimelineInfo(parsedTimelineInfo)) {
+        return res.status(400).send('timelineInfo の形式が不正です');
+      }
+
+      const id = parsedTimelineInfo.uniqueId || req.body.id || nowId;
+      const timelineInfo: TimelineInfo = {
+        ...parsedTimelineInfo,
+        uniqueId: id
+      };
+
+      const file = path.join(DATA_DIR, id + '.json');
+      fs.writeFileSync(file, JSON.stringify(timelineInfo, null, 2), 'utf-8');
+      return res.redirect('/board/' + id);
+    } catch {
+      return res.status(400).send('timelineInfo の読み込みに失敗しました');
+    }
+  }
+
   const article: ParsedArticle = {
     mode: req.body.mode || '',
     damage: req.body.damage || '',
@@ -147,11 +233,8 @@ router.post('/save', (req, res) => {
     article.party = parsed.party;
     article.ubTimes = parsed.ubTimes;
   }
-  // 新規の場合はID生成
-  let id = req.body.id;
-  if (!id) {
-    id = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
-  }
+
+  const id = req.body.id || nowId;
   const file = path.join(DATA_DIR, id + '.json');
   fs.writeFileSync(file, JSON.stringify(article, null, 2), 'utf-8');
   res.redirect('/board/' + id);
