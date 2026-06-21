@@ -13,6 +13,7 @@ const express_1 = __importDefault(require("express"));
 const express_session_1 = __importDefault(require("express-session"));
 const express_ejs_layouts_1 = __importDefault(require("express-ejs-layouts"));
 const board_1 = __importDefault(require("./api/board"));
+const fs_1 = __importDefault(require("fs"));
 const app = (0, express_1.default)();
 const port = 3000;
 function getFirebaseConfigValue(key, fallback) {
@@ -42,6 +43,7 @@ app.set('view engine', 'ejs');
 app.set('views', path_1.default.join(__dirname, '../views'));
 // 静的ファイルの設定
 app.use(express_1.default.static(path_1.default.join(__dirname, '../public')));
+app.use('/chara-images', express_1.default.static(path_1.default.join(__dirname, '../chara')));
 app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
 // APIルーティング
@@ -90,6 +92,29 @@ app.get('/clanbattle-settings', (req, res) => {
         currentPage: 'clanbattle-settings',
         isLoggedIn: false,
         userName: ''
+    });
+});
+app.get('/chara-check', (req, res) => {
+    const charaIndexPath = path_1.default.join(__dirname, '../chara/charaindex.json');
+    let characters = [];
+    try {
+        const raw = fs_1.default.readFileSync(charaIndexPath, 'utf-8');
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+            characters = parsed.filter((item) => {
+                return item && typeof item.fileName === 'string' && typeof item.name === 'string';
+            });
+        }
+    }
+    catch (error) {
+        console.error('Failed to load character index:', error);
+    }
+    res.render('chara-check', {
+        title: 'ゆかりさん△',
+        currentPage: 'chara-check',
+        isLoggedIn: false,
+        userName: '',
+        characters
     });
 });
 // API時刻取得

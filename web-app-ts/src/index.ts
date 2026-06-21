@@ -12,6 +12,7 @@ import session from 'express-session';
 import expressLayouts from 'express-ejs-layouts';
 import { UserProfile } from './types';
 import boardApi from './api/board';
+import fs from 'fs';
 
 const app = express();
 const port = 3000;
@@ -48,6 +49,7 @@ app.set('views', path.join(__dirname, '../views'));
 
 // 静的ファイルの設定
 app.use(express.static(path.join(__dirname, '../public')));
+app.use('/chara-images', express.static(path.join(__dirname, '../chara')));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -104,6 +106,31 @@ app.get('/clanbattle-settings', (req, res) => {
     currentPage: 'clanbattle-settings',
     isLoggedIn: false,
     userName: ''
+  });
+});
+
+app.get('/chara-check', (req, res) => {
+  const charaIndexPath = path.join(__dirname, '../chara/charaindex.json');
+  let characters: { fileName: string; name: string }[] = [];
+
+  try {
+    const raw = fs.readFileSync(charaIndexPath, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      characters = parsed.filter((item): item is { fileName: string; name: string } => {
+        return item && typeof item.fileName === 'string' && typeof item.name === 'string';
+      });
+    }
+  } catch (error) {
+    console.error('Failed to load character index:', error);
+  }
+
+  res.render('chara-check', {
+    title: 'ゆかりさん△',
+    currentPage: 'chara-check',
+    isLoggedIn: false,
+    userName: '',
+    characters
   });
 });
 

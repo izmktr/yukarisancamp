@@ -8,6 +8,38 @@ const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const router = (0, express_1.Router)();
 const DATA_DIR = path_1.default.join(__dirname, '../../data/board');
+function isTimelinePartyMember(value) {
+    if (!value || typeof value !== 'object') {
+        return false;
+    }
+    const member = value;
+    return typeof member.name === 'string'
+        && Number.isInteger(member.star)
+        && Number.isInteger(member.level)
+        && Number.isInteger(member.rank);
+}
+function isTimelineUbEvent(value) {
+    if (!value || typeof value !== 'object') {
+        return false;
+    }
+    const event = value;
+    return typeof event.time === 'string' && typeof event.character === 'string';
+}
+function isTimelineInfo(value) {
+    if (!value || typeof value !== 'object') {
+        return false;
+    }
+    const article = value;
+    return typeof article.uniqueId === 'string'
+        && /^\d{6}$/.test(article.yearmonth)
+        && typeof article.bossname === 'string'
+        && typeof article.mode === 'string'
+        && Number.isInteger(article.damage)
+        && /^\d{2}:\d{2}$/.test(article.battleTime)
+        && /^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}$/.test(article.battleDate)
+        && Array.isArray(article.party) && article.party.every(isTimelinePartyMember)
+        && Array.isArray(article.ubTimeline) && article.ubTimeline.every(isTimelineUbEvent);
+}
 function parseTimelog(text) {
     const lines = text.split(/\r?\n/);
     const result = {
@@ -117,6 +149,27 @@ router.get('/:id/edit', (req, res) => {
 });
 // 編集保存（新規・既存）
 router.post('/save', (req, res) => {
+    const nowId = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
+    const timelineInfoRaw = req.body.timelineInfo;
+    if (typeof timelineInfoRaw === 'string' && timelineInfoRaw.trim().length > 0) {
+        try {
+            const parsedTimelineInfo = JSON.parse(timelineInfoRaw);
+            if (!isTimelineInfo(parsedTimelineInfo)) {
+                return res.status(400).send('timelineInfo の形式が不正です');
+            }
+            const id = parsedTimelineInfo.uniqueId || req.body.id || nowId;
+            const timelineInfo = {
+                ...parsedTimelineInfo,
+                uniqueId: id
+            };
+            const file = path_1.default.join(DATA_DIR, id + '.json');
+            fs_1.default.writeFileSync(file, JSON.stringify(timelineInfo, null, 2), 'utf-8');
+            return res.redirect('/board/' + id);
+        }
+        catch {
+            return res.status(400).send('timelineInfo の読み込みに失敗しました');
+        }
+    }
     const article = {
         mode: req.body.mode || '',
         damage: req.body.damage || '',
@@ -140,11 +193,7 @@ router.post('/save', (req, res) => {
         article.party = parsed.party;
         article.ubTimes = parsed.ubTimes;
     }
-    // 新規の場合はID生成
-    let id = req.body.id;
-    if (!id) {
-        id = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
-    }
+    const id = req.body.id || nowId;
     const file = path_1.default.join(DATA_DIR, id + '.json');
     fs_1.default.writeFileSync(file, JSON.stringify(article, null, 2), 'utf-8');
     res.redirect('/board/' + id);
