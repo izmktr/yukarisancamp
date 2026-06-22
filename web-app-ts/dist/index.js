@@ -14,6 +14,11 @@ const express_session_1 = __importDefault(require("express-session"));
 const express_ejs_layouts_1 = __importDefault(require("express-ejs-layouts"));
 const board_1 = __importDefault(require("./api/board"));
 const fs_1 = __importDefault(require("fs"));
+function parseClanDataJson(raw) {
+    // Preserve large Discord IDs in bosshistory.member without external parser.
+    const normalized = raw.replace(/("member"\s*:\s*)(\d{16,})/g, '$1"$2"');
+    return JSON.parse(normalized);
+}
 const app = (0, express_1.default)();
 const port = 3000;
 function getFirebaseConfigValue(key, fallback) {
@@ -115,6 +120,35 @@ app.get('/chara-check', (req, res) => {
         isLoggedIn: false,
         userName: '',
         characters
+    });
+});
+// クランデータ詳細表示
+app.get('/clandata/:id', (req, res) => {
+    const clanId = req.params.id;
+    const clanDataPath = path_1.default.join(__dirname, '../clandata', `${clanId}.json`);
+    let clanData = null;
+    let error = null;
+    try {
+        if (fs_1.default.existsSync(clanDataPath)) {
+            const raw = fs_1.default.readFileSync(clanDataPath, 'utf-8');
+            clanData = parseClanDataJson(raw);
+        }
+        else {
+            error = `クランID: ${clanId} のデータが見つかりません`;
+        }
+    }
+    catch (err) {
+        console.error('Failed to load clan data:', err);
+        error = `クランデータの読み込みに失敗しました: ${err instanceof Error ? err.message : '不明なエラー'}`;
+    }
+    res.render('clandata-detail', {
+        title: 'ゆかりさん△ - クランデータ',
+        currentPage: 'clandata',
+        isLoggedIn: false,
+        userName: '',
+        clanId,
+        clanData,
+        error
     });
 });
 // API時刻取得

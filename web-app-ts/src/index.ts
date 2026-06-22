@@ -14,6 +14,12 @@ import { UserProfile } from './types';
 import boardApi from './api/board';
 import fs from 'fs';
 
+function parseClanDataJson(raw: string): any {
+  // Preserve large Discord IDs in bosshistory.member without external parser.
+  const normalized = raw.replace(/("member"\s*:\s*)(\d{16,})/g, '$1"$2"');
+  return JSON.parse(normalized);
+}
+
 const app = express();
 const port = 3000;
 
@@ -131,6 +137,36 @@ app.get('/chara-check', (req, res) => {
     isLoggedIn: false,
     userName: '',
     characters
+  });
+});
+
+// クランデータ詳細表示
+app.get('/clandata/:id', (req, res) => {
+  const clanId = req.params.id;
+  const clanDataPath = path.join(__dirname, '../clandata', `${clanId}.json`);
+  let clanData: any = null;
+  let error: string | null = null;
+
+  try {
+    if (fs.existsSync(clanDataPath)) {
+      const raw = fs.readFileSync(clanDataPath, 'utf-8');
+      clanData = parseClanDataJson(raw);
+    } else {
+      error = `クランID: ${clanId} のデータが見つかりません`;
+    }
+  } catch (err) {
+    console.error('Failed to load clan data:', err);
+    error = `クランデータの読み込みに失敗しました: ${err instanceof Error ? err.message : '不明なエラー'}`;
+  }
+
+  res.render('clandata-detail', {
+    title: 'ゆかりさん△ - クランデータ',
+    currentPage: 'clandata',
+    isLoggedIn: false,
+    userName: '',
+    clanId,
+    clanData,
+    error
   });
 });
 
