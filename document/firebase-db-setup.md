@@ -53,7 +53,10 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /userProfiles/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && request.auth.uid == userId 
+        && !('role' in request.resource.data.keys());
     }
 
     match /clanBattles/{yearmonth} {
@@ -64,8 +67,13 @@ service cloud.firestore {
 }
 ```
 
+**セキュリティ対応の説明:**
+- `userProfiles` では `role` フィールドの直接書き込みを禁止しています。`role` はサーバー側（Firebase Admin SDK）でのみ設定してください。
+- クライアント側からは、`displayName`, `discordId`, `discordServer` など、`role` 以外のフィールドのみ更新可能です。
+
 運用メモ:
 - clanBattles の編集権限を管理者のみにしたい場合は、カスタムクレームや allow 条件を追加してください。
+- `role` を付与するには、Firebase Admin SDK を使用するか、ドキュメント手動編集で行ってください。
 
 ## 4. 本アプリのデータ構造
 

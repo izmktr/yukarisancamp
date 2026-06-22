@@ -23,6 +23,12 @@
     "createdAt": {
       "description": "The timestamp when the profile was created.",
       "type": "number"
+    },
+    "role": {
+      "description": "The user's role (managed by server only). Set by Admin SDK only, not directly editable by users.",
+      "type": "string",
+      "enum": ["user", "admin"],
+      "default": "user"
     }
   },
   "required": ["googleUserId", "displayName", "createdAt"]

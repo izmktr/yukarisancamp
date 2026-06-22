@@ -15,6 +15,17 @@ import expressLayouts from 'express-ejs-layouts';
 import boardApi from './api/board';
 import fs from 'fs';
 
+// Admin ユーザーのホワイトリスト管理
+// セキュリティ: role はクライアント側から送信されず、サーバー側のホワイトリストのみで管理される
+const ADMIN_WHITELIST: Set<string> = new Set([
+  // admin ユーザーの googleUserId をここに追加
+  // 例: '123456789...@google.com' など
+]);
+
+function isAdminUser(googleUserId: string | undefined): boolean {
+  return googleUserId ? ADMIN_WHITELIST.has(googleUserId) : false;
+}
+
 function parseClanDataJson(raw: string): any {
   // Preserve large Discord IDs in bosshistory.member without external parser.
   const normalized = raw.replace(/("member"\s*:\s*)(\d{16,})/g, '$1"$2"');
@@ -187,22 +198,26 @@ app.get('/api/user', (req, res) => {
 });
 
 // ユーザーセッション保存API
+// セキュリティ: クライアント側から送信された role は無視し、サーバー側のホワイトリストで role を決定
 app.post('/api/user/session', express.json(), async (req, res) => {
   try {
-    const { googleUserId, displayName, role } = req.body;
+    const { googleUserId, displayName } = req.body;
     
     if (!googleUserId) {
       return res.status(400).json({ error: 'googleUserId is required' });
     }
 
+    // role はサーバー側のホワイトリストから判定（クライアント側の role 値は無視）
+    const role = isAdminUser(googleUserId) ? 'admin' : 'user';
+
     // セッションにユーザー情報を保存
     req.session.user = {
       googleUserId,
       displayName: displayName || 'ユーザー',
-      role: role || 'user'
+      role
     };
 
-    res.json({ success: true, message: 'User session saved' });
+    res.json({ success: true, message: 'User session saved', role });
   } catch (error) {
     console.error('Error saving user session:', error);
     res.status(500).json({ error: 'Failed to save user session' });

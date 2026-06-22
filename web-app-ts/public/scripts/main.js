@@ -873,14 +873,14 @@ function initializeFirebaseAuth() {
                 currentUserProfile = await ensureUserProfile(user);
                 
                 // サーバーにユーザー情報を送信してセッションを保存
+                // 注意: role はサーバー側で Firestore から取得するため、クライアント側では送信しない（セキュリティ）
                 if (currentUserProfile) {
                     await fetch('/api/user/session', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             googleUserId: currentUserProfile.googleUserId,
-                            displayName: currentUserProfile.displayName,
-                            role: currentUserProfile.role
+                            displayName: currentUserProfile.displayName
                         })
                     }).catch(err => console.error('Failed to save user session:', err));
                 }
