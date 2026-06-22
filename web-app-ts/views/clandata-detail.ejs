@@ -1,7 +1,14 @@
 <div class="clandata-detail-container">
   <div class="clandata-header">
     <h2>クランデータ詳細</h2>
-    <p class="clandata-id">クランID: <strong><%= clanId %></strong></p>
+    <% const hasClanName = clanData && typeof clanData.name === 'string' && clanData.name.trim().length > 0; %>
+    <p class="clandata-id">
+      <% if (hasClanName) { %>
+        <strong><%= clanData.name %></strong>
+      <% } else { %>
+        クランID: <strong><%= clanId %></strong>
+      <% } %>
+    </p>
   </div>
 
   <% if (error) { %>
@@ -32,7 +39,7 @@
               <div class="bosscount-item <%= countStateClass %>">
                 <p>
                   <span class="boss-name-label" data-boss-index="<%= idx %>">ボス <%= idx + 1 %></span>:
-                  <strong><%= count %></strong>
+                  <strong><%= Number(count) + 1 %></strong>
                 </p>
               </div>
             <% }); %>
@@ -56,24 +63,63 @@
                 </tr>
               </thead>
               <tbody>
-                <% for (const member of Object.values(clanData.members)) { %>
-                  <% 
-                    const attackTimes = Array.isArray(member.attacktime) ? member.attacktime : [];
-                    const attackCount = attackTimes.reduce((sum, t) => {
+                <% 
+                  const calcAttackCount = (member) => {
+                    const attackTimes = Array.isArray(member?.attacktime) ? member.attacktime : [];
+                    return attackTimes.reduce((sum, t) => {
                       if (t === 0) return sum + 1;
                       if (t === null) return sum;
                       return sum + 0.5;
                     }, 0);
+                  };
+
+                  const sortedMembers = Object.values(clanData.members).sort((left, right) => {
+                    const diff = calcAttackCount(left) - calcAttackCount(right);
+                    if (diff !== 0) {
+                      return diff;
+                    }
+                    return String(left?.name ?? '').localeCompare(String(right?.name ?? ''), 'ja');
+                  });
+                %>
+
+                <% for (const member of sortedMembers) { %>
+                  <% 
+                    const attackCount = calcAttackCount(member);
 
                     const sortedPlan = Array.isArray(member.plan)
                       ? [...member.plan].sort((a, b) => Number(a) - Number(b))
                       : [];
                     const previousDay = sortedPlan.map((p) => Number(p) + 1).join(',');
+
+                    const historyList = Array.isArray(member.history)
+                      ? [...member.history]
+                          .filter((item) => item && typeof item === 'object')
+                          .sort((a, b) => {
+                            const sortieDiff = Number(a.sortie) - Number(b.sortie);
+                            if (sortieDiff !== 0) {
+                              return sortieDiff;
+                            }
+                            return String(a.updatetime ?? '').localeCompare(String(b.updatetime ?? ''));
+                          })
+                      : [];
                   %>
                   <tr>
                     <td><%= member.name || 'Unknown' %></td>
                     <td><%= attackCount %></td>
-                    <td></td>
+                    <td class="member-history-cell">
+                      <% historyList.forEach((item) => { %>
+                        <% 
+                          const sortieNumber = Number(item.sortie);
+                          const bossNumber = Number(item.boss);
+                          const bossId = ((bossNumber % 5) + 5) % 5;
+                          const loop = Math.floor(bossNumber / 5) + 1;
+                          const optionText = item.defeat === true ? ` [討伐:${Number(item.overtime ?? 0)}]` : '';
+                        %>
+                        <div class="member-history-entry">
+                          <%= sortieNumber + 1 %>凸 <%= loop %>周 <span class="boss-name-label" data-boss-index="<%= bossId %>">ボス <%= bossId + 1 %></span><%= optionText %>
+                        </div>
+                      <% }); %>
+                    </td>
                     <td><%= previousDay %></td>
                     <td><%= member.taskkill && member.taskkill !== 0 ? '❗' : '' %></td>
                   </tr>
@@ -85,11 +131,41 @@
       <% } %>
 
       <!-- ボス履歴 -->
-      <% if (clanData.bosshistory && Array.isArray(clanData.bosshistory) && clanData.bosshistory.length > 0) { %>
+      <% 
+        const membersMap = clanData.members && typeof clanData.members === 'object' ? clanData.members : {};
+        const memberHistoryList = Object.values(membersMap).flatMap((member) => {
+          return member && Array.isArray(member.history) ? member.history : [];
+        });
+        const rootBossHistory = Array.isArray(clanData.bosshistory) ? clanData.bosshistory : [];
+        const combinedBossHistory = [...rootBossHistory, ...memberHistoryList];
+
+        const historyMap = new Map();
+        combinedBossHistory.forEach((item) => {
+          if (!item || typeof item !== 'object') {
+            return;
+          }
+          const uniqueKey = [
+            String(item.messageid ?? ''),
+            String(item.member ?? ''),
+            String(item.day ?? ''),
+            String(item.sortie ?? ''),
+            String(item.boss ?? ''),
+            String(item.updatetime ?? '')
+          ].join('|');
+          if (!historyMap.has(uniqueKey)) {
+            historyMap.set(uniqueKey, item);
+          }
+        });
+
+        const mergedHistoryList = Array.from(historyMap.values()).filter((item) => {
+          return item && typeof item === 'object' && Number.isFinite(Number(item.boss)) && Number.isFinite(Number(item.day));
+        });
+      %>
+      <% if (mergedHistoryList.length > 0) { %>
         <% 
-          const membersMap = clanData.members && typeof clanData.members === 'object' ? clanData.members : {};
-          const historyList = clanData.bosshistory
-            .filter((item) => item && typeof item === 'object' && Number.isFinite(Number(item.boss)) && Number.isFinite(Number(item.day)));
+          const historyList = [...mergedHistoryList].sort((a, b) => {
+            return String(a.updatetime ?? '').localeCompare(String(b.updatetime ?? ''));
+          });
 
           const maxDay = historyList.reduce((max, item) => Math.max(max, Number(item.day)), 0);
           const maxLoop = historyList.reduce((max, item) => Math.max(max, Math.floor(Number(item.boss) / 5)), 0);
@@ -112,12 +188,18 @@
               <tbody>
                 <% for (let loop = maxLoop; loop >= minLoop; loop -= 1) { %>
                   <tr>
-                    <td class="bosshistory-loop"><%= loop %></td>
+                    <td class="bosshistory-loop"><%= loop + 1 %></td>
                     <% for (let bossid = 0; bossid < 5; bossid += 1) { %>
                       <% 
                         const cellItems = historyList
                           .filter((item) => Math.floor(Number(item.boss) / 5) === loop && Number(item.boss) % 5 === bossid)
-                          .sort((a, b) => Number(a.sortie) - Number(b.sortie));
+                          .sort((a, b) => {
+                            const timeDiff = String(a.updatetime ?? '').localeCompare(String(b.updatetime ?? ''));
+                            if (timeDiff !== 0) {
+                              return timeDiff;
+                            }
+                            return Number(a.sortie) - Number(b.sortie);
+                          });
                       %>
                       <td class="bosshistory-cell">
                         <% cellItems.forEach((item) => { %>
@@ -129,11 +211,11 @@
                             const memberData = matchedMemberEntry ? matchedMemberEntry[1] : null;
                             const memberName = memberData && typeof memberData.name === 'string'
                               ? memberData.name
-                              : memberIdText;
+                              : '(不明)';
 
                             let option = '';
                             if (item.defeat === true) {
-                              option = ` [討伐:(${Number(item.overtime ?? 0)})]`;
+                              option = ` [討伐:${Number(item.overtime ?? 0)}]`;
                             } else if (item.defeat === false && Number(item.sortiecount ?? 0) < 1) {
                               option = ' [持]';
                             }
@@ -290,6 +372,20 @@
     background-color: #f1f7ff;
   }
 
+  .member-history-cell {
+    white-space: normal;
+    min-width: 240px;
+  }
+
+  .member-history-entry {
+    margin-bottom: 4px;
+    line-height: 1.4;
+  }
+
+  .member-history-entry:last-child {
+    margin-bottom: 0;
+  }
+
   .bosscount-display {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -368,6 +464,6 @@
   }
 
   .bosshistory-entry.history-old-day {
-    color: #888;
+    color: #6ea8d9;
   }
 </style>

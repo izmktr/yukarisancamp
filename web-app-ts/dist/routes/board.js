@@ -71,8 +71,17 @@ function parseTimelog(text) {
     }
     return result;
 }
+function getAuthViewData(req) {
+    const userSession = req.session.user;
+    return {
+        isLoggedIn: !!userSession,
+        userName: userSession?.displayName || '',
+        isAdmin: userSession?.role === 'admin'
+    };
+}
 // 記事一覧
 router.get('/', (req, res) => {
+    const auth = getAuthViewData(req);
     const files = fs_1.default.readdirSync(DATA_DIR).filter(f => f.endsWith('.json'));
     const articles = files.map(file => {
         const data = JSON.parse(fs_1.default.readFileSync(path_1.default.join(DATA_DIR, file), 'utf-8'));
@@ -87,22 +96,22 @@ router.get('/', (req, res) => {
     res.render('board', {
         title: 'ゆかりさん△',
         currentPage: 'board',
-        isLoggedIn: false,
-        userName: '',
+        ...auth,
         articles
     });
 });
 // 新規投稿画面（競合回避のため /:id より前に記述）
 router.get('/post', (req, res) => {
+    const auth = getAuthViewData(req);
     res.render('board-post', {
         title: 'ゆかりさん△',
         currentPage: 'board',
-        isLoggedIn: false,
-        userName: ''
+        ...auth
     });
 });
 // 個別記事
 router.get('/:id', (req, res) => {
+    const auth = getAuthViewData(req);
     const file = path_1.default.join(DATA_DIR, req.params.id + '.json');
     if (!fs_1.default.existsSync(file))
         return res.status(404).send('記事がありません');
@@ -110,22 +119,21 @@ router.get('/:id', (req, res) => {
     res.render('board-detail', {
         title: 'ゆかりさん△',
         currentPage: 'board',
-        isLoggedIn: false,
-        userName: '',
+        ...auth,
         article: data,
         id: req.params.id
     });
 });
 // 投稿処理（timelogテキスト→編集画面）
 router.post('/edit', (req, res) => {
+    const auth = getAuthViewData(req);
     const rawText = req.body.timelog;
     const parsed = parseTimelog(rawText);
     req.session.editingArticle = parsed;
     res.render('board-edit', {
         title: 'ゆかりさん△',
         currentPage: 'board',
-        isLoggedIn: false,
-        userName: '',
+        ...auth,
         article: parsed,
         timelog: rawText,
         isNew: true
@@ -133,6 +141,7 @@ router.post('/edit', (req, res) => {
 });
 // 編集画面（既存記事）
 router.get('/:id/edit', (req, res) => {
+    const auth = getAuthViewData(req);
     const file = path_1.default.join(DATA_DIR, req.params.id + '.json');
     if (!fs_1.default.existsSync(file))
         return res.status(404).send('記事がありません');
@@ -140,8 +149,7 @@ router.get('/:id/edit', (req, res) => {
     res.render('board-edit', {
         title: 'ゆかりさん△',
         currentPage: 'board',
-        isLoggedIn: false,
-        userName: '',
+        ...auth,
         article: data,
         id: req.params.id,
         isNew: false

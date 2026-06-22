@@ -3,7 +3,9 @@
     <p>クランメンバーとの情報共有スペースです。</p>
     
     <div class="board-header">
-        <a href="/board/post" class="btn btn-primary">新規投稿</a>
+        <% if (isLoggedIn) { %>
+            <a href="/board/post" class="btn btn-primary">新規投稿</a>
+        <% } %>
     </div>
     <div class="board-list">
         <% if (typeof articles !== 'undefined' && articles.length > 0) { %>

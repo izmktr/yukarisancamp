@@ -37,6 +37,7 @@ function normalizeUserProfile(user, rawProfile) {
             : getDefaultDisplayName(user),
         discordId: safeProfile.discordId ?? null,
         discordServer: safeProfile.discordServer ?? null,
+        role: safeProfile.role ?? 'user',
         createdAt: typeof safeProfile.createdAt === 'number' ? safeProfile.createdAt : Date.now()
     };
 }
@@ -870,6 +871,19 @@ function initializeFirebaseAuth() {
         if (user && db) {
             try {
                 currentUserProfile = await ensureUserProfile(user);
+                
+                // サーバーにユーザー情報を送信してセッションを保存
+                if (currentUserProfile) {
+                    await fetch('/api/user/session', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            googleUserId: currentUserProfile.googleUserId,
+                            displayName: currentUserProfile.displayName,
+                            role: currentUserProfile.role
+                        })
+                    }).catch(err => console.error('Failed to save user session:', err));
+                }
             } catch (error) {
                 console.error('userProfile の取得または作成に失敗しました:', error);
                 currentProfileLoadErrorMessage = 'Firebaseからユーザー情報を取得できませんでした。権限設定またはネットワーク状態を確認してください。';

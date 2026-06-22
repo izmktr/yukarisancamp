@@ -1,3 +1,5 @@
+/// <reference path="./types/session.d.ts" />
+
 import dotenv from 'dotenv';
 import path from 'path';
 
@@ -10,7 +12,6 @@ dotenv.config({ path: envPath });
 import express from 'express';
 import session from 'express-session';
 import expressLayouts from 'express-ejs-layouts';
-import { UserProfile } from './types';
 import boardApi from './api/board';
 import fs from 'fs';
 
@@ -62,60 +63,62 @@ app.use(express.urlencoded({ extended: true }));
 // APIルーティング
 app.use('/api/board', boardApi);
 
-// 型定義のテスト用サンプルデータ
-const sampleUser: UserProfile = {
-  googleUserId: "123456789",
-  userId: "123456789",
-  displayName: "テストユーザー",
-  createdAt: Date.now(),
-  favoriteThings: ["プリコネ", "クラバト"]
-};
-
 console.log('Web app starting...');
-console.log('Sample user:', sampleUser);
 
 // ルート定義
 app.get('/', (req, res) => {
+  const userSession = req.session.user as any;
   res.render('index', {
     title: 'ゆかりさん△',
     currentPage: 'home',
-    isLoggedIn: false,
-    userName: ''
+    isLoggedIn: !!userSession,
+    userName: userSession?.displayName || '',
+    isAdmin: userSession?.role === 'admin'
   });
 });
 
-app.get('/users', (req, res) => {
-  res.render('users', {
+app.get('/info', (req, res) => {
+  const userSession = req.session.user as any;
+  res.render('info', {
     title: 'ゆかりさん△',
-    currentPage: 'users',
-    isLoggedIn: false,
-    userName: '',
-    sampleUser: sampleUser
+    currentPage: 'info',
+    isLoggedIn: !!userSession,
+    userName: userSession?.displayName || '',
+    isAdmin: userSession?.role === 'admin'
   });
+});
+
+app.get('/users', (_req, res) => {
+  res.redirect('/info');
 });
 
 import boardRouter from './routes/board';
 app.use('/board', boardRouter);
 
 app.get('/settings', (req, res) => {
+  const userSession = req.session.user as any;
   res.render('settings', {
     title: 'ゆかりさん△',
     currentPage: 'settings',
-    isLoggedIn: false,
-    userName: ''
+    isLoggedIn: !!userSession,
+    userName: userSession?.displayName || '',
+    isAdmin: userSession?.role === 'admin'
   });
 });
 
 app.get('/clanbattle-settings', (req, res) => {
+  const userSession = req.session.user as any;
   res.render('clanbattle-settings', {
     title: 'ゆかりさん△',
     currentPage: 'clanbattle-settings',
-    isLoggedIn: false,
-    userName: ''
+    isLoggedIn: !!userSession,
+    userName: userSession?.displayName || '',
+    isAdmin: userSession?.role === 'admin'
   });
 });
 
 app.get('/chara-check', (req, res) => {
+  const userSession = req.session.user as any;
   const charaIndexPath = path.join(__dirname, '../chara/charaindex.json');
   let characters: { fileName: string; name: string }[] = [];
 
@@ -134,8 +137,9 @@ app.get('/chara-check', (req, res) => {
   res.render('chara-check', {
     title: 'ゆかりさん△',
     currentPage: 'chara-check',
-    isLoggedIn: false,
-    userName: '',
+    isLoggedIn: !!userSession,
+    userName: userSession?.displayName || '',
+    isAdmin: userSession?.role === 'admin',
     characters
   });
 });
@@ -159,11 +163,13 @@ app.get('/clandata/:id', (req, res) => {
     error = `クランデータの読み込みに失敗しました: ${err instanceof Error ? err.message : '不明なエラー'}`;
   }
 
+  const userSession = req.session.user as any;
   res.render('clandata-detail', {
     title: 'ゆかりさん△ - クランデータ',
     currentPage: 'clandata',
-    isLoggedIn: false,
-    userName: '',
+    isLoggedIn: !!userSession,
+    userName: userSession?.displayName || '',
+    isAdmin: userSession?.role === 'admin',
     clanId,
     clanData,
     error
@@ -177,7 +183,30 @@ app.get('/api/time', (req, res) => {
 
 // APIユーザー情報取得
 app.get('/api/user', (req, res) => {
-  res.json({ user: sampleUser });
+  res.json({ user: req.session.user || null });
+});
+
+// ユーザーセッション保存API
+app.post('/api/user/session', express.json(), async (req, res) => {
+  try {
+    const { googleUserId, displayName, role } = req.body;
+    
+    if (!googleUserId) {
+      return res.status(400).json({ error: 'googleUserId is required' });
+    }
+
+    // セッションにユーザー情報を保存
+    req.session.user = {
+      googleUserId,
+      displayName: displayName || 'ユーザー',
+      role: role || 'user'
+    };
+
+    res.json({ success: true, message: 'User session saved' });
+  } catch (error) {
+    console.error('Error saving user session:', error);
+    res.status(500).json({ error: 'Failed to save user session' });
+  }
 });
 
 app.listen(port, () => {
