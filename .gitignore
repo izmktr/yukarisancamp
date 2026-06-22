@@ -30,3 +30,4 @@ firebase.setting*
 work/
 web-app-ts/data/board/*.json
 web-app-ts/chara/
+web-app-ts/clandata/
