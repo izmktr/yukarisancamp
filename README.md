@@ -60,3 +60,10 @@
 - 環境変数 `DISCORD_TOKEN` を設定してからDiscordボットを起動してください
 - Webアプリケーションは通常 `http://localhost:3000` で起動します
 - スキーマファイルを変更した場合は、両方のプロジェクトで型定義/モデルの再生成が必要です
+
+## 権限管理（admin ロール）
+
+- ユーザーの権限は Firestore の `userRoles` コレクションのみで管理します
+- `userProfiles` には権限フィールドを持たせません
+- admin 付与は Firebase Console で `userRoles/{uid}` ドキュメントを作成し、`role: "admin"` を設定してください
+- 詳細は [`document/firebase-db-setup.md`](document/firebase-db-setup.md) を参照してください

@@ -9,6 +9,7 @@
 - 利用DB: Cloud Firestore（Native mode）
 - 主な保存先コレクション:
   - userProfiles
+  - userRoles
   - clanBattles
 
 ## 1. Firestore を有効化
@@ -38,13 +39,53 @@ web-app-ts/.env.local の設定値が、対象 Firebase プロジェクトと一
 注意:
 - FIREBASE_PROJECT_ID が別プロジェクトになっていると、別DBへ保存されます。
 
+## 2.5. Firebase Admin SDK を設定（role 管理の場合）
+
+role フィールドを活用するには、Firebase Admin SDK でサーバー側から Firestore にアクセスする必要があります。
+
+### 2.5.1 サービスアカウント JSON を生成
+
+1. [Firebase Console](https://console.firebase.google.com/) を開く
+2. プロジェクト yukarisan-f3b06 を選択
+3. ⚙️ 設定 -> プロジェクトの設定
+4. サービスアカウント タブを開く
+5. **新しい秘密鍵を生成** を押す
+6. JSON ファイルがダウンロードされます（例: `yukarisan-f3b06-firebase-adminsdk-xxxxx.json`）
+
+### 2.5.2 web-app-ts に配置
+
+ダウンロードした JSON ファイルを以下の場所に配置します：
+
+```
+web-app-ts/
+  serviceAccountKey.json  ← ここに配置
+```
+
+**⚠️ 重要: `.gitignore` に追加して git で管理しない**
+
+```gitignore
+# web-app-ts/.gitignore に追加
+serviceAccountKey.json
+```
+
+### 2.5.3 .env.local に設定
+
+web-app-ts/.env.local に以下を追加します：
+
+```env
+FIREBASE_ADMIN_SDK_KEY=../web-app-ts/serviceAccountKey.json
+```
+
+相対パスは web-app-ts/src/index.ts からの相対パスです。
+
 ## 3. Firestore セキュリティルールを設定
 
 最低限の推奨ルール例です。
 
 - 未ログインユーザーは書き込み不可
 - userProfiles は自分の uid ドキュメントのみ読み書き可
-- clanBattles は誰でも読み取り可、書き込みはログインユーザーのみ可
+- userRoles はクライアントから読み書き不可（Admin SDK / Console のみ）
+- clanBattles は誰でも読み取り可、書き込みは admin ユーザーのみ可
 
 Firebase Console の Firestore Database -> ルール で以下を設定してください。
 
@@ -55,25 +96,39 @@ service cloud.firestore {
     match /userProfiles/{userId} {
       allow read: if request.auth != null && request.auth.uid == userId;
       allow create: if request.auth != null && request.auth.uid == userId;
-      allow update: if request.auth != null && request.auth.uid == userId 
-        && !('role' in request.resource.data.keys());
+      allow update: if request.auth != null && request.auth.uid == userId;
+    }
+
+    match /userRoles/{userId} {
+      allow read, write: if false;
     }
 
     match /clanBattles/{yearmonth} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if request.auth != null
+        && exists(/databases/$(database)/documents/userRoles/$(request.auth.uid))
+        && get(/databases/$(database)/documents/userRoles/$(request.auth.uid)).data.role == 'admin';
     }
   }
 }
 ```
 
 **セキュリティ対応の説明:**
-- `userProfiles` では `role` フィールドの直接書き込みを禁止しています。`role` はサーバー側（Firebase Admin SDK）でのみ設定してください。
-- クライアント側からは、`displayName`, `discordId`, `discordServer` など、`role` 以外のフィールドのみ更新可能です。
+- `userProfiles` には権限フィールドを持たせず、表示名などのプロフィール情報のみ保持します。
+- `userRoles` は権限専用コレクションです。クライアントからは read/write ともに不可です。
+- サーバーは `/api/user/session` 時に `userRoles/{uid}` を読み込み、`role` が `"admin"` のときのみ管理者扱いにします。
+- `userRoles/{uid}` が存在しないユーザーは `role: "user"` として扱われます（通常ユーザーはレコードなし運用）。
+- Firestore 側でも `clanBattles` への書き込みは `userRoles/{uid}.role == "admin"` のユーザーだけ許可されます。
+
+**admin ロール付与方法:**
+1. Firebase Console の Firestore Database -> userRoles コレクションを開く
+2. 対象ユーザーの uid をドキュメントIDにして新規作成（既存なら開く）
+3. `role` フィールドを `"admin"` で保存
+5. ユーザーが次にログインするとき、自動的に admin 権限が反映されます
 
 運用メモ:
 - clanBattles の編集権限を管理者のみにしたい場合は、カスタムクレームや allow 条件を追加してください。
-- `role` を付与するには、Firebase Admin SDK を使用するか、ドキュメント手動編集で行ってください。
+- サーバーの Admin SDK 初期化に失敗した場合、全ユーザーは `role: 'user'` で扱われます。コンソールログで確認してください。
 
 ## 4. 本アプリのデータ構造
 
@@ -88,6 +143,14 @@ service cloud.firestore {
 - discordId: string | null
 - discordServer: string | null
 - createdAt: number（UNIXミリ秒）
+
+### userRoles コレクション
+
+ドキュメントID:
+- Google ログインユーザーの uid
+
+主なフィールド:
+- role: string（`admin` のみ作成。通常ユーザーはドキュメントを作成しない）
 
 ### clanBattles コレクション
 

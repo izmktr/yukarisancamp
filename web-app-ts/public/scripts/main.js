@@ -37,7 +37,6 @@ function normalizeUserProfile(user, rawProfile) {
             : getDefaultDisplayName(user),
         discordId: safeProfile.discordId ?? null,
         discordServer: safeProfile.discordServer ?? null,
-        role: safeProfile.role ?? 'user',
         createdAt: typeof safeProfile.createdAt === 'number' ? safeProfile.createdAt : Date.now()
     };
 }
@@ -873,16 +872,23 @@ function initializeFirebaseAuth() {
                 currentUserProfile = await ensureUserProfile(user);
                 
                 // サーバーにユーザー情報を送信してセッションを保存
-                // 注意: role はサーバー側で Firestore から取得するため、クライアント側では送信しない（セキュリティ）
+                // セキュリティ: Firebase ID トークンを Authorization ヘッダーで送信し、サーバー側で検証する
                 if (currentUserProfile) {
-                    await fetch('/api/user/session', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            googleUserId: currentUserProfile.googleUserId,
-                            displayName: currentUserProfile.displayName
-                        })
-                    }).catch(err => console.error('Failed to save user session:', err));
+                    try {
+                        const idToken = await user.getIdToken();
+                        await fetch('/api/user/session', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${idToken}`
+                            },
+                            body: JSON.stringify({
+                                displayName: currentUserProfile.displayName
+                            })
+                        });
+                    } catch (err) {
+                        console.error('Failed to save user session:', err);
+                    }
                 }
             } catch (error) {
                 console.error('userProfile の取得または作成に失敗しました:', error);

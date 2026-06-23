@@ -15,15 +15,43 @@ import expressLayouts from 'express-ejs-layouts';
 import boardApi from './api/board';
 import fs from 'fs';
 
-// Admin ユーザーのホワイトリスト管理
-// セキュリティ: role はクライアント側から送信されず、サーバー側のホワイトリストのみで管理される
-const ADMIN_WHITELIST: Set<string> = new Set([
-  // admin ユーザーの googleUserId をここに追加
-  // 例: '123456789...@google.com' など
-]);
+// Firebase Admin SDK 初期化
+let adminDb: any = null;
 
-function isAdminUser(googleUserId: string | undefined): boolean {
-  return googleUserId ? ADMIN_WHITELIST.has(googleUserId) : false;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const admin = require('firebase-admin');
+  const serviceAccountPath = process.env.FIREBASE_ADMIN_SDK_KEY;
+  if (serviceAccountPath) {
+    const serviceAccountJson = fs.readFileSync(serviceAccountPath, 'utf-8');
+    const serviceAccount = JSON.parse(serviceAccountJson);
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount)
+    });
+    adminDb = admin.firestore();
+    console.log('Firebase Admin SDK initialized successfully');
+  } else {
+    console.warn('FIREBASE_ADMIN_SDK_KEY not set. role management will use default "user" role.');
+  }
+} catch (error) {
+  console.warn('Firebase Admin SDK initialization failed:', error instanceof Error ? error.message : error);
+}
+
+// Firestore から user role を取得（userRoles コレクション運用）
+async function getUserRoleFromFirestore(googleUserId: string): Promise<'user' | 'admin'> {
+  if (!adminDb) {
+    return 'user';
+  }
+  try {
+    const doc = await adminDb.collection('userRoles').doc(googleUserId).get();
+    if (doc.exists) {
+      const data = doc.data();
+      return data?.role === 'admin' ? 'admin' : 'user';
+    }
+  } catch (error) {
+    console.error('Failed to fetch role from Firestore:', error);
+  }
+  return 'user';
 }
 
 function parseClanDataJson(raw: string): any {
@@ -79,9 +107,9 @@ console.log('Web app starting...');
 // ルート定義
 app.get('/', (req, res) => {
   const userSession = req.session.user as any;
-  res.render('index', {
+  res.render('info', {
     title: 'ゆかりさん△',
-    currentPage: 'home',
+    currentPage: 'info',
     isLoggedIn: !!userSession,
     userName: userSession?.displayName || '',
     isAdmin: userSession?.role === 'admin'
@@ -198,17 +226,35 @@ app.get('/api/user', (req, res) => {
 });
 
 // ユーザーセッション保存API
-// セキュリティ: クライアント側から送信された role は無視し、サーバー側のホワイトリストで role を決定
+// セキュリティ:
+//   - Authorization: Bearer <Firebase ID Token> を必須とし、Admin SDK で検証
+//   - req.body の googleUserId は使わず、検証済みトークンの uid を使用
+//   - Admin SDK 未初期化の場合はリクエストを拒否
 app.post('/api/user/session', express.json(), async (req, res) => {
   try {
-    const { googleUserId, displayName } = req.body;
-    
-    if (!googleUserId) {
-      return res.status(400).json({ error: 'googleUserId is required' });
+    if (!adminDb) {
+      return res.status(503).json({ error: 'Authentication service is not available' });
     }
 
-    // role はサーバー側のホワイトリストから判定（クライアント側の role 値は無視）
-    const role = isAdminUser(googleUserId) ? 'admin' : 'user';
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Authorization header with Bearer token is required' });
+    }
+
+    const idToken = authHeader.slice(7);
+    const admin = require('firebase-admin');
+    let decodedToken: any;
+    try {
+      decodedToken = await admin.auth().verifyIdToken(idToken);
+    } catch {
+      return res.status(401).json({ error: 'Invalid or expired ID token' });
+    }
+
+    const googleUserId = decodedToken.uid;
+    const { displayName } = req.body;
+
+    // role は Firestore から取得（トークンの uid で検索）
+    const role = await getUserRoleFromFirestore(googleUserId);
 
     // セッションにユーザー情報を保存
     req.session.user = {

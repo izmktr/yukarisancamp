@@ -29,9 +29,5 @@ export interface UserProfile {
    * The timestamp when the profile was created.
    */
   createdAt: number;
-  /**
-   * The user's role (managed by server only). Set by Admin SDK only, not directly editable by users.
-   */
-  role?: "user" | "admin";
   [k: string]: unknown;
 }

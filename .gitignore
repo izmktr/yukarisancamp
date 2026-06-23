@@ -25,6 +25,7 @@ node_modules/
 
 # firebase
 firebase.setting*
+serviceAccountKey.json
 
 #work
 work/

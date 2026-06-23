@@ -15,6 +15,45 @@ const express_session_1 = __importDefault(require("express-session"));
 const express_ejs_layouts_1 = __importDefault(require("express-ejs-layouts"));
 const board_1 = __importDefault(require("./api/board"));
 const fs_1 = __importDefault(require("fs"));
+// Firebase Admin SDK 初期化
+let adminDb = null;
+try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const admin = require('firebase-admin');
+    const serviceAccountPath = process.env.FIREBASE_ADMIN_SDK_KEY;
+    if (serviceAccountPath) {
+        const serviceAccountJson = fs_1.default.readFileSync(serviceAccountPath, 'utf-8');
+        const serviceAccount = JSON.parse(serviceAccountJson);
+        admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount)
+        });
+        adminDb = admin.firestore();
+        console.log('Firebase Admin SDK initialized successfully');
+    }
+    else {
+        console.warn('FIREBASE_ADMIN_SDK_KEY not set. role management will use default "user" role.');
+    }
+}
+catch (error) {
+    console.warn('Firebase Admin SDK initialization failed:', error instanceof Error ? error.message : error);
+}
+// Firestore から user role を取得（userRoles コレクション運用）
+async function getUserRoleFromFirestore(googleUserId) {
+    if (!adminDb) {
+        return 'user';
+    }
+    try {
+        const doc = await adminDb.collection('userRoles').doc(googleUserId).get();
+        if (doc.exists) {
+            const data = doc.data();
+            return data?.role === 'admin' ? 'admin' : 'user';
+        }
+    }
+    catch (error) {
+        console.error('Failed to fetch role from Firestore:', error);
+    }
+    return 'user';
+}
 function parseClanDataJson(raw) {
     // Preserve large Discord IDs in bosshistory.member without external parser.
     const normalized = raw.replace(/("member"\s*:\s*)(\d{16,})/g, '$1"$2"');
@@ -58,9 +97,9 @@ console.log('Web app starting...');
 // ルート定義
 app.get('/', (req, res) => {
     const userSession = req.session.user;
-    res.render('index', {
+    res.render('info', {
         title: 'ゆかりさん△',
-        currentPage: 'home',
+        currentPage: 'info',
         isLoggedIn: !!userSession,
         userName: userSession?.displayName || '',
         isAdmin: userSession?.role === 'admin'
@@ -166,19 +205,39 @@ app.get('/api/user', (req, res) => {
     res.json({ user: req.session.user || null });
 });
 // ユーザーセッション保存API
+// セキュリティ:
+//   - Authorization: Bearer <Firebase ID Token> を必須とし、Admin SDK で検証
+//   - req.body の googleUserId は使わず、検証済みトークンの uid を使用
+//   - Admin SDK 未初期化の場合はリクエストを拒否
 app.post('/api/user/session', express_1.default.json(), async (req, res) => {
     try {
-        const { googleUserId, displayName, role } = req.body;
-        if (!googleUserId) {
-            return res.status(400).json({ error: 'googleUserId is required' });
+        if (!adminDb) {
+            return res.status(503).json({ error: 'Authentication service is not available' });
         }
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ error: 'Authorization header with Bearer token is required' });
+        }
+        const idToken = authHeader.slice(7);
+        const admin = require('firebase-admin');
+        let decodedToken;
+        try {
+            decodedToken = await admin.auth().verifyIdToken(idToken);
+        }
+        catch {
+            return res.status(401).json({ error: 'Invalid or expired ID token' });
+        }
+        const googleUserId = decodedToken.uid;
+        const { displayName } = req.body;
+        // role は Firestore から取得（トークンの uid で検索）
+        const role = await getUserRoleFromFirestore(googleUserId);
         // セッションにユーザー情報を保存
         req.session.user = {
             googleUserId,
             displayName: displayName || 'ユーザー',
-            role: role || 'user'
+            role
         };
-        res.json({ success: true, message: 'User session saved' });
+        res.json({ success: true, message: 'User session saved', role });
     }
     catch (error) {
         console.error('Error saving user session:', error);
