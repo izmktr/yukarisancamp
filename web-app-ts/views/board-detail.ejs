@@ -9,41 +9,72 @@
         <p><strong>バトル日時:</strong> <%= article.battleDate || '' %></p>
 
         <h3>パーティ編成</h3>
-        <% if (article.party && article.party.length > 0) { %>
-            <ul>
-                <% article.party.forEach(function(member) { %>
-                    <li>
-                        <% if (member && typeof member === 'object') { %>
-                            <%= member.name || '' %> ★<%= member.star || '' %> Lv<%= member.level || '' %> RANK<%= member.rank || '' %>
+        <% if (partyMembers && partyMembers.length > 0) { %>
+            <% const partyDisplayMembers = partyMembers.slice().reverse(); %>
+            <div class="board-party-grid">
+                <% partyDisplayMembers.forEach(function(member) { %>
+                    <div class="board-party-card">
+                        <% if (member.imagePath) { %>
+                            <img src="<%= member.imagePath %>" alt="<%= member.name %>" class="board-party-image" />
                         <% } else { %>
-                            <%= member %>
+                            <div class="board-party-image board-party-image-missing">NO IMAGE</div>
                         <% } %>
-                    </li>
+                        <div class="board-party-name"><%= member.name %></div>
+                        <div class="board-party-stats"><%
+                            const stats = [];
+                            if (member.star !== null) stats.push(`★${member.star}`);
+                            if (member.level !== null) stats.push(`Lv${member.level}`);
+                            if (member.rank !== null) stats.push(`RANK${member.rank}`);
+                        %><%= stats.length > 0 ? stats.join(' ') : '' %></div>
+                    </div>
                 <% }); %>
-            </ul>
+            </div>
         <% } else { %>
             <p>未登録</p>
         <% } %>
 
         <h3>ユニオンバースト発動時間</h3>
-        <% if (article.ubTimeline && article.ubTimeline.length > 0) { %>
-            <ul>
-                <% article.ubTimeline.forEach(function(ub) { %>
-                    <li>
-                        <% if (ub && typeof ub === 'object') { %>
-                            <%= ub.time || '' %> <%= ub.character || '' %>
-                        <% } else { %>
-                            <%= ub %>
-                        <% } %>
-                    </li>
-                <% }); %>
-            </ul>
-        <% } else if (article.ubTimes && article.ubTimes.length > 0) { %>
-            <ul>
-                <% article.ubTimes.forEach(function(ub) { %>
-                    <li><%= ub %></li>
-                <% }); %>
-            </ul>
+        <% if (ubRows && ubRows.length > 0) { %>
+            <% const partySlots = (partyMembers && partyMembers.length > 0) ? partyMembers.slice().reverse() : []; %>
+            <div class="ub-table-wrapper">
+                <table class="ub-table">
+                    <thead>
+                        <tr>
+                            <th>残り時間</th>
+                            <th>UB</th>
+                            <% for (let i = 0; i < 5; i += 1) { %>
+                                <% const headerSlot = partySlots[i]; %>
+                                <th class="ub-header-party-cell">
+                                    <% if (headerSlot && headerSlot.imagePath) { %>
+                                        <img src="<%= headerSlot.imagePath %>" alt="<%= headerSlot.name %>" title="<%= headerSlot.name %>" class="ub-party-image" />
+                                    <% } else if (headerSlot) { %>
+                                        <span class="ub-party-text"><%= headerSlot.name %></span>
+                                    <% } else { %>
+                                        <span class="ub-party-empty">-</span>
+                                    <% } %>
+                                </th>
+                            <% } %>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% ubRows.forEach(function(row) { %>
+                            <tr>
+                                <td class="ub-time-cell"><%= row.time || '' %></td>
+                                <td class="ub-event-cell">
+                                    <% if (row.ubImagePath) { %>
+                                        <img src="<%= row.ubImagePath %>" alt="<%= row.ubText %>" title="<%= row.ubText %>" class="ub-event-image" />
+                                    <% } else { %>
+                                        <span class="ub-event-text"><%= row.ubText %></span>
+                                    <% } %>
+                                </td>
+                                <% for (let i = 0; i < 5; i += 1) { %>
+                                    <td class="ub-party-cell"></td>
+                                <% } %>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
         <% } else { %>
             <p>未登録</p>
         <% } %>

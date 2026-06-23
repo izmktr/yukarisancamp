@@ -8,6 +8,7 @@ const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const router = (0, express_1.Router)();
 const DATA_DIR = path_1.default.join(__dirname, '../../data/board');
+const CHARA_INDEX_PATH = path_1.default.join(__dirname, '../../chara/charaindex.json');
 function isTimelinePartyMember(value) {
     if (!value || typeof value !== 'object') {
         return false;
@@ -39,6 +40,148 @@ function isTimelineInfo(value) {
         && /^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}$/.test(article.battleDate)
         && Array.isArray(article.party) && article.party.every(isTimelinePartyMember)
         && Array.isArray(article.ubTimeline) && article.ubTimeline.every(isTimelineUbEvent);
+}
+function loadCharaIndex() {
+    try {
+        const raw = fs_1.default.readFileSync(CHARA_INDEX_PATH, 'utf-8');
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) {
+            return [];
+        }
+        return parsed.filter((entry) => {
+            return entry
+                && typeof entry === 'object'
+                && typeof entry.fileName === 'string'
+                && typeof entry.name === 'string';
+        });
+    }
+    catch (error) {
+        console.error('Failed to load chara index:', error);
+        return [];
+    }
+}
+const charaIndex = loadCharaIndex();
+const charaImageByName = new Map(charaIndex.map((entry) => [entry.name, entry.fileName]));
+function normalizeCharacterName(name) {
+    const trimmed = name.trim();
+    const swimsuitMatch = trimmed.match(/^水着(.+)$/);
+    if (swimsuitMatch && !trimmed.includes('（')) {
+        return `${swimsuitMatch[1].trim()}（サマー）`;
+    }
+    return trimmed;
+}
+function getSwimsuitAliasName(name) {
+    const match = normalizeCharacterName(name).match(/^(.*)（サマー）$/);
+    if (!match) {
+        return null;
+    }
+    return `水着${match[1].trim()}`;
+}
+function splitCharacterName(name) {
+    const trimmed = normalizeCharacterName(name);
+    const match = trimmed.match(/^(.*?)(?:（(.+)）)?$/);
+    if (!match) {
+        return { base: trimmed, suffix: null };
+    }
+    return {
+        base: match[1].trim(),
+        suffix: match[2] ? match[2].trim() : null
+    };
+}
+function resolveCharacterImagePath(name) {
+    const normalizedName = normalizeCharacterName(name);
+    const swimsuitAliasName = getSwimsuitAliasName(normalizedName);
+    const exact = charaImageByName.get(normalizedName)
+        || charaImageByName.get(name)
+        || (swimsuitAliasName ? charaImageByName.get(swimsuitAliasName) : undefined);
+    if (exact) {
+        return `/chara-images/${exact}`;
+    }
+    const target = splitCharacterName(normalizedName);
+    const fallback = charaIndex.find((entry) => {
+        const candidate = splitCharacterName(entry.name);
+        if (candidate.suffix !== target.suffix) {
+            return false;
+        }
+        return candidate.base.includes(target.base) || target.base.includes(candidate.base);
+    });
+    return fallback ? `/chara-images/${fallback.fileName}` : null;
+}
+function parseLegacyPartyMember(value) {
+    const match = value.match(/^(.*?)\s+★(\d+)\s+Lv(\d+)\s+RANK(\d+)$/i);
+    if (!match) {
+        return {
+            name: value,
+            star: null,
+            level: null,
+            rank: null,
+            imagePath: resolveCharacterImagePath(value)
+        };
+    }
+    const name = match[1].trim();
+    return {
+        name: normalizeCharacterName(name),
+        star: Number(match[2]),
+        level: Number(match[3]),
+        rank: Number(match[4]),
+        imagePath: resolveCharacterImagePath(name)
+    };
+}
+function resolveBoardDetailPartyMembers(party) {
+    if (!Array.isArray(party)) {
+        return [];
+    }
+    return party.flatMap((member) => {
+        if (isTimelinePartyMember(member)) {
+            return [{
+                    name: normalizeCharacterName(member.name),
+                    star: member.star,
+                    level: member.level,
+                    rank: member.rank,
+                    imagePath: resolveCharacterImagePath(member.name)
+                }];
+        }
+        if (typeof member === 'string' && member.trim().length > 0) {
+            return [parseLegacyPartyMember(member.trim())];
+        }
+        return [];
+    });
+}
+function resolveBoardDetailUbRows(article) {
+    const rows = [];
+    if (Array.isArray(article?.ubTimeline)) {
+        for (const ub of article.ubTimeline) {
+            if (!ub || typeof ub !== 'object') {
+                continue;
+            }
+            const event = ub;
+            const time = typeof event.time === 'string' ? event.time : '';
+            const ubText = typeof event.character === 'string' ? event.character.trim() : '';
+            if (!time && !ubText) {
+                continue;
+            }
+            const ubImagePath = ubText ? resolveCharacterImagePath(ubText) : null;
+            rows.push({ time, ubText, ubImagePath });
+        }
+        return rows;
+    }
+    if (Array.isArray(article?.ubTimes)) {
+        for (const line of article.ubTimes) {
+            if (typeof line !== 'string') {
+                continue;
+            }
+            const trimmed = line.trim();
+            if (!trimmed) {
+                continue;
+            }
+            const match = trimmed.match(/^([0-9]{1,2}:[0-9]{2})\s+(.+)$/);
+            const time = match ? match[1] : '';
+            const ubText = match ? match[2].trim() : trimmed;
+            const ubImagePath = ubText ? resolveCharacterImagePath(ubText) : null;
+            rows.push({ time, ubText, ubImagePath });
+        }
+    }
+    return rows;
 }
 function parseTimelog(text) {
     const lines = text.split(/\r?\n/);
@@ -116,11 +259,15 @@ router.get('/:id', (req, res) => {
     if (!fs_1.default.existsSync(file))
         return res.status(404).send('記事がありません');
     const data = JSON.parse(fs_1.default.readFileSync(file, 'utf-8'));
+    const partyMembers = resolveBoardDetailPartyMembers(data.party);
+    const ubRows = resolveBoardDetailUbRows(data);
     res.render('board-detail', {
         title: 'ゆかりさん△',
         currentPage: 'board',
         ...auth,
         article: data,
+        partyMembers,
+        ubRows,
         id: req.params.id
     });
 });

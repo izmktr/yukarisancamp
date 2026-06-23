@@ -11,6 +11,7 @@ declare module 'express-session' {
 
 const router = Router();
 const DATA_DIR = path.join(__dirname, '../../data/board');
+const CHARA_INDEX_PATH = path.join(__dirname, '../../chara/charaindex.json');
 
 type ParsedArticle = {
   mode: string;
@@ -26,6 +27,25 @@ type TimelinePartyMember = {
   star: number;
   level: number;
   rank: number;
+};
+
+type CharaIndexEntry = {
+  fileName: string;
+  name: string;
+};
+
+type BoardDetailPartyMember = {
+  name: string;
+  star: number | null;
+  level: number | null;
+  rank: number | null;
+  imagePath: string | null;
+};
+
+type BoardDetailUbRow = {
+  time: string;
+  ubText: string;
+  ubImagePath: string | null;
 };
 
 type TimelineUbEvent = {
@@ -81,6 +101,175 @@ function isTimelineInfo(value: unknown): value is TimelineInfo {
     && /^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}$/.test(article.battleDate)
     && Array.isArray(article.party) && article.party.every(isTimelinePartyMember)
     && Array.isArray(article.ubTimeline) && article.ubTimeline.every(isTimelineUbEvent);
+}
+
+function loadCharaIndex(): CharaIndexEntry[] {
+  try {
+    const raw = fs.readFileSync(CHARA_INDEX_PATH, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed.filter((entry): entry is CharaIndexEntry => {
+      return entry
+        && typeof entry === 'object'
+        && typeof (entry as CharaIndexEntry).fileName === 'string'
+        && typeof (entry as CharaIndexEntry).name === 'string';
+    });
+  } catch (error) {
+    console.error('Failed to load chara index:', error);
+    return [];
+  }
+}
+
+const charaIndex = loadCharaIndex();
+const charaImageByName = new Map(charaIndex.map((entry) => [entry.name, entry.fileName]));
+
+function normalizeCharacterName(name: string): string {
+  const trimmed = name.trim();
+  const swimsuitMatch = trimmed.match(/^水着(.+)$/);
+  if (swimsuitMatch && !trimmed.includes('（')) {
+    return `${swimsuitMatch[1].trim()}（サマー）`;
+  }
+
+  return trimmed;
+}
+
+function getSwimsuitAliasName(name: string): string | null {
+  const match = normalizeCharacterName(name).match(/^(.*)（サマー）$/);
+  if (!match) {
+    return null;
+  }
+
+  return `水着${match[1].trim()}`;
+}
+
+function splitCharacterName(name: string): { base: string; suffix: string | null } {
+  const trimmed = normalizeCharacterName(name);
+  const match = trimmed.match(/^(.*?)(?:（(.+)）)?$/);
+  if (!match) {
+    return { base: trimmed, suffix: null };
+  }
+
+  return {
+    base: match[1].trim(),
+    suffix: match[2] ? match[2].trim() : null
+  };
+}
+
+function resolveCharacterImagePath(name: string): string | null {
+  const normalizedName = normalizeCharacterName(name);
+  const swimsuitAliasName = getSwimsuitAliasName(normalizedName);
+  const exact = charaImageByName.get(normalizedName)
+    || charaImageByName.get(name)
+    || (swimsuitAliasName ? charaImageByName.get(swimsuitAliasName) : undefined);
+  if (exact) {
+    return `/chara-images/${exact}`;
+  }
+
+  const target = splitCharacterName(normalizedName);
+  const fallback = charaIndex.find((entry) => {
+    const candidate = splitCharacterName(entry.name);
+    if (candidate.suffix !== target.suffix) {
+      return false;
+    }
+
+    return candidate.base.includes(target.base) || target.base.includes(candidate.base);
+  });
+
+  return fallback ? `/chara-images/${fallback.fileName}` : null;
+}
+
+function parseLegacyPartyMember(value: string): BoardDetailPartyMember {
+  const match = value.match(/^(.*?)\s+★(\d+)\s+Lv(\d+)\s+RANK(\d+)$/i);
+  if (!match) {
+    return {
+      name: value,
+      star: null,
+      level: null,
+      rank: null,
+      imagePath: resolveCharacterImagePath(value)
+    };
+  }
+
+  const name = match[1].trim();
+  return {
+    name: normalizeCharacterName(name),
+    star: Number(match[2]),
+    level: Number(match[3]),
+    rank: Number(match[4]),
+    imagePath: resolveCharacterImagePath(name)
+  };
+}
+
+function resolveBoardDetailPartyMembers(party: unknown): BoardDetailPartyMember[] {
+  if (!Array.isArray(party)) {
+    return [];
+  }
+
+  return party.flatMap((member) => {
+    if (isTimelinePartyMember(member)) {
+      return [{
+        name: normalizeCharacterName(member.name),
+        star: member.star,
+        level: member.level,
+        rank: member.rank,
+        imagePath: resolveCharacterImagePath(member.name)
+      }];
+    }
+
+    if (typeof member === 'string' && member.trim().length > 0) {
+      return [parseLegacyPartyMember(member.trim())];
+    }
+
+    return [];
+  });
+}
+
+function resolveBoardDetailUbRows(article: any): BoardDetailUbRow[] {
+  const rows: BoardDetailUbRow[] = [];
+
+  if (Array.isArray(article?.ubTimeline)) {
+    for (const ub of article.ubTimeline) {
+      if (!ub || typeof ub !== 'object') {
+        continue;
+      }
+
+      const event = ub as { time?: unknown; character?: unknown };
+      const time = typeof event.time === 'string' ? event.time : '';
+      const ubText = typeof event.character === 'string' ? event.character.trim() : '';
+      if (!time && !ubText) {
+        continue;
+      }
+
+      const ubImagePath = ubText ? resolveCharacterImagePath(ubText) : null;
+      rows.push({ time, ubText, ubImagePath });
+    }
+
+    return rows;
+  }
+
+  if (Array.isArray(article?.ubTimes)) {
+    for (const line of article.ubTimes) {
+      if (typeof line !== 'string') {
+        continue;
+      }
+
+      const trimmed = line.trim();
+      if (!trimmed) {
+        continue;
+      }
+
+      const match = trimmed.match(/^([0-9]{1,2}:[0-9]{2})\s+(.+)$/);
+      const time = match ? match[1] : '';
+      const ubText = match ? match[2].trim() : trimmed;
+      const ubImagePath = ubText ? resolveCharacterImagePath(ubText) : null;
+      rows.push({ time, ubText, ubImagePath });
+    }
+  }
+
+  return rows;
 }
 
 function parseTimelog(text: string): ParsedArticle {
@@ -152,11 +341,15 @@ router.get('/:id', (req, res) => {
   const file = path.join(DATA_DIR, req.params.id + '.json');
   if (!fs.existsSync(file)) return res.status(404).send('記事がありません');
   const data = JSON.parse(fs.readFileSync(file, 'utf-8'));
+  const partyMembers = resolveBoardDetailPartyMembers(data.party);
+  const ubRows = resolveBoardDetailUbRows(data);
   res.render('board-detail', {
     title: 'ゆかりさん△',
     currentPage: 'board',
     ...auth,
     article: data,
+    partyMembers,
+    ubRows,
     id: req.params.id
   });
 });

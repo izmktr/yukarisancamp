@@ -15,19 +15,27 @@ const express_session_1 = __importDefault(require("express-session"));
 const express_ejs_layouts_1 = __importDefault(require("express-ejs-layouts"));
 const board_1 = __importDefault(require("./api/board"));
 const fs_1 = __importDefault(require("fs"));
+const app_1 = require("firebase-admin/app");
+const auth_1 = require("firebase-admin/auth");
+const firestore_1 = require("firebase-admin/firestore");
 // Firebase Admin SDK 初期化
 let adminDb = null;
 try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const admin = require('firebase-admin');
     const serviceAccountPath = process.env.FIREBASE_ADMIN_SDK_KEY;
     if (serviceAccountPath) {
-        const serviceAccountJson = fs_1.default.readFileSync(serviceAccountPath, 'utf-8');
+        // パスを解決
+        const resolvedPath = path_1.default.resolve(__dirname, serviceAccountPath);
+        console.log('Firebase serviceAccountKey path:', resolvedPath);
+        // ファイルが存在するか確認
+        if (!fs_1.default.existsSync(resolvedPath)) {
+            throw new Error(`serviceAccountKey.json not found at: ${resolvedPath}`);
+        }
+        const serviceAccountJson = fs_1.default.readFileSync(resolvedPath, 'utf-8');
         const serviceAccount = JSON.parse(serviceAccountJson);
-        admin.initializeApp({
-            credential: admin.credential.cert(serviceAccount)
+        (0, app_1.initializeApp)({
+            credential: (0, app_1.cert)(serviceAccount)
         });
-        adminDb = admin.firestore();
+        adminDb = (0, firestore_1.getFirestore)();
         console.log('Firebase Admin SDK initialized successfully');
     }
     else {
@@ -35,7 +43,9 @@ try {
     }
 }
 catch (error) {
-    console.warn('Firebase Admin SDK initialization failed:', error instanceof Error ? error.message : error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.warn('Firebase Admin SDK initialization failed:', errorMsg);
+    console.warn('Troubleshooting: Check if firebase-admin is installed and serviceAccountKey.json path is correct');
 }
 // Firestore から user role を取得（userRoles コレクション運用）
 async function getUserRoleFromFirestore(googleUserId) {
@@ -204,6 +214,16 @@ app.get('/api/time', (req, res) => {
 app.get('/api/user', (req, res) => {
     res.json({ user: req.session.user || null });
 });
+app.post('/api/user/logout', (req, res) => {
+    req.session.user = undefined;
+    req.session.save((saveError) => {
+        if (saveError) {
+            console.error('Failed to clear user session:', saveError);
+            return res.status(500).json({ error: 'Failed to clear user session' });
+        }
+        return res.json({ success: true });
+    });
+});
 // ユーザーセッション保存API
 // セキュリティ:
 //   - Authorization: Bearer <Firebase ID Token> を必須とし、Admin SDK で検証
@@ -219,10 +239,9 @@ app.post('/api/user/session', express_1.default.json(), async (req, res) => {
             return res.status(401).json({ error: 'Authorization header with Bearer token is required' });
         }
         const idToken = authHeader.slice(7);
-        const admin = require('firebase-admin');
         let decodedToken;
         try {
-            decodedToken = await admin.auth().verifyIdToken(idToken);
+            decodedToken = await (0, auth_1.getAuth)().verifyIdToken(idToken);
         }
         catch {
             return res.status(401).json({ error: 'Invalid or expired ID token' });
