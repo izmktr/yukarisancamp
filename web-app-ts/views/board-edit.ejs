@@ -1,39 +1,161 @@
 <div class="page-content">
     <h2>記事編集</h2>
-    <form action="/board/save" method="post">
-        <% if (typeof id !== 'undefined' && id) { %>
-            <input type="hidden" name="id" value="<%= id %>">
+    <div class="board-detail">
+        <p><strong>ボス名:</strong> <%= article.bossname || '' %></p>
+        <p><strong>ダメージ:</strong> <%= article.damage || '' %></p>
+        <p><strong>バトル時間:</strong> <%= article.battleTime || '' %></p>
+
+        <h3>ユニオンバースト発動時間</h3>
+        <% if (ubRows && ubRows.length > 0) { %>
+            <% const partySlots = (partyMembers && partyMembers.length > 0) ? partyMembers.slice().reverse() : []; %>
+            <div class="ub-table-wrapper">
+                <table class="ub-table">
+                    <thead>
+                        <tr>
+                            <th>残り時間</th>
+                            <th>UB</th>
+                            <% for (let i = 0; i < 5; i += 1) { %>
+                                <% const headerSlot = partySlots[i]; %>
+                                <th class="ub-header-party-cell">
+                                    <% if (headerSlot && headerSlot.imagePath) { %>
+                                        <img src="<%= headerSlot.imagePath %>" alt="<%= headerSlot.name %>" title="<%= headerSlot.name %>" class="ub-party-image" />
+                                    <% } else if (headerSlot) { %>
+                                        <div class="ub-party-image-missing ub-party-image-missing-blue"><%= headerSlot.name %></div>
+                                    <% } else { %>
+                                        <span class="ub-party-empty">-</span>
+                                    <% } %>
+                                </th>
+                            <% } %>
+                            <th class="ub-auto-cell">Auto</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% ubRows.forEach(function(row) { %>
+                            <tr data-is-battle-start="<%= row.ubText === 'バトル開始' ? 'true' : 'false' %>">
+                                <td class="ub-time-cell"><%= row.time || '' %></td>
+                                <td class="ub-event-cell">
+                                    <% if (row.ubImagePath) { %>
+                                        <img src="<%= row.ubImagePath %>" alt="<%= row.ubText %>" title="<%= row.ubText %>" class="ub-event-image" />
+                                    <% } else { %>
+                                        <div class="ub-event-image-missing ub-event-image-missing-blue"><%= row.ubText %></div>
+                                    <% } %>
+                                </td>
+                                <% for (let i = 0; i < 5; i += 1) { %>
+                                    <% const partySlot = partySlots[i]; %>
+                                    <td class="ub-party-cell">
+                                        <% if (partySlot && partySlot.imagePath) { %>
+                                            <div class="ub-icon-box ub-party-toggleable-char" data-icon-type="image">
+                                                <img src="<%= partySlot.imagePath %>" alt="<%= partySlot.name %>" title="<%= partySlot.name %>" class="ub-party-image ub-party-image-mono" />
+                                                <span class="ub-set-badge">SET!</span>
+                                            </div>
+                                        <% } else if (partySlot) { %>
+                                            <div class="ub-icon-box ub-party-toggleable-char" data-icon-type="placeholder">
+                                                <div class="ub-party-image-missing ub-party-image-missing-gray"><%= partySlot.name %></div>
+                                                <span class="ub-set-badge">SET!</span>
+                                            </div>
+                                        <% } else { %>
+                                            <div class="ub-icon-box ub-party-toggleable-char" data-icon-type="placeholder">
+                                                <div class="ub-party-image-missing ub-party-image-missing-gray"></div>
+                                                <span class="ub-set-badge">SET!</span>
+                                            </div>
+                                        <% } %>
+                                    </td>
+                                <% } %>
+                                <td class="ub-auto-cell"></td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <p>未登録</p>
         <% } %>
-        <div class="form-group">
-            <label for="mode">モード</label>
-            <input id="mode" name="mode" class="form-control" value="<%= article && article.mode ? article.mode : '' %>">
-        </div>
-        <div class="form-group">
-            <label for="damage">ダメージ</label>
-            <input id="damage" name="damage" class="form-control" value="<%= article && article.damage ? article.damage : '' %>">
-        </div>
-        <div class="form-group">
-            <label for="battleTime">バトル時間</label>
-            <input id="battleTime" name="battleTime" class="form-control" value="<%= article && article.battleTime ? article.battleTime : '' %>">
-        </div>
-        <div class="form-group">
-            <label for="battleDate">バトル日時</label>
-            <input id="battleDate" name="battleDate" class="form-control" value="<%= article && article.battleDate ? article.battleDate : '' %>">
-        </div>
-        <div class="form-group">
-            <label for="party">パーティ編成（1行1件）</label>
-            <textarea id="party" name="party" rows="6" class="form-control"><%= article && article.party ? article.party.join('\n') : '' %></textarea>
-        </div>
-        <div class="form-group">
-            <label for="ubTimes">ユニオンバースト発動時間（1行1件）</label>
-            <textarea id="ubTimes" name="ubTimes" rows="6" class="form-control"><%= article && article.ubTimes ? article.ubTimes.join('\n') : '' %></textarea>
-        </div>
-        <% if (typeof timelog !== 'undefined' && timelog) { %>
-            <details>
-                <summary>元の timelog を表示</summary>
-                <pre><%= timelog %></pre>
-            </details>
-        <% } %>
-        <button type="submit" class="btn btn-success">保存</button>
-    </form>
+
+        <p>
+            <a href="/board" class="btn">一覧へ戻る</a>
+        </p>
+    </div>
 </div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const ICON_COLUMN_COUNT = 5;
+
+        function isIconActive(iconBox) {
+            const iconType = iconBox.dataset.iconType;
+            if (iconType === 'image') {
+                const image = iconBox.querySelector('.ub-party-image');
+                return image ? !image.classList.contains('ub-party-image-mono') : false;
+            }
+
+            const placeholder = iconBox.querySelector('.ub-party-image-missing');
+            return placeholder ? placeholder.classList.contains('ub-party-image-missing-blue') : false;
+        }
+
+        function setIconActive(iconBox, active) {
+            const iconType = iconBox.dataset.iconType;
+            if (iconType === 'image') {
+                const image = iconBox.querySelector('.ub-party-image');
+                if (image) {
+                    image.classList.toggle('ub-party-image-mono', !active);
+                }
+                return;
+            }
+
+            const placeholder = iconBox.querySelector('.ub-party-image-missing');
+            if (!placeholder) {
+                return;
+            }
+
+            placeholder.classList.toggle('ub-party-image-missing-blue', active);
+            placeholder.classList.toggle('ub-party-image-missing-gray', !active);
+        }
+
+        function updateSetBubbles() {
+            const rows = Array.from(document.querySelectorAll('.ub-table tbody tr'));
+            const previousSetByColumn = Array(ICON_COLUMN_COUNT).fill(false);
+
+            rows.forEach((row) => {
+                const isBattleStart = row.dataset.isBattleStart === 'true';
+                const iconBoxes = row.querySelectorAll('.ub-party-cell .ub-icon-box');
+                let hasActiveIcon = false;
+
+                for (let columnIndex = 0; columnIndex < ICON_COLUMN_COUNT; columnIndex += 1) {
+                    const iconBox = iconBoxes[columnIndex];
+                    if (!iconBox) {
+                        continue;
+                    }
+
+                    const isActive = isIconActive(iconBox);
+                    if (isActive) {
+                        hasActiveIcon = true;
+                    }
+                    let shouldSet = false;
+
+                    if (isBattleStart) {
+                        shouldSet = isActive;
+                    } else if (isActive) {
+                        shouldSet = !previousSetByColumn[columnIndex];
+                    } else {
+                        shouldSet = previousSetByColumn[columnIndex];
+                    }
+
+                    iconBox.classList.toggle('has-set', shouldSet);
+                    iconBox.classList.toggle('set-inactive', shouldSet && !isActive);
+                    previousSetByColumn[columnIndex] = shouldSet;
+                }
+
+                row.classList.toggle('ub-row-has-active', hasActiveIcon);
+            });
+        }
+
+        document.querySelectorAll('.ub-party-toggleable-char').forEach((iconBox) => {
+            iconBox.addEventListener('click', () => {
+                setIconActive(iconBox, !isIconActive(iconBox));
+                updateSetBubbles();
+            });
+        });
+
+        updateSetBubbles();
+    });
+</script>

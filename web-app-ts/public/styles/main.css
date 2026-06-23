@@ -345,7 +345,9 @@ body {
     background: #f6f8ff;
 }
 
-.board-party-image-missing {
+.board-party-image-missing,
+.ub-party-image-missing,
+.ub-event-image-missing-body {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -353,6 +355,17 @@ body {
     font-size: 0.75rem;
     font-weight: 700;
     border: 1px dashed #cfd6e6;
+}
+
+.ub-event-image-missing {
+    width: 84px;
+    height: 84px;
+    border-radius: 8px;
+    background: #cfe0ff;
+    text-align: center;
+    padding: 0.25rem;
+    line-height: 1.2;
+    word-break: break-all;
 }
 
 .board-party-name {
@@ -410,6 +423,10 @@ body {
     border-bottom: none;
 }
 
+.ub-table tbody tr.ub-row-has-active td {
+    background: #fff9d9;
+}
+
 .ub-time-cell {
     font-weight: 700;
     color: #2f3650;
@@ -425,6 +442,21 @@ body {
     background: #f4f7ff;
 }
 
+.ub-icon-box {
+    position: relative;
+    width: 84px;
+    height: 84px;
+    margin: 0 auto;
+}
+
+.ub-party-image-mono {
+    filter: grayscale(100%);
+}
+
+.ub-party-image-toggleable {
+    cursor: pointer;
+}
+
 .ub-event-text,
 .ub-party-text {
     font-size: 0.82rem;
@@ -433,14 +465,142 @@ body {
     white-space: nowrap;
 }
 
+.ub-event-image-missing-blue,
+.ub-party-image-missing-blue {
+    width: 84px;
+    height: 84px;
+    border-radius: 8px;
+    background: #cfe0ff;
+    border: 1px solid #9db8ef;
+    color: #345a9f;
+    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 0.25rem;
+    line-height: 1.15;
+    word-break: break-all;
+}
+
+.ub-event-image-missing-gray,
+.ub-party-image-missing-gray {
+    width: 84px;
+    height: 84px;
+    border-radius: 8px;
+    background: #d7d7d7;
+    border: 1px solid #c1c1c1;
+    color: #6a6a6a;
+    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 0.25rem;
+    line-height: 1.15;
+    word-break: break-all;
+}
+
+.ub-icon-box .ub-party-image:not(.ub-party-image-mono) {
+    border-color: #e15252;
+    box-shadow: 0 0 0 2px #e15252;
+}
+
+.ub-icon-box .ub-party-image-missing-blue {
+    border-color: #e15252;
+    box-shadow: 0 0 0 2px #e15252;
+}
+
+.ub-event-image-missing-body {
+    width: 84px;
+    height: 84px;
+    border-radius: 8px;
+    background: #cfe0ff;
+    border: 1px solid #9db8ef;
+    color: #345a9f;
+    font-size: 0.75rem;
+    text-align: center;
+    padding: 0.25rem;
+    line-height: 1.15;
+    word-break: break-all;
+}
+
+.ub-party-toggleable-char {
+    cursor: pointer;
+}
+
+.ub-set-badge {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    min-width: 38px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: #2daee6;
+    border: 2px solid #ffffff;
+    color: #ffffff;
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    box-shadow: 0 2px 6px rgba(21, 87, 128, 0.35);
+    pointer-events: none;
+    z-index: 2;
+}
+
+.ub-set-badge::after {
+    content: "";
+    position: absolute;
+    right: 9px;
+    bottom: -6px;
+    width: 0;
+    height: 0;
+    border-top: 6px solid #2daee6;
+    border-left: 6px solid transparent;
+}
+
+.ub-icon-box.has-set .ub-set-badge {
+    display: inline-flex;
+}
+
+.ub-icon-box.has-set.set-inactive .ub-set-badge {
+    filter: grayscale(100%);
+}
+
 .ub-party-empty {
     font-size: 0.8rem;
     color: #9aa5c4;
 }
 
+.ub-party-image-missing-gray {
+    width: 84px;
+    height: 84px;
+    border-radius: 8px;
+    background: #d7d7d7;
+    border: 1px solid #c1c1c1;
+    color: #6a6a6a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 0.25rem;
+    line-height: 1.15;
+    word-break: break-all;
+}
+
 .ub-header-party-cell,
-.ub-party-cell {
+.ub-party-cell,
+.ub-auto-cell {
     background: #fff;
+}
+
+.ub-header-party-cell,
+.ub-party-cell,
+.ub-auto-cell {
+    width: 84px;
 }
 
 @media (max-width: 960px) {

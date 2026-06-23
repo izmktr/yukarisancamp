@@ -277,11 +277,15 @@ router.post('/edit', (req, res) => {
     const rawText = req.body.timelog;
     const parsed = parseTimelog(rawText);
     req.session.editingArticle = parsed;
+    const partyMembers = resolveBoardDetailPartyMembers(parsed.party);
+    const ubRows = resolveBoardDetailUbRows(parsed);
     res.render('board-edit', {
         title: 'ゆかりさん△',
         currentPage: 'board',
         ...auth,
         article: parsed,
+        partyMembers,
+        ubRows,
         timelog: rawText,
         isNew: true
     });
@@ -293,11 +297,15 @@ router.get('/:id/edit', (req, res) => {
     if (!fs_1.default.existsSync(file))
         return res.status(404).send('記事がありません');
     const data = JSON.parse(fs_1.default.readFileSync(file, 'utf-8'));
+    const partyMembers = resolveBoardDetailPartyMembers(data.party);
+    const ubRows = resolveBoardDetailUbRows(data);
     res.render('board-edit', {
         title: 'ゆかりさん△',
         currentPage: 'board',
         ...auth,
         article: data,
+        partyMembers,
+        ubRows,
         id: req.params.id,
         isNew: false
     });

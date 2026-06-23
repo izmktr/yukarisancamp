@@ -48,12 +48,13 @@
                                     <% if (headerSlot && headerSlot.imagePath) { %>
                                         <img src="<%= headerSlot.imagePath %>" alt="<%= headerSlot.name %>" title="<%= headerSlot.name %>" class="ub-party-image" />
                                     <% } else if (headerSlot) { %>
-                                        <span class="ub-party-text"><%= headerSlot.name %></span>
+                                        <div class="ub-event-image-missing"><%= headerSlot.name %></div>
                                     <% } else { %>
                                         <span class="ub-party-empty">-</span>
                                     <% } %>
                                 </th>
                             <% } %>
+                            <th class="ub-auto-cell">Auto</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -64,12 +65,13 @@
                                     <% if (row.ubImagePath) { %>
                                         <img src="<%= row.ubImagePath %>" alt="<%= row.ubText %>" title="<%= row.ubText %>" class="ub-event-image" />
                                     <% } else { %>
-                                        <span class="ub-event-text"><%= row.ubText %></span>
+                                        <div class="ub-event-image-missing"><%= row.ubText %></div>
                                     <% } %>
                                 </td>
                                 <% for (let i = 0; i < 5; i += 1) { %>
                                     <td class="ub-party-cell"></td>
                                 <% } %>
+                                <td class="ub-auto-cell"></td>
                             </tr>
                         <% }); %>
                     </tbody>
