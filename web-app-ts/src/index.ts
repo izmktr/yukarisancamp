@@ -14,13 +14,14 @@ import session from 'express-session';
 import expressLayouts from 'express-ejs-layouts';
 import boardApi from './api/board';
 import fs from 'fs';
+import { cert, initializeApp as initializeAdminApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
+import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 
 // Firebase Admin SDK 初期化
-let adminDb: any = null;
+let adminDb: Firestore | null = null;
 
 try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const admin = require('firebase-admin');
   const serviceAccountPath = process.env.FIREBASE_ADMIN_SDK_KEY;
   if (serviceAccountPath) {
     // パスを解決
@@ -34,16 +35,11 @@ try {
 
     const serviceAccountJson = fs.readFileSync(resolvedPath, 'utf-8');
     const serviceAccount = JSON.parse(serviceAccountJson);
-    
-    // admin.credential が存在するか確認
-    if (!admin.credential || typeof admin.credential.cert !== 'function') {
-      throw new Error('firebase-admin module is not properly loaded. admin.credential.cert is not a function');
-    }
 
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount)
+    initializeAdminApp({
+      credential: cert(serviceAccount)
     });
-    adminDb = admin.firestore();
+    adminDb = getFirestore();
     console.log('Firebase Admin SDK initialized successfully');
   } else {
     console.warn('FIREBASE_ADMIN_SDK_KEY not set. role management will use default "user" role.');
@@ -259,10 +255,9 @@ app.post('/api/user/session', express.json(), async (req, res) => {
     }
 
     const idToken = authHeader.slice(7);
-    const admin = require('firebase-admin');
     let decodedToken: any;
     try {
-      decodedToken = await admin.auth().verifyIdToken(idToken);
+      decodedToken = await getAuth().verifyIdToken(idToken);
     } catch {
       return res.status(401).json({ error: 'Invalid or expired ID token' });
     }
