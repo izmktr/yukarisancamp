@@ -6,6 +6,7 @@ let currentAuthUser = null;
 let currentUserProfile = null;
 let currentProfileLoadErrorMessage = '';
 let currentAuthInitErrorMessage = '';
+let hasTriggeredAuthSyncReload = false;
 
 const USER_PROFILE_COLLECTION = 'userProfiles';
 const CLAN_BATTLE_COLLECTION = 'clanBattles';
@@ -805,6 +806,23 @@ function getMissingFirebaseConfigKeys(config) {
     return requiredKeys.filter((key) => !config || !config[key]);
 }
 
+function getServerSessionState() {
+    const defaultState = { isLoggedIn: false, isAdmin: false };
+    if (!window.__SERVER_SESSION__) {
+        return defaultState;
+    }
+    return {
+        isLoggedIn: Boolean(window.__SERVER_SESSION__.isLoggedIn),
+        isAdmin: Boolean(window.__SERVER_SESSION__.isAdmin)
+    };
+}
+
+function shouldReloadAfterSessionSync(role) {
+    const serverState = getServerSessionState();
+    const latestIsAdmin = role === 'admin';
+    return !serverState.isLoggedIn || serverState.isAdmin !== latestIsAdmin;
+}
+
 function renderAuthState(user, profile = null) {
     const authButtons = document.querySelector('.auth-buttons');
     if (!authButtons) {
@@ -876,7 +894,7 @@ function initializeFirebaseAuth() {
                 if (currentUserProfile) {
                     try {
                         const idToken = await user.getIdToken();
-                        await fetch('/api/user/session', {
+                        const response = await fetch('/api/user/session', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
@@ -886,6 +904,15 @@ function initializeFirebaseAuth() {
                                 displayName: currentUserProfile.displayName
                             })
                         });
+
+                        if (response.ok) {
+                            const payload = await response.json();
+                            if (!hasTriggeredAuthSyncReload && shouldReloadAfterSessionSync(payload.role)) {
+                                hasTriggeredAuthSyncReload = true;
+                                location.reload();
+                                return;
+                            }
+                        }
                     } catch (err) {
                         console.error('Failed to save user session:', err);
                     }
@@ -934,8 +961,11 @@ async function logout() {
 
     try {
         await auth.signOut();
+        await fetch('/api/user/logout', { method: 'POST' });
         currentAuthUser = null;
         currentUserProfile = null;
+        hasTriggeredAuthSyncReload = false;
+        location.reload();
     } catch (error) {
         console.error('ログアウト失敗:', error);
         alert('ログアウトに失敗しました。');

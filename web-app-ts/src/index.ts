@@ -238,6 +238,17 @@ app.get('/api/user', (req, res) => {
   res.json({ user: req.session.user || null });
 });
 
+app.post('/api/user/logout', (req, res) => {
+  req.session.user = undefined;
+  req.session.save((saveError) => {
+    if (saveError) {
+      console.error('Failed to clear user session:', saveError);
+      return res.status(500).json({ error: 'Failed to clear user session' });
+    }
+    return res.json({ success: true });
+  });
+});
+
 // ユーザーセッション保存API
 // セキュリティ:
 //   - Authorization: Bearer <Firebase ID Token> を必須とし、Admin SDK で検証
