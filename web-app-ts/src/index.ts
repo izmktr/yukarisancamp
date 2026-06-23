@@ -23,8 +23,23 @@ try {
   const admin = require('firebase-admin');
   const serviceAccountPath = process.env.FIREBASE_ADMIN_SDK_KEY;
   if (serviceAccountPath) {
-    const serviceAccountJson = fs.readFileSync(serviceAccountPath, 'utf-8');
+    // パスを解決
+    const resolvedPath = path.resolve(__dirname, serviceAccountPath);
+    console.log('Firebase serviceAccountKey path:', resolvedPath);
+
+    // ファイルが存在するか確認
+    if (!fs.existsSync(resolvedPath)) {
+      throw new Error(`serviceAccountKey.json not found at: ${resolvedPath}`);
+    }
+
+    const serviceAccountJson = fs.readFileSync(resolvedPath, 'utf-8');
     const serviceAccount = JSON.parse(serviceAccountJson);
+    
+    // admin.credential が存在するか確認
+    if (!admin.credential || typeof admin.credential.cert !== 'function') {
+      throw new Error('firebase-admin module is not properly loaded. admin.credential.cert is not a function');
+    }
+
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount)
     });
@@ -34,7 +49,9 @@ try {
     console.warn('FIREBASE_ADMIN_SDK_KEY not set. role management will use default "user" role.');
   }
 } catch (error) {
-  console.warn('Firebase Admin SDK initialization failed:', error instanceof Error ? error.message : error);
+  const errorMsg = error instanceof Error ? error.message : String(error);
+  console.warn('Firebase Admin SDK initialization failed:', errorMsg);
+  console.warn('Troubleshooting: Check if firebase-admin is installed and serviceAccountKey.json path is correct');
 }
 
 // Firestore から user role を取得（userRoles コレクション運用）
