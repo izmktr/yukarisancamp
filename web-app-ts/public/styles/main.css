@@ -563,6 +563,16 @@ body {
     white-space: nowrap;
 }
 
+.ub-table thead th:nth-child(2),
+.ub-table tbody td.ub-event-cell {
+    padding-right: 0.95rem;
+}
+
+.ub-table thead th:nth-child(3),
+.ub-table tbody td.ub-party-cell:first-of-type {
+    padding-left: 0.95rem;
+}
+
 .ub-table thead th {
     background: #f7f9ff;
     color: #34406a;
