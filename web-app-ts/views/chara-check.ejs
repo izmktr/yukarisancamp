@@ -2,6 +2,26 @@
     <h2>キャラ確認</h2>
     <p>登録済みキャラを名前と画像で確認できます。（<%= characters.length %>件）</p>
 
+    <% if (unindexedImages && unindexedImages.length > 0) { %>
+        <div class="card">
+            <h3>charaindex未登録画像</h3>
+            <p><%= unindexedImages.length %>件のpngファイルが charaindex.json に未登録です。</p>
+            <div class="chara-grid">
+                <% unindexedImages.forEach((fileName) => { %>
+                    <div class="chara-card">
+                        <img
+                            src="/chara-images/<%= fileName %>"
+                            alt="<%= fileName %>"
+                            class="chara-image"
+                            loading="lazy"
+                        >
+                        <p class="chara-name"><%= fileName %></p>
+                    </div>
+                <% }) %>
+            </div>
+        </div>
+    <% } %>
+
     <% if (characters.length === 0) { %>
         <div class="card">
             <p>キャラデータが見つかりませんでした。</p>

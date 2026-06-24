@@ -153,7 +153,9 @@ app.get('/clanbattle-settings', (req, res) => {
 app.get('/chara-check', (req, res) => {
     const userSession = req.session.user;
     const charaIndexPath = path_1.default.join(__dirname, '../chara/charaindex.json');
+    const charaDirPath = path_1.default.join(__dirname, '../chara');
     let characters = [];
+    let unindexedImages = [];
     try {
         const raw = fs_1.default.readFileSync(charaIndexPath, 'utf-8');
         const parsed = JSON.parse(raw);
@@ -166,13 +168,24 @@ app.get('/chara-check', (req, res) => {
     catch (error) {
         console.error('Failed to load character index:', error);
     }
+    try {
+        const indexedFileNames = new Set(characters.map((character) => character.fileName));
+        unindexedImages = fs_1.default.readdirSync(charaDirPath)
+            .filter((fileName) => fileName.toLowerCase().endsWith('.png'))
+            .filter((fileName) => !indexedFileNames.has(fileName))
+            .sort((left, right) => left.localeCompare(right, 'ja'));
+    }
+    catch (error) {
+        console.error('Failed to scan character image directory:', error);
+    }
     res.render('chara-check', {
         title: 'ゆかりさん△',
         currentPage: 'chara-check',
         isLoggedIn: !!userSession,
         userName: userSession?.displayName || '',
         isAdmin: userSession?.role === 'admin',
-        characters
+        characters,
+        unindexedImages
     });
 });
 // クランデータ詳細表示
