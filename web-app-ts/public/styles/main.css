@@ -425,6 +425,15 @@ body {
     padding-top: 0.45rem;
 }
 
+.post-info-row-difficulty {
+    align-items: center;
+}
+
+.post-info-row-difficulty label {
+    padding-top: 0;
+    line-height: 1.2;
+}
+
 .post-info-input,
 .post-info-textarea {
     width: 100%;
@@ -458,6 +467,12 @@ body {
     gap: 0.5rem;
 }
 
+.post-info-toggle-wrap-difficulty {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.75rem;
+}
+
 .post-toggle-group {
     display: flex;
     flex-wrap: wrap;
@@ -486,7 +501,7 @@ body {
     margin: 0;
     color: #4a5783;
     font-size: 0.86rem;
-    line-height: 1.45;
+    line-height: 1.2;
 }
 
 .ub-table-wrapper {
