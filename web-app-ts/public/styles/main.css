@@ -618,6 +618,43 @@ body {
     width: 84px;
 }
 
+.ub-actions-cell {
+    background: #fff;
+    width: 96px;
+}
+
+.ub-actions-buttons {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+}
+
+.ub-action-btn {
+    width: 42px;
+    height: 42px;
+    border: 1px solid #c9d4ea;
+    border-radius: 10px;
+    background: #f7f9ff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    cursor: pointer;
+}
+
+.ub-action-btn.is-disabled,
+.ub-action-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.ub-action-btn-image {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+}
+
 .ub-auto-icon-box {
     display: flex;
     align-items: center;
@@ -655,6 +692,57 @@ body {
 
 .ub-auto-label.ub-auto-label-on {
     font-size: 1.5rem;
+}
+
+.ub-table tbody tr.has-comment-row td {
+    border-bottom: none;
+}
+
+.ub-comment-row td {
+    border-top: none;
+}
+
+.ub-comment-prefix-cell {
+    background: #fff;
+}
+
+.ub-comment-cell {
+    background: #fff;
+    padding: 0.35rem 0.45rem 0.55rem 0.45rem;
+}
+
+.ub-comment-content {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ub-comment-input {
+    flex: 1;
+    min-width: 0;
+    height: 34px;
+    border: 1px solid #c8d0e1;
+    border-radius: 8px;
+    padding: 0 10px;
+    font-size: 0.9rem;
+}
+
+.ub-comment-input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
+}
+
+.ub-comment-delete-btn {
+    height: 34px;
+    border: 1px solid #e2b8b8;
+    border-radius: 8px;
+    background: #fff4f4;
+    color: #8f2f2f;
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding: 0 12px;
+    cursor: pointer;
 }
 
 /* ON + 活性 → 赤 */

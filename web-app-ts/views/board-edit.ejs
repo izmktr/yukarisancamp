@@ -27,6 +27,7 @@
                                 </th>
                             <% } %>
                             <th class="ub-auto-cell">Auto</th>
+                            <th class="ub-actions-cell"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -68,6 +69,16 @@
                                         </div>
                                     </div>
                                 </td>
+                                <td class="ub-actions-cell">
+                                    <div class="ub-actions-buttons">
+                                        <button type="button" class="ub-action-btn ub-action-btn-comment" title="コメントを追加" aria-label="コメントを追加">
+                                            <img src="/images/icon_comment.png" alt="コメントを追加" class="ub-action-btn-image" />
+                                        </button>
+                                        <button type="button" class="ub-action-btn ub-action-btn-add-line" title="下に行を追加" aria-label="下に行を追加">
+                                            <img src="/images/icon_add_line.png" alt="下に行を追加" class="ub-action-btn-image" />
+                                        </button>
+                                    </div>
+                                </td>
                             </tr>
                         <% }); %>
                     </tbody>
@@ -86,6 +97,63 @@
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         const PARTY_COLUMN_COUNT = 5;
+        const COMMENT_COLSPAN = 8;
+
+        function getMainRows() {
+            return Array.from(document.querySelectorAll('.ub-table tbody tr:not(.ub-comment-row)'));
+        }
+
+        function ensureRowIds() {
+            getMainRows().forEach((row, index) => {
+                if (!row.dataset.ubRowId) {
+                    row.dataset.ubRowId = String(index + 1);
+                }
+            });
+        }
+
+        function getCommentRowFor(mainRow) {
+            const rowId = mainRow.dataset.ubRowId;
+            if (!rowId) {
+                return null;
+            }
+            return document.querySelector(`.ub-comment-row[data-parent-row-id="${rowId}"]`);
+        }
+
+        function setCommentButtonState(mainRow, disabled) {
+            const commentButton = mainRow.querySelector('.ub-action-btn-comment');
+            if (!commentButton) {
+                return;
+            }
+            commentButton.disabled = disabled;
+            commentButton.classList.toggle('is-disabled', disabled);
+        }
+
+        function createCommentRow(mainRow) {
+            const rowId = mainRow.dataset.ubRowId;
+            if (!rowId) {
+                return null;
+            }
+
+            const commentRow = document.createElement('tr');
+            commentRow.className = 'ub-comment-row';
+            commentRow.dataset.parentRowId = rowId;
+
+            const prefixCell = document.createElement('td');
+            prefixCell.className = 'ub-comment-prefix-cell';
+
+            const mergedCell = document.createElement('td');
+            mergedCell.className = 'ub-comment-cell';
+            mergedCell.colSpan = COMMENT_COLSPAN;
+            mergedCell.innerHTML = `
+                <div class="ub-comment-content">
+                    <input type="text" class="ub-comment-input" placeholder="コメントを入力" aria-label="コメントを入力" />
+                    <button type="button" class="ub-comment-delete-btn" aria-label="コメントを削除">削除</button>
+                </div>
+            `;
+
+            commentRow.append(prefixCell, mergedCell);
+            return commentRow;
+        }
 
         function isIconActive(iconBox) {
             const iconType = iconBox.dataset.iconType;
@@ -133,7 +201,7 @@
         }
 
         function updateSetBubbles() {
-            const rows = Array.from(document.querySelectorAll('.ub-table tbody tr'));
+            const rows = getMainRows();
             const previousSetByColumn = Array(PARTY_COLUMN_COUNT + 1).fill(false);
 
             rows.forEach((row) => {
@@ -177,6 +245,62 @@
                 updateSetBubbles();
             });
         });
+
+        ensureRowIds();
+
+        getMainRows().forEach((row) => {
+            const commentButton = row.querySelector('.ub-action-btn-comment');
+            if (!commentButton) {
+                return;
+            }
+
+            commentButton.addEventListener('click', () => {
+                if (getCommentRowFor(row)) {
+                    return;
+                }
+
+                const commentRow = createCommentRow(row);
+                if (!commentRow) {
+                    return;
+                }
+
+                row.insertAdjacentElement('afterend', commentRow);
+                row.classList.add('has-comment-row');
+                setCommentButtonState(row, true);
+            });
+        });
+
+        const tbody = document.querySelector('.ub-table tbody');
+        if (tbody) {
+            tbody.addEventListener('click', (event) => {
+                const target = event.target;
+                if (!(target instanceof HTMLElement)) {
+                    return;
+                }
+
+                const deleteButton = target.closest('.ub-comment-delete-btn');
+                if (!deleteButton) {
+                    return;
+                }
+
+                const commentRow = deleteButton.closest('.ub-comment-row');
+                if (!commentRow) {
+                    return;
+                }
+
+                const parentRowId = commentRow.dataset.parentRowId;
+                const mainRow = parentRowId
+                    ? document.querySelector(`tr[data-ub-row-id="${parentRowId}"]`)
+                    : null;
+
+                commentRow.remove();
+
+                if (mainRow instanceof HTMLElement) {
+                    mainRow.classList.remove('has-comment-row');
+                    setCommentButtonState(mainRow, false);
+                }
+            });
+        }
 
         updateSetBubbles();
     });
