@@ -61,7 +61,13 @@
                                         <% } %>
                                     </td>
                                 <% } %>
-                                <td class="ub-auto-cell"></td>
+                                <td class="ub-auto-cell">
+                                    <div class="ub-icon-box ub-auto-icon-box ub-party-toggleable-char" data-icon-type="auto">
+                                        <div class="ub-auto-btn ub-auto-btn-inactive">
+                                            <span class="ub-auto-label">OFF</span>
+                                        </div>
+                                    </div>
+                                </td>
                             </tr>
                         <% }); %>
                     </tbody>
@@ -79,7 +85,7 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', () => {
-        const ICON_COLUMN_COUNT = 5;
+        const PARTY_COLUMN_COUNT = 5;
 
         function isIconActive(iconBox) {
             const iconType = iconBox.dataset.iconType;
@@ -87,7 +93,10 @@
                 const image = iconBox.querySelector('.ub-party-image');
                 return image ? !image.classList.contains('ub-party-image-mono') : false;
             }
-
+            if (iconType === 'auto') {
+                const btn = iconBox.querySelector('.ub-auto-btn');
+                return btn ? btn.classList.contains('ub-auto-btn-active') : false;
+            }
             const placeholder = iconBox.querySelector('.ub-party-image-missing');
             return placeholder ? placeholder.classList.contains('ub-party-image-missing-blue') : false;
         }
@@ -101,48 +110,61 @@
                 }
                 return;
             }
-
+            if (iconType === 'auto') {
+                const btn = iconBox.querySelector('.ub-auto-btn');
+                if (btn) {
+                    btn.classList.toggle('ub-auto-btn-active', active);
+                    btn.classList.toggle('ub-auto-btn-inactive', !active);
+                }
+                return;
+            }
             const placeholder = iconBox.querySelector('.ub-party-image-missing');
             if (!placeholder) {
                 return;
             }
-
             placeholder.classList.toggle('ub-party-image-missing-blue', active);
             placeholder.classList.toggle('ub-party-image-missing-gray', !active);
         }
 
+        function computeSet(isActive, previousSet, isBattleStart) {
+            if (isBattleStart) return isActive;
+            if (isActive) return !previousSet;
+            return previousSet;
+        }
+
         function updateSetBubbles() {
             const rows = Array.from(document.querySelectorAll('.ub-table tbody tr'));
-            const previousSetByColumn = Array(ICON_COLUMN_COUNT).fill(false);
+            const previousSetByColumn = Array(PARTY_COLUMN_COUNT + 1).fill(false);
 
             rows.forEach((row) => {
                 const isBattleStart = row.dataset.isBattleStart === 'true';
                 const iconBoxes = row.querySelectorAll('.ub-party-cell .ub-icon-box');
                 let hasActiveIcon = false;
 
-                for (let columnIndex = 0; columnIndex < ICON_COLUMN_COUNT; columnIndex += 1) {
+                for (let columnIndex = 0; columnIndex < PARTY_COLUMN_COUNT; columnIndex += 1) {
                     const iconBox = iconBoxes[columnIndex];
                     if (!iconBox) {
                         continue;
                     }
-
                     const isActive = isIconActive(iconBox);
-                    if (isActive) {
-                        hasActiveIcon = true;
-                    }
-                    let shouldSet = false;
-
-                    if (isBattleStart) {
-                        shouldSet = isActive;
-                    } else if (isActive) {
-                        shouldSet = !previousSetByColumn[columnIndex];
-                    } else {
-                        shouldSet = previousSetByColumn[columnIndex];
-                    }
-
+                    if (isActive) hasActiveIcon = true;
+                    const shouldSet = computeSet(isActive, previousSetByColumn[columnIndex], isBattleStart);
                     iconBox.classList.toggle('has-set', shouldSet);
                     iconBox.classList.toggle('set-inactive', shouldSet && !isActive);
                     previousSetByColumn[columnIndex] = shouldSet;
+                }
+
+                const autoBox = row.querySelector('.ub-auto-cell .ub-icon-box');
+                if (autoBox) {
+                    const isAutoActive = isIconActive(autoBox);
+                    if (isAutoActive) hasActiveIcon = true;
+                    const shouldAutoSet = computeSet(isAutoActive, previousSetByColumn[PARTY_COLUMN_COUNT], isBattleStart);
+                    const autoLabel = autoBox.querySelector('.ub-auto-label');
+                    if (autoLabel) {
+                        autoLabel.textContent = shouldAutoSet ? 'ON' : 'OFF';
+                        autoLabel.classList.toggle('ub-auto-label-on', shouldAutoSet);
+                    }
+                    previousSetByColumn[PARTY_COLUMN_COUNT] = shouldAutoSet;
                 }
 
                 row.classList.toggle('ub-row-has-active', hasActiveIcon);

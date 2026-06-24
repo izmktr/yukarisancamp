@@ -618,6 +618,55 @@ body {
     width: 84px;
 }
 
+.ub-auto-icon-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ub-auto-btn {
+    width: 63px;
+    height: 63px;
+    border-radius: 50%;
+    border: 2px solid;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.ub-auto-btn-inactive {
+    background: #d0d0d0;
+    border-color: #a0a0a0;
+    color: #666666;
+}
+
+.ub-auto-btn-active {
+    background: #7de3f9;
+    border-color: #29b6d9;
+    color: #0a5a78;
+}
+
+.ub-auto-label {
+    font-weight: 800;
+    font-size: 0.85rem;
+    pointer-events: none;
+}
+
+.ub-auto-label.ub-auto-label-on {
+    font-size: 1.5rem;
+}
+
+/* ON + 活性 → 赤 */
+.ub-auto-btn-active .ub-auto-label-on {
+    color: #e15252;
+}
+
+/* OFF + 非活性 → 背景色に近い薄い色 */
+.ub-auto-btn-inactive .ub-auto-label:not(.ub-auto-label-on) {
+    color: #b8b8b8;
+}
+
 @media (max-width: 960px) {
     .board-party-grid {
         grid-template-columns: repeat(3, minmax(0, 1fr));
