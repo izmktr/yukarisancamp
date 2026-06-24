@@ -129,6 +129,16 @@ function loadCharaIndex(): CharaIndexEntry[] {
 
 const charaIndex = loadCharaIndex();
 const charaImageByName = new Map(charaIndex.map((entry) => [entry.name, entry.fileName]));
+const charaImageByNormalizedName = new Map(
+  charaIndex.map((entry) => [normalizeCharacterLookupKey(entry.name), entry.fileName])
+);
+
+function normalizeCharacterLookupKey(name: string): string {
+  return (name || '')
+    .toLowerCase()
+    .replace(/[\s　・･]/g, '')
+    .trim();
+}
 
 function normalizeCharacterName(name: string): string {
   const trimmed = name.trim();
@@ -170,6 +180,14 @@ function resolveCharacterImagePath(name: string): string | null {
     || (swimsuitAliasName ? charaImageByName.get(swimsuitAliasName) : undefined);
   if (exact) {
     return `/chara-images/${exact}`;
+  }
+
+  const normalizedKey = normalizeCharacterLookupKey(normalizedName);
+  const normalizedAliasKey = swimsuitAliasName ? normalizeCharacterLookupKey(swimsuitAliasName) : '';
+  const normalizedMatch = charaImageByNormalizedName.get(normalizedKey)
+    || (normalizedAliasKey ? charaImageByNormalizedName.get(normalizedAliasKey) : undefined);
+  if (normalizedMatch) {
+    return `/chara-images/${normalizedMatch}`;
   }
 
   const target = splitCharacterName(normalizedName);
