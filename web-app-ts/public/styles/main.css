@@ -504,6 +504,11 @@ body {
     line-height: 1.2;
 }
 
+.post-info-row-difficulty .post-difficulty-help-text {
+    margin-bottom: 0;
+    color: #4a5783;
+}
+
 .ub-table-wrapper {
     margin-top: 0.75rem;
     overflow-x: auto;
