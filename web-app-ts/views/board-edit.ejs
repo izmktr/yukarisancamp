@@ -8,6 +8,11 @@
         <h3>ユニオンバースト発動時間</h3>
         <% if (ubRows && ubRows.length > 0) { %>
             <% const partySlots = (partyMembers && partyMembers.length > 0) ? partyMembers.slice().reverse() : []; %>
+            <div class="ub-display-toggle" role="group" aria-label="表示切り替え">
+                <button type="button" class="ub-display-toggle-btn is-active" data-display-mode="all">すべて</button>
+                <button type="button" class="ub-display-toggle-btn" data-display-mode="operation">操作</button>
+                <button type="button" class="ub-display-toggle-btn" data-display-mode="operation-plus-prev">操作+1つ前</button>
+            </div>
             <div class="ub-table-wrapper">
                 <table class="ub-table">
                     <thead>
@@ -32,7 +37,7 @@
                     </thead>
                     <tbody>
                         <% ubRows.forEach(function(row) { %>
-                            <tr data-is-battle-start="<%= row.ubText === 'バトル開始' ? 'true' : 'false' %>">
+                            <tr data-is-battle-start="<%= row.ubText === 'バトル開始' ? 'true' : 'false' %>" data-is-battle-end="<%= row.ubText === 'バトル終了' ? 'true' : 'false' %>">
                                 <td class="ub-time-cell"><%= row.time || '' %></td>
                                 <td class="ub-event-cell">
                                     <% if (row.ubImagePath) { %>
@@ -98,6 +103,10 @@
     document.addEventListener('DOMContentLoaded', () => {
         const PARTY_COLUMN_COUNT = 5;
         const COMMENT_COLSPAN = 8;
+        const DISPLAY_MODE_ALL = 'all';
+        const DISPLAY_MODE_OPERATION = 'operation';
+        const DISPLAY_MODE_OPERATION_PLUS_PREV = 'operation-plus-prev';
+        let currentDisplayMode = DISPLAY_MODE_ALL;
 
         function getMainRows() {
             return Array.from(document.querySelectorAll('.ub-table tbody tr:not(.ub-comment-row)'));
@@ -105,9 +114,7 @@
 
         function ensureRowIds() {
             getMainRows().forEach((row, index) => {
-                if (!row.dataset.ubRowId) {
-                    row.dataset.ubRowId = String(index + 1);
-                }
+                row.dataset.ubRowId = String(index + 1);
             });
         }
 
@@ -146,13 +153,357 @@
             mergedCell.colSpan = COMMENT_COLSPAN;
             mergedCell.innerHTML = `
                 <div class="ub-comment-content">
-                    <input type="text" class="ub-comment-input" placeholder="コメントを入力" aria-label="コメントを入力" />
+                    <textarea class="ub-comment-input" rows="1" placeholder="コメントを入力" aria-label="コメントを入力"></textarea>
                     <button type="button" class="ub-comment-delete-btn" aria-label="コメントを削除">削除</button>
                 </div>
             `;
 
             commentRow.append(prefixCell, mergedCell);
             return commentRow;
+        }
+
+        function resizeCommentInput(commentInput) {
+            if (!(commentInput instanceof HTMLTextAreaElement)) {
+                return;
+            }
+            commentInput.style.height = 'auto';
+            commentInput.style.height = `${commentInput.scrollHeight}px`;
+        }
+
+        function bindCommentInputAutoResize(commentInput) {
+            if (!(commentInput instanceof HTMLTextAreaElement)) {
+                return;
+            }
+
+            resizeCommentInput(commentInput);
+
+            commentInput.addEventListener('input', () => {
+                resizeCommentInput(commentInput);
+            });
+
+            commentInput.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    requestAnimationFrame(() => resizeCommentInput(commentInput));
+                }
+            });
+
+            commentInput.addEventListener('paste', () => {
+                requestAnimationFrame(() => resizeCommentInput(commentInput));
+            });
+        }
+
+        function getRowTimeText(row) {
+            const timeInput = row.querySelector('.ub-time-input');
+            if (timeInput instanceof HTMLInputElement) {
+                return timeInput.value;
+            }
+            const timeCell = row.querySelector('.ub-time-cell');
+            return timeCell ? timeCell.textContent.trim() : '';
+        }
+
+        function parseTimeToSeconds(timeText) {
+            const raw = (timeText || '').trim();
+            if (!raw) {
+                return null;
+            }
+
+            const normalizedWithColon = raw.match(/^(\d{1,2}):(\d{1,2})$/);
+            if (normalizedWithColon) {
+                const minutes = Number(normalizedWithColon[1]);
+                const seconds = Number(normalizedWithColon[2]);
+                if (Number.isNaN(minutes) || Number.isNaN(seconds) || seconds >= 60) {
+                    return null;
+                }
+                return (minutes * 60) + seconds;
+            }
+
+            const normalizedDigits = raw.match(/^\d{1,4}$/);
+            if (!normalizedDigits) {
+                return null;
+            }
+
+            const padded = raw.padStart(4, '0');
+            const minutes = Number(padded.slice(0, 2));
+            const seconds = Number(padded.slice(2));
+            if (Number.isNaN(minutes) || Number.isNaN(seconds) || seconds >= 60) {
+                return null;
+            }
+            return (minutes * 60) + seconds;
+        }
+
+        function formatSecondsToTime(totalSeconds) {
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+
+        function getAdjacentMainRows(currentRow) {
+            const rows = getMainRows();
+            const index = rows.indexOf(currentRow);
+            if (index < 0) {
+                return { previousRow: null, nextRow: null };
+            }
+            return {
+                previousRow: index > 0 ? rows[index - 1] : null,
+                nextRow: index < rows.length - 1 ? rows[index + 1] : null,
+            };
+        }
+
+        function validateTimeBetweenAdjacentRows(currentRow, currentSeconds) {
+            const { previousRow, nextRow } = getAdjacentMainRows(currentRow);
+            const previousSeconds = previousRow ? parseTimeToSeconds(getRowTimeText(previousRow)) : null;
+            const nextSeconds = nextRow ? parseTimeToSeconds(getRowTimeText(nextRow)) : null;
+
+            if (previousSeconds === null || nextSeconds === null) {
+                return true;
+            }
+
+            const minValue = Math.min(previousSeconds, nextSeconds);
+            const maxValue = Math.max(previousSeconds, nextSeconds);
+            return currentSeconds >= minValue && currentSeconds <= maxValue;
+        }
+
+        function normalizeAndValidateTimeInput(timeInput) {
+            if (!(timeInput instanceof HTMLInputElement)) {
+                return;
+            }
+
+            const row = timeInput.closest('tr');
+            if (!(row instanceof HTMLTableRowElement)) {
+                return;
+            }
+
+            const rawValue = timeInput.value.trim();
+            const parsedSeconds = parseTimeToSeconds(rawValue);
+            if (parsedSeconds === null) {
+                alert('残り時間は 00:00 形式に変換できる値を入力してください。');
+                timeInput.value = timeInput.dataset.lastValidTime || '';
+                return;
+            }
+
+            const formatted = formatSecondsToTime(parsedSeconds);
+            if (!validateTimeBetweenAdjacentRows(row, parsedSeconds)) {
+                alert('残り時間は前行と後行の間の時刻にしてください。');
+                timeInput.value = timeInput.dataset.lastValidTime || '';
+                return;
+            }
+
+            timeInput.value = formatted;
+            timeInput.dataset.lastValidTime = formatted;
+        }
+
+        function bindTimeInputValidation(row) {
+            const timeInput = row.querySelector('.ub-time-input');
+            if (!(timeInput instanceof HTMLInputElement)) {
+                return;
+            }
+
+            const initialSeconds = parseTimeToSeconds(timeInput.value);
+            if (initialSeconds !== null) {
+                const formattedInitial = formatSecondsToTime(initialSeconds);
+                timeInput.value = formattedInitial;
+                timeInput.dataset.lastValidTime = formattedInitial;
+            } else {
+                timeInput.dataset.lastValidTime = '';
+            }
+
+            timeInput.addEventListener('blur', () => {
+                normalizeAndValidateTimeInput(timeInput);
+            });
+
+            timeInput.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    normalizeAndValidateTimeInput(timeInput);
+                    timeInput.blur();
+                }
+            });
+        }
+
+        function createCopiedRow(sourceRow) {
+            const copiedRow = sourceRow.cloneNode(true);
+            copiedRow.classList.remove('ub-row-has-active', 'has-comment-row');
+            copiedRow.dataset.isBattleStart = 'false';
+            copiedRow.dataset.isAddedRow = 'true';
+            delete copiedRow.dataset.ubRowId;
+
+            const timeCell = copiedRow.querySelector('.ub-time-cell');
+            if (timeCell) {
+                const copiedTime = getRowTimeText(sourceRow);
+                timeCell.innerHTML = '';
+                const timeInput = document.createElement('input');
+                timeInput.type = 'text';
+                timeInput.className = 'ub-time-input';
+                timeInput.setAttribute('aria-label', '残り時間');
+                timeInput.value = copiedTime;
+                timeCell.appendChild(timeInput);
+            }
+
+            const eventCell = copiedRow.querySelector('.ub-event-cell');
+            if (eventCell) {
+                eventCell.innerHTML = '';
+            }
+
+            copiedRow.querySelectorAll('.ub-party-toggleable-char').forEach((iconBox) => {
+                setIconActive(iconBox, false);
+            });
+
+            setCommentButtonState(copiedRow, false);
+            ensureAddedRowDeleteButton(copiedRow);
+
+            return copiedRow;
+        }
+
+        function ensureAddedRowDeleteButton(row) {
+            if (row.dataset.isAddedRow !== 'true') {
+                return;
+            }
+
+            const actionsButtons = row.querySelector('.ub-actions-buttons');
+            if (!actionsButtons) {
+                return;
+            }
+
+            const existingDeleteButton = actionsButtons.querySelector('.ub-action-btn-delete-row');
+            if (existingDeleteButton) {
+                return;
+            }
+
+            const deleteButton = document.createElement('button');
+            deleteButton.type = 'button';
+            deleteButton.className = 'ub-action-btn ub-action-btn-delete-row';
+            deleteButton.title = '行を削除';
+            deleteButton.setAttribute('aria-label', '行を削除');
+            deleteButton.innerHTML = '<img src="/images/icon_trash.png" alt="行を削除" class="ub-action-btn-image" />';
+            actionsButtons.appendChild(deleteButton);
+        }
+
+        function bindIconToggleHandlers(row) {
+            row.querySelectorAll('.ub-party-toggleable-char').forEach((iconBox) => {
+                iconBox.addEventListener('click', () => {
+                    setIconActive(iconBox, !isIconActive(iconBox));
+                    updateSetBubbles();
+                });
+            });
+        }
+
+        function bindRowActionHandlers(row) {
+            const commentButton = row.querySelector('.ub-action-btn-comment');
+            if (commentButton) {
+                commentButton.addEventListener('click', () => {
+                    if (getCommentRowFor(row)) {
+                        return;
+                    }
+
+                    const commentRow = createCommentRow(row);
+                    if (!commentRow) {
+                        return;
+                    }
+
+                    const existingCommentRow = getCommentRowFor(row);
+                    if (existingCommentRow) {
+                        existingCommentRow.insertAdjacentElement('afterend', commentRow);
+                    } else {
+                        row.insertAdjacentElement('afterend', commentRow);
+                    }
+                    row.classList.add('has-comment-row');
+                    setCommentButtonState(row, true);
+
+                    const commentInput = commentRow.querySelector('.ub-comment-input');
+                    bindCommentInputAutoResize(commentInput);
+                    applyRowFilter();
+                });
+            }
+
+            const addLineButton = row.querySelector('.ub-action-btn-add-line');
+            if (addLineButton) {
+                addLineButton.addEventListener('click', () => {
+                    const copiedRow = createCopiedRow(row);
+                    const existingCommentRow = getCommentRowFor(row);
+                    if (existingCommentRow) {
+                        existingCommentRow.insertAdjacentElement('afterend', copiedRow);
+                    } else {
+                        row.insertAdjacentElement('afterend', copiedRow);
+                    }
+
+                    bindIconToggleHandlers(copiedRow);
+                    bindRowActionHandlers(copiedRow);
+                    ensureRowIds();
+                    bindTimeInputValidation(copiedRow);
+
+                    const copiedCommentRow = createCommentRow(copiedRow);
+                    if (copiedCommentRow) {
+                        copiedRow.insertAdjacentElement('afterend', copiedCommentRow);
+                        copiedRow.classList.add('has-comment-row');
+                        setCommentButtonState(copiedRow, true);
+                        const commentInput = copiedCommentRow.querySelector('.ub-comment-input');
+                        bindCommentInputAutoResize(commentInput);
+                    }
+
+                    updateSetBubbles();
+                    applyRowFilter();
+                });
+            }
+        }
+
+        function isYellowMainRow(row) {
+            return row.classList.contains('ub-row-has-active')
+                || row.classList.contains('has-comment-row')
+                || row.dataset.isAddedRow === 'true'
+                || row.dataset.isBattleStart === 'true'
+                || row.dataset.isBattleEnd === 'true';
+        }
+
+        function isYellowRow(row) {
+            if (row.classList.contains('ub-comment-row')) {
+                return true;
+            }
+            return isYellowMainRow(row);
+        }
+
+        function applyRowFilter() {
+            const tbody = document.querySelector('.ub-table tbody');
+            if (!tbody) {
+                return;
+            }
+
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            if (currentDisplayMode === DISPLAY_MODE_ALL) {
+                rows.forEach((row) => {
+                    row.hidden = false;
+                });
+                return;
+            }
+
+            if (currentDisplayMode === DISPLAY_MODE_OPERATION) {
+                rows.forEach((row) => {
+                    row.hidden = !isYellowRow(row);
+                });
+                return;
+            }
+
+            const visibleRows = new Set();
+            rows.forEach((row) => {
+                if (!isYellowRow(row)) {
+                    return;
+                }
+                visibleRows.add(row);
+
+                const isBattleStartRow = row.dataset.isBattleStart === 'true';
+                const isBattleEndRow = row.dataset.isBattleEnd === 'true';
+                if (isBattleStartRow || isBattleEndRow) {
+                    return;
+                }
+
+                const previousRow = row.previousElementSibling;
+                if (previousRow instanceof HTMLTableRowElement) {
+                    visibleRows.add(previousRow);
+                }
+            });
+
+            rows.forEach((row) => {
+                row.hidden = !visibleRows.has(row);
+            });
         }
 
         function isIconActive(iconBox) {
@@ -237,38 +588,17 @@
 
                 row.classList.toggle('ub-row-has-active', hasActiveIcon);
             });
+
+            applyRowFilter();
         }
 
-        document.querySelectorAll('.ub-party-toggleable-char').forEach((iconBox) => {
-            iconBox.addEventListener('click', () => {
-                setIconActive(iconBox, !isIconActive(iconBox));
-                updateSetBubbles();
-            });
+        getMainRows().forEach((row) => {
+            ensureAddedRowDeleteButton(row);
+            bindIconToggleHandlers(row);
+            bindRowActionHandlers(row);
         });
 
         ensureRowIds();
-
-        getMainRows().forEach((row) => {
-            const commentButton = row.querySelector('.ub-action-btn-comment');
-            if (!commentButton) {
-                return;
-            }
-
-            commentButton.addEventListener('click', () => {
-                if (getCommentRowFor(row)) {
-                    return;
-                }
-
-                const commentRow = createCommentRow(row);
-                if (!commentRow) {
-                    return;
-                }
-
-                row.insertAdjacentElement('afterend', commentRow);
-                row.classList.add('has-comment-row');
-                setCommentButtonState(row, true);
-            });
-        });
 
         const tbody = document.querySelector('.ub-table tbody');
         if (tbody) {
@@ -279,29 +609,64 @@
                 }
 
                 const deleteButton = target.closest('.ub-comment-delete-btn');
-                if (!deleteButton) {
+                if (deleteButton) {
+                    const commentRow = deleteButton.closest('.ub-comment-row');
+                    if (!commentRow) {
+                        return;
+                    }
+
+                    const parentRowId = commentRow.dataset.parentRowId;
+                    const mainRow = parentRowId
+                        ? document.querySelector(`tr[data-ub-row-id="${parentRowId}"]`)
+                        : null;
+
+                    commentRow.remove();
+
+                    if (mainRow instanceof HTMLElement) {
+                        mainRow.classList.remove('has-comment-row');
+                        setCommentButtonState(mainRow, false);
+                    }
+                    applyRowFilter();
                     return;
                 }
 
-                const commentRow = deleteButton.closest('.ub-comment-row');
-                if (!commentRow) {
+                const deleteRowButton = target.closest('.ub-action-btn-delete-row');
+                if (!deleteRowButton) {
                     return;
                 }
 
-                const parentRowId = commentRow.dataset.parentRowId;
-                const mainRow = parentRowId
-                    ? document.querySelector(`tr[data-ub-row-id="${parentRowId}"]`)
-                    : null;
-
-                commentRow.remove();
-
-                if (mainRow instanceof HTMLElement) {
-                    mainRow.classList.remove('has-comment-row');
-                    setCommentButtonState(mainRow, false);
+                const mainRow = deleteRowButton.closest('tr');
+                if (!mainRow || mainRow.dataset.isAddedRow !== 'true') {
+                    return;
                 }
+
+                const commentRow = getCommentRowFor(mainRow);
+                if (commentRow) {
+                    commentRow.remove();
+                }
+
+                mainRow.remove();
+                ensureRowIds();
+                updateSetBubbles();
+                applyRowFilter();
             });
         }
 
+        document.querySelectorAll('.ub-display-toggle-btn').forEach((button) => {
+            button.addEventListener('click', () => {
+                const mode = button.dataset.displayMode;
+                if (!mode) {
+                    return;
+                }
+                currentDisplayMode = mode;
+                document.querySelectorAll('.ub-display-toggle-btn').forEach((item) => {
+                    item.classList.toggle('is-active', item === button);
+                });
+                applyRowFilter();
+            });
+        });
+
         updateSetBubbles();
+        applyRowFilter();
     });
 </script>

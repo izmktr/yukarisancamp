@@ -392,6 +392,34 @@ body {
     text-align: center;
 }
 
+.ub-display-toggle {
+    margin-top: 0.6rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px;
+    border: 1px solid #d8e0f2;
+    border-radius: 999px;
+    background: #f7f9ff;
+}
+
+.ub-display-toggle-btn {
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: #4a5783;
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding: 7px 12px;
+    cursor: pointer;
+}
+
+.ub-display-toggle-btn.is-active {
+    background: #667eea;
+    color: #ffffff;
+    box-shadow: 0 1px 4px rgba(29, 52, 137, 0.25);
+}
+
 .ub-table {
     width: auto;
     margin: 0 auto;
@@ -427,9 +455,39 @@ body {
     background: #fff9d9;
 }
 
+.ub-table tbody tr[data-is-battle-start="true"] td {
+    background: #fff9d9;
+}
+
+.ub-table tbody tr[data-is-battle-end="true"] td {
+    background: #fff9d9;
+}
+
+.ub-table tbody tr.has-comment-row td,
+.ub-table tbody tr[data-is-added-row="true"] td,
+.ub-table tbody tr.ub-comment-row td {
+    background: #fff9d9;
+}
+
 .ub-time-cell {
     font-weight: 700;
     color: #2f3650;
+}
+
+.ub-time-input {
+    width: 82px;
+    height: 32px;
+    border: 1px solid #c8d0e1;
+    border-radius: 8px;
+    padding: 0 8px;
+    font-size: 0.9rem;
+    text-align: center;
+}
+
+.ub-time-input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
 }
 
 .ub-event-image,
@@ -620,12 +678,12 @@ body {
 
 .ub-actions-cell {
     background: #fff;
-    width: 96px;
+    width: 156px;
 }
 
 .ub-actions-buttons {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
     gap: 6px;
 }
@@ -703,28 +761,32 @@ body {
 }
 
 .ub-comment-prefix-cell {
-    background: #fff;
+    background: #fff9d9;
 }
 
 .ub-comment-cell {
-    background: #fff;
+    background: #fff9d9;
     padding: 0.35rem 0.45rem 0.55rem 0.45rem;
 }
 
 .ub-comment-content {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 8px;
 }
 
 .ub-comment-input {
     flex: 1;
     min-width: 0;
-    height: 34px;
+    min-height: 34px;
+    max-height: 280px;
     border: 1px solid #c8d0e1;
     border-radius: 8px;
-    padding: 0 10px;
+    padding: 7px 10px;
     font-size: 0.9rem;
+    line-height: 1.35;
+    resize: none;
+    overflow-y: hidden;
 }
 
 .ub-comment-input:focus {
