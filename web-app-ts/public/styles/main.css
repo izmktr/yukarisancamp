@@ -182,6 +182,12 @@ body {
     padding: 2rem 0;
 }
 
+.board-edit-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 0.65rem;
+}
+
 .page-content h2 {
     color: #333;
     margin-bottom: 1rem;
@@ -569,6 +575,20 @@ body {
 .ub-time-cell {
     font-weight: 700;
     color: #2f3650;
+    white-space: normal;
+    line-height: 1.2;
+}
+
+.ub-time-main {
+    display: block;
+}
+
+.ub-time-diff {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #5f6a8a;
 }
 
 .ub-time-input {
@@ -870,6 +890,16 @@ body {
     display: flex;
     align-items: flex-start;
     gap: 8px;
+}
+
+.ub-comment-display {
+    width: 100%;
+    white-space: pre-wrap;
+    text-align: left;
+    color: #2f3650;
+    font-size: 0.9rem;
+    line-height: 1.45;
+    padding: 0.35rem 0.15rem;
 }
 
 .ub-comment-input {

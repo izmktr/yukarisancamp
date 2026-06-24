@@ -161,7 +161,21 @@ function resolveBoardDetailUbRows(article) {
                 continue;
             }
             const ubImagePath = ubText ? resolveCharacterImagePath(ubText) : null;
-            rows.push({ time, ubText, ubImagePath });
+            const activeIcons = Array.isArray(event.activeIcons)
+                ? event.activeIcons.filter((value) => Number.isInteger(value) && value >= 0 && value <= 4)
+                : [];
+            const autoActive = typeof event.autoActive === 'boolean' ? event.autoActive : false;
+            const comment = typeof event.comment === 'string' ? event.comment : '';
+            const isAddedRow = typeof event.isAddedRow === 'boolean' ? event.isAddedRow : false;
+            rows.push({
+                time,
+                ubText,
+                ubImagePath,
+                activeIcons,
+                autoActive,
+                comment,
+                isAddedRow
+            });
         }
         return rows;
     }
@@ -178,7 +192,15 @@ function resolveBoardDetailUbRows(article) {
             const time = match ? match[1] : '';
             const ubText = match ? match[2].trim() : trimmed;
             const ubImagePath = ubText ? resolveCharacterImagePath(ubText) : null;
-            rows.push({ time, ubText, ubImagePath });
+            rows.push({
+                time,
+                ubText,
+                ubImagePath,
+                activeIcons: [],
+                autoActive: false,
+                comment: '',
+                isAddedRow: false
+            });
         }
     }
     return rows;

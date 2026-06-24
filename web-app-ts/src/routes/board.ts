@@ -46,6 +46,10 @@ type BoardDetailUbRow = {
   time: string;
   ubText: string;
   ubImagePath: string | null;
+  activeIcons: number[];
+  autoActive: boolean;
+  comment: string;
+  isAddedRow: boolean;
 };
 
 type TimelineUbEvent = {
@@ -236,7 +240,14 @@ function resolveBoardDetailUbRows(article: any): BoardDetailUbRow[] {
         continue;
       }
 
-      const event = ub as { time?: unknown; character?: unknown };
+      const event = ub as {
+        time?: unknown;
+        character?: unknown;
+        activeIcons?: unknown;
+        autoActive?: unknown;
+        comment?: unknown;
+        isAddedRow?: unknown;
+      };
       const time = typeof event.time === 'string' ? event.time : '';
       const ubText = typeof event.character === 'string' ? event.character.trim() : '';
       if (!time && !ubText) {
@@ -244,7 +255,21 @@ function resolveBoardDetailUbRows(article: any): BoardDetailUbRow[] {
       }
 
       const ubImagePath = ubText ? resolveCharacterImagePath(ubText) : null;
-      rows.push({ time, ubText, ubImagePath });
+      const activeIcons = Array.isArray(event.activeIcons)
+        ? event.activeIcons.filter((value): value is number => Number.isInteger(value) && value >= 0 && value <= 4)
+        : [];
+      const autoActive = typeof event.autoActive === 'boolean' ? event.autoActive : false;
+      const comment = typeof event.comment === 'string' ? event.comment : '';
+      const isAddedRow = typeof event.isAddedRow === 'boolean' ? event.isAddedRow : false;
+      rows.push({
+        time,
+        ubText,
+        ubImagePath,
+        activeIcons,
+        autoActive,
+        comment,
+        isAddedRow
+      });
     }
 
     return rows;
@@ -265,7 +290,15 @@ function resolveBoardDetailUbRows(article: any): BoardDetailUbRow[] {
       const time = match ? match[1] : '';
       const ubText = match ? match[2].trim() : trimmed;
       const ubImagePath = ubText ? resolveCharacterImagePath(ubText) : null;
-      rows.push({ time, ubText, ubImagePath });
+      rows.push({
+        time,
+        ubText,
+        ubImagePath,
+        activeIcons: [],
+        autoActive: false,
+        comment: '',
+        isAddedRow: false
+      });
     }
   }
 

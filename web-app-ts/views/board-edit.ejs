@@ -1,4 +1,9 @@
 <div class="page-content">
+    <textarea id="board-original-article-json" hidden><%- JSON.stringify(article || {}) %></textarea>
+    <input id="board-current-id" type="hidden" value="<%= typeof id !== 'undefined' ? id : '' %>" />
+    <div class="board-edit-toolbar">
+        <button type="button" id="board-save-button" class="btn btn-primary">保存</button>
+    </div>
     <h2>記事編集</h2>
     <div class="board-detail">
         <p><strong>ボス名:</strong> <%= article.bossname || '' %></p>
@@ -88,26 +93,37 @@
                     </thead>
                     <tbody>
                         <% ubRows.forEach(function(row) { %>
-                            <tr data-is-battle-start="<%= row.ubText === 'バトル開始' ? 'true' : 'false' %>" data-is-battle-end="<%= row.ubText === 'バトル終了' ? 'true' : 'false' %>">
-                                <td class="ub-time-cell"><%= row.time || '' %></td>
+                            <% const rowActiveIcons = Array.isArray(row.activeIcons) ? row.activeIcons : []; %>
+                            <% const hasServerActive = rowActiveIcons.length > 0 || row.autoActive; %>
+                            <tr class="<%= hasServerActive ? 'ub-row-has-active' : '' %> <%= row.comment ? 'has-comment-row' : '' %>" data-is-battle-start="<%= row.ubText === 'バトル開始' ? 'true' : 'false' %>" data-is-battle-end="<%= row.ubText === 'バトル終了' ? 'true' : 'false' %>" data-is-added-row="<%= row.isAddedRow ? 'true' : 'false' %>" data-active-icons="<%= JSON.stringify(rowActiveIcons) %>" data-auto-active="<%= row.autoActive ? 'true' : 'false' %>" data-comment="<%= encodeURIComponent(row.comment || '') %>">
+                                <td class="ub-time-cell">
+                                    <% if (row.isAddedRow) { %>
+                                        <input type="text" class="ub-time-input" aria-label="残り時間" value="<%= row.time || '' %>" />
+                                    <% } else { %>
+                                        <%= row.time || '' %>
+                                    <% } %>
+                                </td>
                                 <td class="ub-event-cell">
                                     <% if (row.ubImagePath) { %>
                                         <img src="<%= row.ubImagePath %>" alt="<%= row.ubText %>" title="<%= row.ubText %>" class="ub-event-image" />
-                                    <% } else { %>
+                                    <% } else if (row.ubText) { %>
                                         <div class="ub-event-image-missing ub-event-image-missing-blue"><%= row.ubText %></div>
+                                    <% } else { %>
+                                        <div class="ub-event-image-missing ub-event-image-missing-gray"></div>
                                     <% } %>
                                 </td>
                                 <% for (let i = 0; i < 5; i += 1) { %>
                                     <% const partySlot = partySlots[i]; %>
+                                    <% const isPartyActive = rowActiveIcons.includes(i); %>
                                     <td class="ub-party-cell">
                                         <% if (partySlot && partySlot.imagePath) { %>
                                             <div class="ub-icon-box ub-party-toggleable-char" data-icon-type="image">
-                                                <img src="<%= partySlot.imagePath %>" alt="<%= partySlot.name %>" title="<%= partySlot.name %>" class="ub-party-image ub-party-image-mono" />
+                                                <img src="<%= partySlot.imagePath %>" alt="<%= partySlot.name %>" title="<%= partySlot.name %>" class="ub-party-image <%= isPartyActive ? '' : 'ub-party-image-mono' %>" />
                                                 <span class="ub-set-badge">SET!</span>
                                             </div>
                                         <% } else if (partySlot) { %>
                                             <div class="ub-icon-box ub-party-toggleable-char" data-icon-type="placeholder">
-                                                <div class="ub-party-image-missing ub-party-image-missing-gray"><%= partySlot.name %></div>
+                                                <div class="ub-party-image-missing <%= isPartyActive ? 'ub-party-image-missing-blue' : 'ub-party-image-missing-gray' %>"><%= partySlot.name %></div>
                                                 <span class="ub-set-badge">SET!</span>
                                             </div>
                                         <% } else { %>
@@ -120,22 +136,38 @@
                                 <% } %>
                                 <td class="ub-auto-cell">
                                     <div class="ub-icon-box ub-auto-icon-box ub-party-toggleable-char" data-icon-type="auto">
-                                        <div class="ub-auto-btn ub-auto-btn-inactive">
+                                        <div class="ub-auto-btn <%= row.autoActive ? 'ub-auto-btn-active' : 'ub-auto-btn-inactive' %>">
                                             <span class="ub-auto-label">OFF</span>
                                         </div>
                                     </div>
                                 </td>
                                 <td class="ub-actions-cell">
                                     <div class="ub-actions-buttons">
-                                        <button type="button" class="ub-action-btn ub-action-btn-comment" title="コメントを追加" aria-label="コメントを追加">
+                                        <button type="button" class="ub-action-btn ub-action-btn-comment <%= row.comment ? 'is-disabled' : '' %>" title="コメントを追加" aria-label="コメントを追加" <%= row.comment ? 'disabled' : '' %>>
                                             <img src="/images/icon_comment.png" alt="コメントを追加" class="ub-action-btn-image" />
                                         </button>
                                         <button type="button" class="ub-action-btn ub-action-btn-add-line" title="下に行を追加" aria-label="下に行を追加">
                                             <img src="/images/icon_add_line.png" alt="下に行を追加" class="ub-action-btn-image" />
                                         </button>
+                                        <% if (row.isAddedRow) { %>
+                                            <button type="button" class="ub-action-btn ub-action-btn-delete-row" title="行を削除" aria-label="行を削除">
+                                                <img src="/images/icon_trash.png" alt="行を削除" class="ub-action-btn-image" />
+                                            </button>
+                                        <% } %>
                                     </div>
                                 </td>
                             </tr>
+                            <% if (row.comment) { %>
+                                <tr class="ub-comment-row">
+                                    <td class="ub-comment-prefix-cell"></td>
+                                    <td class="ub-comment-cell" colspan="8">
+                                        <div class="ub-comment-content">
+                                            <textarea class="ub-comment-input" rows="1" placeholder="コメントを入力" aria-label="コメントを入力"><%= row.comment %></textarea>
+                                            <button type="button" class="ub-comment-delete-btn" aria-label="コメントを削除">削除</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            <% } %>
                         <% }); %>
                     </tbody>
                 </table>
@@ -152,6 +184,15 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', () => {
+        const originalArticleRaw = document.getElementById('board-original-article-json');
+        const currentIdInput = document.getElementById('board-current-id');
+        let originalArticle = {};
+        try {
+            originalArticle = JSON.parse(originalArticleRaw ? originalArticleRaw.value || '{}' : '{}');
+        } catch {
+            originalArticle = {};
+        }
+        const currentId = currentIdInput instanceof HTMLInputElement ? currentIdInput.value : '';
         const PARTY_COLUMN_COUNT = 5;
         const COMMENT_COLSPAN = 8;
         const DISPLAY_MODE_ALL = 'all';
@@ -164,7 +205,153 @@
             normal: '普通：目押しする回数が3回以上',
             hard: '高難度：目押しの猶予が短く、失敗が多い',
         };
+        const DIFFICULTY_VALUE_TO_LEVEL = {
+            'full-auto': 1,
+            'semi-auto': 2,
+            easy: 3,
+            normal: 4,
+            hard: 5,
+        };
+        const DIFFICULTY_LEVEL_TO_VALUE = {
+            1: 'full-auto',
+            2: 'semi-auto',
+            3: 'easy',
+            4: 'normal',
+            5: 'hard',
+        };
         let currentDisplayMode = DISPLAY_MODE_ALL;
+
+        function setActiveToggle(groupName, value) {
+            const group = document.querySelector(`.post-toggle-group[data-group="${groupName}"]`);
+            if (!group) {
+                return;
+            }
+
+            const buttons = Array.from(group.querySelectorAll('.post-toggle-btn'));
+            const target = buttons.find((button) => button.dataset.value === value) || buttons[0];
+            if (!target) {
+                return;
+            }
+
+            buttons.forEach((button) => {
+                button.classList.toggle('is-active', button === target);
+            });
+
+            const hiddenInput = document.getElementById(`post-${groupName}-value`);
+            if (hiddenInput instanceof HTMLInputElement) {
+                hiddenInput.value = target.dataset.value || '';
+            }
+
+            if (groupName === 'difficulty') {
+                const helpText = document.querySelector('.post-difficulty-help-text');
+                if (helpText) {
+                    helpText.textContent = DIFFICULTY_HELP_TEXT[target.dataset.value || 'easy'] || DIFFICULTY_HELP_TEXT.easy;
+                }
+            }
+        }
+
+        function getUbEventLabel(row) {
+            const eventCell = row.querySelector('.ub-event-cell');
+            if (!eventCell) {
+                return '';
+            }
+            const img = eventCell.querySelector('img');
+            if (img) {
+                return (img.getAttribute('alt') || '').trim();
+            }
+            return (eventCell.textContent || '').trim();
+        }
+
+        function getActiveIconIndexes(row) {
+            const indexes = [];
+            const partyIcons = row.querySelectorAll('.ub-party-cell .ub-icon-box');
+            partyIcons.forEach((iconBox, index) => {
+                if (isIconActive(iconBox)) {
+                    indexes.push(index);
+                }
+            });
+            return indexes;
+        }
+
+        function buildUbTimelinePayload() {
+            return getMainRows().map((row) => {
+                const commentRow = getCommentRowFor(row);
+                const commentInput = commentRow ? commentRow.querySelector('.ub-comment-input') : null;
+                const autoBox = row.querySelector('.ub-auto-cell .ub-icon-box');
+                return {
+                    time: getRowTimeText(row),
+                    character: getUbEventLabel(row),
+                    activeIcons: getActiveIconIndexes(row),
+                    autoActive: autoBox ? isIconActive(autoBox) : false,
+                    comment: commentInput instanceof HTMLTextAreaElement ? commentInput.value : '',
+                    isAddedRow: row.dataset.isAddedRow === 'true',
+                };
+            });
+        }
+
+        function createMergedTimelineInfo() {
+            const base = JSON.parse(JSON.stringify(originalArticle || {}));
+            const titleInput = document.getElementById('post-title-input');
+            const commentInput = document.getElementById('post-comment-input');
+            const difficultyInput = document.getElementById('post-difficulty-value');
+            const visibilityInput = document.getElementById('post-visibility-value');
+
+            if (titleInput instanceof HTMLInputElement) {
+                base.postTitle = titleInput.value;
+            }
+            if (commentInput instanceof HTMLTextAreaElement) {
+                base.postComment = commentInput.value;
+            }
+            if (difficultyInput instanceof HTMLInputElement) {
+                const mapped = DIFFICULTY_VALUE_TO_LEVEL[difficultyInput.value] || 3;
+                base.difficulty = mapped;
+            }
+            if (visibilityInput instanceof HTMLInputElement) {
+                base.visibility = visibilityInput.value || 'self';
+            }
+
+            base.ubTimeline = buildUbTimelinePayload();
+            return base;
+        }
+
+        function submitSave() {
+            const timelineInfo = createMergedTimelineInfo();
+            const form = document.createElement('form');
+            form.method = 'post';
+            form.action = '/board/save';
+
+            const timelineInput = document.createElement('input');
+            timelineInput.type = 'hidden';
+            timelineInput.name = 'timelineInfo';
+            timelineInput.value = JSON.stringify(timelineInfo);
+            form.appendChild(timelineInput);
+
+            const idInput = document.createElement('input');
+            idInput.type = 'hidden';
+            idInput.name = 'id';
+            idInput.value = currentId || (originalArticle && originalArticle.uniqueId) || '';
+            form.appendChild(idInput);
+
+            document.body.appendChild(form);
+            form.submit();
+        }
+
+        function initializePostInfoFromArticle() {
+            const titleInput = document.getElementById('post-title-input');
+            const commentInput = document.getElementById('post-comment-input');
+            if (titleInput instanceof HTMLInputElement && typeof originalArticle.postTitle === 'string') {
+                titleInput.value = originalArticle.postTitle;
+            }
+            if (commentInput instanceof HTMLTextAreaElement && typeof originalArticle.postComment === 'string') {
+                commentInput.value = originalArticle.postComment;
+            }
+
+            const difficultyValue = DIFFICULTY_LEVEL_TO_VALUE[Number(originalArticle.difficulty)] || 'easy';
+            setActiveToggle('difficulty', difficultyValue);
+
+            const visibilityValue = typeof originalArticle.visibility === 'string' ? originalArticle.visibility : 'self';
+            setActiveToggle('visibility', visibilityValue);
+        }
 
         function setupPostInfoToggles() {
             const updateDifficultyHelp = (value) => {
@@ -220,6 +407,10 @@
         function ensureRowIds() {
             getMainRows().forEach((row, index) => {
                 row.dataset.ubRowId = String(index + 1);
+                const nextRow = row.nextElementSibling;
+                if (nextRow instanceof HTMLTableRowElement && nextRow.classList.contains('ub-comment-row')) {
+                    nextRow.dataset.parentRowId = row.dataset.ubRowId;
+                }
             });
         }
 
@@ -429,7 +620,11 @@
             const copiedRow = sourceRow.cloneNode(true);
             copiedRow.classList.remove('ub-row-has-active', 'has-comment-row');
             copiedRow.dataset.isBattleStart = 'false';
+            copiedRow.dataset.isBattleEnd = 'false';
             copiedRow.dataset.isAddedRow = 'true';
+            copiedRow.dataset.activeIcons = '[]';
+            copiedRow.dataset.autoActive = 'false';
+            copiedRow.dataset.comment = '';
             delete copiedRow.dataset.ubRowId;
 
             const timeCell = copiedRow.querySelector('.ub-time-cell');
@@ -481,6 +676,87 @@
             deleteButton.setAttribute('aria-label', '行を削除');
             deleteButton.innerHTML = '<img src="/images/icon_trash.png" alt="行を削除" class="ub-action-btn-image" />';
             actionsButtons.appendChild(deleteButton);
+        }
+
+        function parseActiveIconsFromRow(row) {
+            const raw = row.dataset.activeIcons;
+            if (!raw) {
+                return [];
+            }
+            try {
+                const parsed = JSON.parse(raw);
+                if (!Array.isArray(parsed)) {
+                    return [];
+                }
+                return parsed.filter((value) => Number.isInteger(value) && value >= 0 && value < PARTY_COLUMN_COUNT);
+            } catch {
+                return [];
+            }
+        }
+
+        function getDecodedRowComment(row) {
+            const raw = row.dataset.comment || '';
+            if (!raw) {
+                return '';
+            }
+            try {
+                return decodeURIComponent(raw);
+            } catch {
+                return raw;
+            }
+        }
+
+        function ensureAddedRowEditableTime(row) {
+            if (row.dataset.isAddedRow !== 'true') {
+                return;
+            }
+
+            const timeCell = row.querySelector('.ub-time-cell');
+            if (!timeCell || timeCell.querySelector('.ub-time-input')) {
+                return;
+            }
+
+            const currentTime = getRowTimeText(row);
+            timeCell.innerHTML = '';
+            const timeInput = document.createElement('input');
+            timeInput.type = 'text';
+            timeInput.className = 'ub-time-input';
+            timeInput.setAttribute('aria-label', '残り時間');
+            timeInput.value = currentTime;
+            timeCell.appendChild(timeInput);
+        }
+
+        function hydrateInitialUbRows() {
+            getMainRows().forEach((row) => {
+                const activeIndexes = parseActiveIconsFromRow(row);
+                const partyIcons = row.querySelectorAll('.ub-party-cell .ub-icon-box');
+                partyIcons.forEach((iconBox, index) => {
+                    setIconActive(iconBox, activeIndexes.includes(index));
+                });
+
+                const autoBox = row.querySelector('.ub-auto-cell .ub-icon-box');
+                if (autoBox) {
+                    setIconActive(autoBox, row.dataset.autoActive === 'true');
+                }
+
+                ensureAddedRowEditableTime(row);
+                bindTimeInputValidation(row);
+
+                const commentText = getDecodedRowComment(row);
+                if (commentText && !getCommentRowFor(row)) {
+                    const commentRow = createCommentRow(row);
+                    if (commentRow) {
+                        row.insertAdjacentElement('afterend', commentRow);
+                        row.classList.add('has-comment-row');
+                        setCommentButtonState(row, true);
+                        const commentInput = commentRow.querySelector('.ub-comment-input');
+                        if (commentInput instanceof HTMLTextAreaElement) {
+                            commentInput.value = commentText;
+                            bindCommentInputAutoResize(commentInput);
+                        }
+                    }
+                }
+            });
         }
 
         function bindIconToggleHandlers(row) {
@@ -704,6 +980,7 @@
         });
 
         ensureRowIds();
+        hydrateInitialUbRows();
 
         const tbody = document.querySelector('.ub-table tbody');
         if (tbody) {
@@ -772,6 +1049,11 @@
         });
 
         setupPostInfoToggles();
+        initializePostInfoFromArticle();
+        const saveButton = document.getElementById('board-save-button');
+        if (saveButton) {
+            saveButton.addEventListener('click', submitSave);
+        }
         updateSetBubbles();
         applyRowFilter();
     });

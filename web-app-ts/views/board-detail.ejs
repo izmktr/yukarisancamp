@@ -36,6 +36,12 @@
         <h3>ユニオンバースト発動時間</h3>
         <% if (ubRows && ubRows.length > 0) { %>
             <% const partySlots = (partyMembers && partyMembers.length > 0) ? partyMembers.slice().reverse() : []; %>
+            <% const DETAIL_COMMENT_COLSPAN = 7; %>
+            <div class="ub-display-toggle" role="group" aria-label="表示切り替え">
+                <button type="button" class="ub-display-toggle-btn is-active" data-display-mode="all">すべて</button>
+                <button type="button" class="ub-display-toggle-btn" data-display-mode="operation">操作</button>
+                <button type="button" class="ub-display-toggle-btn" data-display-mode="operation-plus-prev">操作+1つ前</button>
+            </div>
             <div class="ub-table-wrapper">
                 <table class="ub-table">
                     <thead>
@@ -48,7 +54,7 @@
                                     <% if (headerSlot && headerSlot.imagePath) { %>
                                         <img src="<%= headerSlot.imagePath %>" alt="<%= headerSlot.name %>" title="<%= headerSlot.name %>" class="ub-party-image" />
                                     <% } else if (headerSlot) { %>
-                                        <div class="ub-event-image-missing"><%= headerSlot.name %></div>
+                                        <div class="ub-party-image-missing ub-party-image-missing-blue"><%= headerSlot.name %></div>
                                     <% } else { %>
                                         <span class="ub-party-empty">-</span>
                                     <% } %>
@@ -59,20 +65,56 @@
                     </thead>
                     <tbody>
                         <% ubRows.forEach(function(row) { %>
-                            <tr>
+                            <% const rowActiveIcons = Array.isArray(row.activeIcons) ? row.activeIcons : []; %>
+                            <% const hasServerActive = rowActiveIcons.length > 0 || row.autoActive; %>
+                            <tr class="<%= hasServerActive ? 'ub-row-has-active' : '' %> <%= row.comment ? 'has-comment-row' : '' %>" data-is-battle-start="<%= row.ubText === 'バトル開始' ? 'true' : 'false' %>" data-is-battle-end="<%= row.ubText === 'バトル終了' ? 'true' : 'false' %>" data-is-added-row="<%= row.isAddedRow ? 'true' : 'false' %>">
                                 <td class="ub-time-cell"><%= row.time || '' %></td>
                                 <td class="ub-event-cell">
                                     <% if (row.ubImagePath) { %>
                                         <img src="<%= row.ubImagePath %>" alt="<%= row.ubText %>" title="<%= row.ubText %>" class="ub-event-image" />
+                                    <% } else if (row.ubText) { %>
+                                        <div class="ub-event-image-missing ub-event-image-missing-blue"><%= row.ubText %></div>
                                     <% } else { %>
-                                        <div class="ub-event-image-missing"><%= row.ubText %></div>
+                                        <div class="ub-event-image-missing ub-event-image-missing-gray"></div>
                                     <% } %>
                                 </td>
                                 <% for (let i = 0; i < 5; i += 1) { %>
-                                    <td class="ub-party-cell"></td>
+                                    <% const partySlot = partySlots[i]; %>
+                                    <td class="ub-party-cell">
+                                        <% if (partySlot && partySlot.imagePath) { %>
+                                            <div class="ub-icon-box" data-icon-type="image" data-is-active="<%= rowActiveIcons.includes(i) ? 'true' : 'false' %>">
+                                                <img src="<%= partySlot.imagePath %>" alt="<%= partySlot.name %>" title="<%= partySlot.name %>" class="ub-party-image <%= rowActiveIcons.includes(i) ? '' : 'ub-party-image-mono' %>" />
+                                                <span class="ub-set-badge">SET!</span>
+                                            </div>
+                                        <% } else if (partySlot) { %>
+                                            <div class="ub-icon-box" data-icon-type="placeholder" data-is-active="<%= rowActiveIcons.includes(i) ? 'true' : 'false' %>">
+                                                <div class="<%= rowActiveIcons.includes(i) ? 'ub-party-image-missing ub-party-image-missing-blue' : 'ub-party-image-missing ub-party-image-missing-gray' %>"><%= partySlot.name %></div>
+                                                <span class="ub-set-badge">SET!</span>
+                                            </div>
+                                        <% } else { %>
+                                            <div class="ub-icon-box" data-icon-type="placeholder" data-is-active="false">
+                                                <div class="ub-party-image-missing ub-party-image-missing-gray"></div>
+                                                <span class="ub-set-badge">SET!</span>
+                                            </div>
+                                        <% } %>
+                                    </td>
                                 <% } %>
-                                <td class="ub-auto-cell"></td>
+                                <td class="ub-auto-cell">
+                                    <div class="ub-icon-box ub-auto-icon-box" data-icon-type="auto" data-is-active="<%= row.autoActive ? 'true' : 'false' %>">
+                                        <div class="ub-auto-btn <%= row.autoActive ? 'ub-auto-btn-active' : 'ub-auto-btn-inactive' %>">
+                                            <span class="ub-auto-label">OFF</span>
+                                        </div>
+                                    </div>
+                                </td>
                             </tr>
+                            <% if (row.comment) { %>
+                                <tr class="ub-comment-row">
+                                    <td class="ub-comment-prefix-cell"></td>
+                                    <td class="ub-comment-cell" colspan="<%= DETAIL_COMMENT_COLSPAN %>">
+                                        <div class="ub-comment-display"><%= row.comment %></div>
+                                    </td>
+                                </tr>
+                            <% } %>
                         <% }); %>
                     </tbody>
                 </table>
@@ -87,3 +129,220 @@
         </p>
     </div>
 </div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const PARTY_COLUMN_COUNT = 5;
+        const DISPLAY_MODE_ALL = 'all';
+        const DISPLAY_MODE_OPERATION = 'operation';
+        const DISPLAY_MODE_OPERATION_PLUS_PREV = 'operation-plus-prev';
+        let currentDisplayMode = DISPLAY_MODE_ALL;
+
+        function parseTimeToSeconds(timeText) {
+            const raw = (timeText || '').trim();
+            const match = raw.match(/^(\d{1,2}):(\d{2})$/);
+            if (!match) {
+                return null;
+            }
+            const minutes = Number(match[1]);
+            const seconds = Number(match[2]);
+            if (Number.isNaN(minutes) || Number.isNaN(seconds) || seconds >= 60) {
+                return null;
+            }
+            return (minutes * 60) + seconds;
+        }
+
+        function renderTimeCell(cell, timeText, diffSeconds) {
+            if (!cell) {
+                return;
+            }
+            cell.innerHTML = '';
+
+            const timeMain = document.createElement('div');
+            timeMain.className = 'ub-time-main';
+            timeMain.textContent = timeText || '';
+            cell.appendChild(timeMain);
+
+            if (typeof diffSeconds === 'number') {
+                const timeDiff = document.createElement('div');
+                timeDiff.className = 'ub-time-diff';
+                const sign = diffSeconds >= 0 ? '+' : '';
+                timeDiff.textContent = `(${sign}${diffSeconds}s)`;
+                cell.appendChild(timeDiff);
+            }
+        }
+
+        function initializeTimeCells() {
+            const rows = Array.from(document.querySelectorAll('.ub-table tbody tr:not(.ub-comment-row)'));
+            rows.forEach((row) => {
+                const timeCell = row.querySelector('.ub-time-cell');
+                if (!timeCell) {
+                    return;
+                }
+                const raw = (timeCell.textContent || '').trim();
+                row.dataset.timeRaw = raw;
+                renderTimeCell(timeCell, raw, null);
+            });
+        }
+
+        function updateVisibleTimeDiffs() {
+            const rows = Array.from(document.querySelectorAll('.ub-table tbody tr:not(.ub-comment-row)'));
+            let previousVisibleSeconds = null;
+
+            rows.forEach((row) => {
+                const timeCell = row.querySelector('.ub-time-cell');
+                if (!timeCell) {
+                    return;
+                }
+
+                const timeRaw = row.dataset.timeRaw || '';
+                const currentSeconds = parseTimeToSeconds(timeRaw);
+
+                if (row.hidden) {
+                    renderTimeCell(timeCell, timeRaw, null);
+                    return;
+                }
+
+                if (previousVisibleSeconds === null || currentSeconds === null) {
+                    renderTimeCell(timeCell, timeRaw, null);
+                } else {
+                    renderTimeCell(timeCell, timeRaw, previousVisibleSeconds - currentSeconds);
+                }
+
+                previousVisibleSeconds = currentSeconds;
+            });
+        }
+
+        function isIconActive(iconBox) {
+            return iconBox instanceof HTMLElement && iconBox.dataset.isActive === 'true';
+        }
+
+        function computeSet(isActive, previousSet, isBattleStart) {
+            if (isBattleStart) return isActive;
+            if (isActive) return !previousSet;
+            return previousSet;
+        }
+
+        function updateSetBubbles() {
+            const rows = Array.from(document.querySelectorAll('.ub-table tbody tr:not(.ub-comment-row)'));
+            const previousSetByColumn = Array(PARTY_COLUMN_COUNT + 1).fill(false);
+
+            rows.forEach((row) => {
+                const isBattleStart = row.dataset.isBattleStart === 'true';
+                const iconBoxes = row.querySelectorAll('.ub-party-cell .ub-icon-box');
+                let hasActiveIcon = false;
+
+                for (let columnIndex = 0; columnIndex < PARTY_COLUMN_COUNT; columnIndex += 1) {
+                    const iconBox = iconBoxes[columnIndex];
+                    if (!iconBox) {
+                        continue;
+                    }
+                    const isActive = isIconActive(iconBox);
+                    if (isActive) hasActiveIcon = true;
+                    const shouldSet = computeSet(isActive, previousSetByColumn[columnIndex], isBattleStart);
+                    iconBox.classList.toggle('has-set', shouldSet);
+                    iconBox.classList.toggle('set-inactive', shouldSet && !isActive);
+                    previousSetByColumn[columnIndex] = shouldSet;
+                }
+
+                const autoBox = row.querySelector('.ub-auto-cell .ub-icon-box');
+                if (autoBox) {
+                    const isAutoActive = isIconActive(autoBox);
+                    if (isAutoActive) hasActiveIcon = true;
+                    const shouldAutoSet = computeSet(isAutoActive, previousSetByColumn[PARTY_COLUMN_COUNT], isBattleStart);
+                    const autoLabel = autoBox.querySelector('.ub-auto-label');
+                    if (autoLabel) {
+                        autoLabel.textContent = shouldAutoSet ? 'ON' : 'OFF';
+                        autoLabel.classList.toggle('ub-auto-label-on', shouldAutoSet);
+                    }
+                    previousSetByColumn[PARTY_COLUMN_COUNT] = shouldAutoSet;
+                }
+
+                row.classList.toggle('ub-row-has-active', hasActiveIcon);
+
+                const commentRow = row.nextElementSibling;
+                const hasCommentRow = commentRow instanceof HTMLTableRowElement
+                    && commentRow.classList.contains('ub-comment-row');
+                row.classList.toggle('has-comment-row', hasCommentRow);
+            });
+
+            applyRowFilter();
+        }
+
+        function isYellowMainRow(row) {
+            return row.classList.contains('ub-row-has-active')
+                || row.classList.contains('has-comment-row')
+                || row.dataset.isAddedRow === 'true'
+                || row.dataset.isBattleStart === 'true'
+                || row.dataset.isBattleEnd === 'true';
+        }
+
+        function isYellowRow(row) {
+            if (row.classList.contains('ub-comment-row')) {
+                return true;
+            }
+            return isYellowMainRow(row);
+        }
+
+        function applyRowFilter() {
+            const tbody = document.querySelector('.ub-table tbody');
+            if (!tbody) {
+                return;
+            }
+
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            if (currentDisplayMode === DISPLAY_MODE_ALL) {
+                rows.forEach((row) => {
+                    row.hidden = false;
+                });
+            } else if (currentDisplayMode === DISPLAY_MODE_OPERATION) {
+                rows.forEach((row) => {
+                    row.hidden = !isYellowRow(row);
+                });
+            } else {
+                const visibleRows = new Set();
+                rows.forEach((row) => {
+                    if (!isYellowRow(row)) {
+                        return;
+                    }
+                    visibleRows.add(row);
+
+                    const isBattleStartRow = row.dataset.isBattleStart === 'true';
+                    const isBattleEndRow = row.dataset.isBattleEnd === 'true';
+                    if (isBattleStartRow || isBattleEndRow) {
+                        return;
+                    }
+
+                    const previousRow = row.previousElementSibling;
+                    if (previousRow instanceof HTMLTableRowElement) {
+                        visibleRows.add(previousRow);
+                    }
+                });
+
+                rows.forEach((row) => {
+                    row.hidden = !visibleRows.has(row);
+                });
+            }
+
+            updateVisibleTimeDiffs();
+        }
+
+        document.querySelectorAll('.ub-display-toggle-btn').forEach((button) => {
+            button.addEventListener('click', () => {
+                const mode = button.dataset.displayMode;
+                if (!mode) {
+                    return;
+                }
+                currentDisplayMode = mode;
+                document.querySelectorAll('.ub-display-toggle-btn').forEach((item) => {
+                    item.classList.toggle('is-active', item === button);
+                });
+                applyRowFilter();
+            });
+        });
+
+        initializeTimeCells();
+        updateSetBubbles();
+        applyRowFilter();
+    });
+</script>
