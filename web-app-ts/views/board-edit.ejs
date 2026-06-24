@@ -5,6 +5,57 @@
         <p><strong>ダメージ:</strong> <%= article.damage || '' %></p>
         <p><strong>バトル時間:</strong> <%= article.battleTime || '' %></p>
 
+        <% 
+          const damageNum = parseInt(article.damage || 0);
+          const afterRemoveLast4 = Math.floor(damageNum / 10000);
+          const oku = Math.floor(afterRemoveLast4 / 10000);
+          const man = afterRemoveLast4 % 10000;
+          let damageFormatted = '';
+          if (oku > 0) damageFormatted += oku + '億';
+          if (man > 0) damageFormatted += man + '万';
+          const defaultTitle = [article.bossname || '', damageFormatted].filter(Boolean).join(' ').trim();
+        %>
+        <section class="post-info-editor" aria-label="投稿情報">
+            <h3>投稿情報</h3>
+
+            <div class="post-info-row">
+                <label for="post-title-input">タイトル</label>
+                <input id="post-title-input" type="text" class="post-info-input" value="<%= defaultTitle %>" aria-label="タイトル" />
+            </div>
+
+            <div class="post-info-row">
+                <label for="post-comment-input">コメント</label>
+                <textarea id="post-comment-input" class="post-info-textarea" rows="3" aria-label="コメント"></textarea>
+            </div>
+
+            <div class="post-info-row">
+                <label>難易度</label>
+                <div class="post-info-toggle-wrap">
+                    <input type="hidden" id="post-difficulty-value" value="easy" />
+                    <div class="post-toggle-group" data-group="difficulty" role="group" aria-label="難易度">
+                        <button type="button" class="post-toggle-btn" data-value="full-auto">フルオート</button>
+                        <button type="button" class="post-toggle-btn" data-value="semi-auto">セミオート</button>
+                        <button type="button" class="post-toggle-btn is-active" data-value="easy">簡単</button>
+                        <button type="button" class="post-toggle-btn" data-value="normal">普通</button>
+                        <button type="button" class="post-toggle-btn" data-value="hard">高難度</button>
+                    </div>
+                    <p class="post-difficulty-help-text">簡単：目押しする回数が2回以下で、猶予が長め</p>
+                </div>
+            </div>
+
+            <div class="post-info-row">
+                <label>公開範囲</label>
+                <div class="post-info-toggle-wrap">
+                    <input type="hidden" id="post-visibility-value" value="self" />
+                    <div class="post-toggle-group" data-group="visibility" role="group" aria-label="公開範囲">
+                        <button type="button" class="post-toggle-btn" data-value="all">全体</button>
+                        <button type="button" class="post-toggle-btn" data-value="clan">クラン</button>
+                        <button type="button" class="post-toggle-btn is-active" data-value="self">自分</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <h3>ユニオンバースト発動時間</h3>
         <% if (ubRows && ubRows.length > 0) { %>
             <% const partySlots = (partyMembers && partyMembers.length > 0) ? partyMembers.slice().reverse() : []; %>
@@ -106,7 +157,61 @@
         const DISPLAY_MODE_ALL = 'all';
         const DISPLAY_MODE_OPERATION = 'operation';
         const DISPLAY_MODE_OPERATION_PLUS_PREV = 'operation-plus-prev';
+        const DIFFICULTY_HELP_TEXT = {
+            'full-auto': 'フルオート：バトル開始時にセットし、最後まで切り替えない',
+            'semi-auto': 'セミオート：UB演出中、または猶予1秒以上ある切り替えのみ',
+            easy: '簡単：目押しする回数が2回以下で、猶予が長め',
+            normal: '普通：目押しする回数が3回以上',
+            hard: '高難度：目押しの猶予が短く、失敗が多い',
+        };
         let currentDisplayMode = DISPLAY_MODE_ALL;
+
+        function setupPostInfoToggles() {
+            const updateDifficultyHelp = (value) => {
+                const helpText = document.querySelector('.post-difficulty-help-text');
+                if (!helpText) {
+                    return;
+                }
+                helpText.textContent = DIFFICULTY_HELP_TEXT[value] || DIFFICULTY_HELP_TEXT.easy;
+            };
+
+            document.querySelectorAll('.post-toggle-group').forEach((group) => {
+                const groupName = group.dataset.group;
+                const buttons = Array.from(group.querySelectorAll('.post-toggle-btn'));
+                if (buttons.length === 0) {
+                    return;
+                }
+
+                const hiddenInput = groupName
+                    ? document.getElementById(`post-${groupName}-value`)
+                    : null;
+
+                buttons.forEach((button) => {
+                    button.addEventListener('click', () => {
+                        buttons.forEach((item) => {
+                            item.classList.toggle('is-active', item === button);
+                        });
+
+                        if (hiddenInput instanceof HTMLInputElement) {
+                            hiddenInput.value = button.dataset.value || '';
+                        }
+
+                        if (groupName === 'difficulty') {
+                            updateDifficultyHelp(button.dataset.value || 'easy');
+                        }
+                    });
+                });
+
+                const activeButton = group.querySelector('.post-toggle-btn.is-active');
+                if (activeButton && hiddenInput instanceof HTMLInputElement) {
+                    hiddenInput.value = activeButton.dataset.value || '';
+                }
+
+                if (groupName === 'difficulty') {
+                    updateDifficultyHelp((activeButton && activeButton.dataset.value) || 'easy');
+                }
+            });
+        }
 
         function getMainRows() {
             return Array.from(document.querySelectorAll('.ub-table tbody tr:not(.ub-comment-row)'));
@@ -666,6 +771,7 @@
             });
         });
 
+        setupPostInfoToggles();
         updateSetBubbles();
         applyRowFilter();
     });

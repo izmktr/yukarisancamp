@@ -386,6 +386,103 @@ body {
     white-space: nowrap;
 }
 
+.post-info-editor {
+    margin: 0.75rem 0 1.1rem 0;
+    padding: 0.9rem;
+    border: 1px solid #dfe5f4;
+    border-radius: 12px;
+    background: #f8faff;
+}
+
+.post-info-editor h3 {
+    margin: 0 0 0.85rem 0;
+    font-size: 1.02rem;
+    color: #33406c;
+}
+
+.post-info-row {
+    display: grid;
+    grid-template-columns: 84px 1fr;
+    gap: 0.7rem;
+    align-items: start;
+    margin-bottom: 0.7rem;
+}
+
+.post-info-row:last-child {
+    margin-bottom: 0;
+}
+
+.post-info-row label {
+    font-weight: 700;
+    font-size: 0.88rem;
+    color: #3e4b76;
+    padding-top: 0.45rem;
+}
+
+.post-info-input,
+.post-info-textarea {
+    width: 100%;
+    border: 1px solid #c8d0e1;
+    border-radius: 9px;
+    background: #ffffff;
+    color: #2f3650;
+    font-size: 0.9rem;
+    padding: 0.45rem 0.65rem;
+}
+
+.post-info-input {
+    height: 36px;
+}
+
+.post-info-textarea {
+    min-height: 76px;
+    resize: vertical;
+}
+
+.post-info-input:focus,
+.post-info-textarea:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.14);
+}
+
+.post-info-toggle-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.post-toggle-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.post-toggle-btn {
+    border: 1px solid #cfd8ee;
+    border-radius: 999px;
+    background: #ffffff;
+    color: #42507b;
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding: 0.38rem 0.72rem;
+    cursor: pointer;
+}
+
+.post-toggle-btn.is-active {
+    background: #667eea;
+    border-color: #667eea;
+    color: #ffffff;
+}
+
+.post-difficulty-help-text {
+    margin: 0;
+    color: #4a5783;
+    font-size: 0.86rem;
+    line-height: 1.45;
+}
+
 .ub-table-wrapper {
     margin-top: 0.75rem;
     overflow-x: auto;
