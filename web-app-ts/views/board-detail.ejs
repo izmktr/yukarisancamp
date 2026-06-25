@@ -7,7 +7,7 @@
                 4: '普通',
                 5: '高難度'
             };
-            const difficultyLabel = `難易度: ${difficultyLabelByLevel[Number(article.difficulty)] || ''}`;
+            const difficultyValue = difficultyLabelByLevel[Number(article.difficulty)] || '';
             const postCommentText = article.postComment || article.postcomment || '';
             const visibilityRaw = String(article.visibility || article.visibilality || '').toLowerCase();
             const visibilityLabelByValue = {
@@ -15,30 +15,41 @@
                 clan: 'クラン',
                 self: '自分'
             };
-            const visibilityLabel = `公開範囲: ${visibilityLabelByValue[visibilityRaw] || visibilityRaw}`;
-            const bossDamageText = `${article.bossname || ''} : ${article.damage || ''} damage`;
+            const visibilityValue = visibilityLabelByValue[visibilityRaw] || visibilityRaw;
+            const bossValue = article.bossname || '';
+            const damageValue = article.damage || '';
         %>
         <h2><%= article.postTitle || '記事詳細' %></h2>
     <div class="board-detail">
         <section class="post-info-editor" aria-label="情報">
             <h3>情報</h3>
 
-            <div class="post-info-row post-info-row-static">
-                <div class="post-info-static-value post-info-static-value-compact"><%= bossDamageText %></div>
+            <div class="post-info-row post-info-row-static post-info-row-inline">
+                <div class="post-info-inline-group">
+                    <div class="post-info-pill" role="group" aria-label="ボス">
+                        <span class="post-info-pill-key">ボス</span>
+                        <span class="post-info-pill-value"><%= bossValue %></span>
+                    </div>
+                    <div class="post-info-pill" role="group" aria-label="ダメージ">
+                        <span class="post-info-pill-key">ダメージ</span>
+                        <span class="post-info-pill-value"><%= damageValue %></span>
+                    </div>
+                    <div class="post-info-pill" role="group" aria-label="難易度">
+                        <span class="post-info-pill-key">難易度</span>
+                        <span class="post-info-pill-value"><%= difficultyValue %></span>
+                    </div>
+                    <div class="post-info-pill" role="group" aria-label="公開範囲">
+                        <span class="post-info-pill-key">公開範囲</span>
+                        <span class="post-info-pill-value"><%= visibilityValue %></span>
+                    </div>
+                </div>
             </div>
 
             <% if (postCommentText.trim().length > 0) { %>
                 <div class="post-info-row post-info-row-static">
-                    <div class="post-info-static-value post-info-static-value-multiline"><%= postCommentText %></div>
+                    <div class="post-info-static-value post-info-static-value-multiline post-info-static-value-titlelike"><%= postCommentText %></div>
                 </div>
             <% } %>
-
-            <div class="post-info-row post-info-row-static post-info-row-inline">
-                <div class="post-info-inline-group">
-                    <div class="post-info-static-value post-info-static-value-compact"><%= difficultyLabel %></div>
-                    <div class="post-info-static-value post-info-static-value-compact"><%= visibilityLabel %></div>
-                </div>
-            </div>
         </section>
 
         <h3>パーティ編成</h3>
@@ -70,10 +81,18 @@
         <% if (ubRows && ubRows.length > 0) { %>
             <% const partySlots = (partyMembers && partyMembers.length > 0) ? partyMembers.slice().reverse() : []; %>
             <% const DETAIL_COMMENT_COLSPAN = 7; %>
-            <div class="ub-display-toggle" role="group" aria-label="表示切り替え">
-                <button type="button" class="ub-display-toggle-btn is-active" data-display-mode="all">すべて</button>
-                <button type="button" class="ub-display-toggle-btn" data-display-mode="operation">操作</button>
-                <button type="button" class="ub-display-toggle-btn" data-display-mode="operation-plus-prev">操作+1つ前</button>
+            <div class="ub-toolbar">
+                <div class="ub-display-toggle" role="group" aria-label="表示切り替え">
+                    <button type="button" class="ub-display-toggle-btn is-active" data-display-mode="all">すべて</button>
+                    <button type="button" class="ub-display-toggle-btn" data-display-mode="operation">操作</button>
+                    <button type="button" class="ub-display-toggle-btn" data-display-mode="operation-plus-prev">操作+1つ前</button>
+                </div>
+                <div class="ub-size-toggle" role="group" aria-label="サイズ">
+                    <span class="ub-size-toggle-label">サイズ</span>
+                    <button type="button" class="ub-size-toggle-btn is-active" data-icon-size="large">大</button>
+                    <button type="button" class="ub-size-toggle-btn" data-icon-size="medium">中</button>
+                    <button type="button" class="ub-size-toggle-btn" data-icon-size="small">小</button>
+                </div>
             </div>
             <div class="ub-table-wrapper">
                 <table class="ub-table">
@@ -169,6 +188,9 @@
         const DISPLAY_MODE_ALL = 'all';
         const DISPLAY_MODE_OPERATION = 'operation';
         const DISPLAY_MODE_OPERATION_PLUS_PREV = 'operation-plus-prev';
+        const ICON_SIZE_LARGE = 'large';
+        const ICON_SIZE_MEDIUM = 'medium';
+        const ICON_SIZE_SMALL = 'small';
         let currentDisplayMode = DISPLAY_MODE_ALL;
 
         function parseTimeToSeconds(timeText) {
@@ -360,6 +382,36 @@
             updateVisibleTimeDiffs();
         }
 
+        function applyIconSize(sizeMode) {
+            const tableWrapper = document.querySelector('.ub-table-wrapper');
+            if (!(tableWrapper instanceof HTMLElement)) {
+                return;
+            }
+
+            tableWrapper.classList.remove('ub-icon-size-large', 'ub-icon-size-medium', 'ub-icon-size-small');
+            tableWrapper.classList.add(`ub-icon-size-${sizeMode}`);
+        }
+
+        function updateBattleStartEndLabels(sizeMode) {
+            const eventTextElements = Array.from(document.querySelectorAll('.ub-event-cell .ub-event-image-missing-blue'));
+            eventTextElements.forEach((element) => {
+                if (!(element instanceof HTMLElement)) {
+                    return;
+                }
+
+                const originalText = element.dataset.originalBattleLabel || (element.textContent || '').trim();
+                if (!element.dataset.originalBattleLabel) {
+                    element.dataset.originalBattleLabel = originalText;
+                }
+
+                if (originalText === 'バトル開始') {
+                    element.textContent = sizeMode === ICON_SIZE_SMALL ? '開始' : 'バトル開始';
+                } else if (originalText === 'バトル終了') {
+                    element.textContent = sizeMode === ICON_SIZE_SMALL ? '終了' : 'バトル終了';
+                }
+            });
+        }
+
         document.querySelectorAll('.ub-display-toggle-btn').forEach((button) => {
             button.addEventListener('click', () => {
                 const mode = button.dataset.displayMode;
@@ -374,8 +426,24 @@
             });
         });
 
+        document.querySelectorAll('.ub-size-toggle-btn').forEach((button) => {
+            button.addEventListener('click', () => {
+                const sizeMode = button.dataset.iconSize;
+                if (![ICON_SIZE_LARGE, ICON_SIZE_MEDIUM, ICON_SIZE_SMALL].includes(sizeMode || '')) {
+                    return;
+                }
+                applyIconSize(sizeMode);
+                updateBattleStartEndLabels(sizeMode);
+                document.querySelectorAll('.ub-size-toggle-btn').forEach((item) => {
+                    item.classList.toggle('is-active', item === button);
+                });
+            });
+        });
+
         initializeTimeCells();
         updateSetBubbles();
         applyRowFilter();
+        applyIconSize(ICON_SIZE_LARGE);
+        updateBattleStartEndLabels(ICON_SIZE_LARGE);
     });
 </script>
