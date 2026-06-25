@@ -50,7 +50,10 @@
       <!-- メンバー情報セクション -->
       <% if (clanData.members) { %>
         <section class="clandata-section">
-          <h3>メンバー</h3>
+          <div class="clandata-section-header clandata-members-header">
+            <h3>メンバー</h3>
+            <button type="button" id="members-show-all-btn" class="members-show-all-btn" aria-pressed="false">全て表示</button>
+          </div>
           <div class="members-table-wrapper">
             <table class="members-table">
               <thead>
@@ -85,6 +88,7 @@
                   <% 
                     const attackCount = calcAttackCount(member);
                     const hasTaskkill = !!(member.taskkill && member.taskkill !== 0);
+                    const hideByDefault = attackCount >= 3;
 
                     const sortedPlan = Array.isArray(member.plan)
                       ? [...member.plan].sort((a, b) => Number(a) - Number(b))
@@ -103,7 +107,7 @@
                           })
                       : [];
                   %>
-                  <tr>
+                  <tr class="member-row <%= hideByDefault ? 'member-row-hidden-by-default' : '' %>" data-attack-count="<%= attackCount %>" data-hidden-by-default="<%= hideByDefault ? '1' : '0' %>">
                     <td class="member-name-cell">
                       <div class="member-name-content">
                         <span class="member-name-text"><%= member.name || 'Unknown' %></span>
@@ -425,7 +429,41 @@
   document.addEventListener('DOMContentLoaded', async () => {
     await replaceBossCountLabelsFromClanBattleSettings();
     initBossHistoryMobileFilter();
+    initMembersAttackCountToggle();
   });
+
+  function initMembersAttackCountToggle() {
+    const toggleButton = document.getElementById('members-show-all-btn');
+    const memberRows = Array.from(document.querySelectorAll('.member-row[data-attack-count]'));
+
+    if (!(toggleButton instanceof HTMLButtonElement) || memberRows.length === 0) {
+      return;
+    }
+
+    let showAll = false;
+
+    const applyState = () => {
+      const isMobile = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
+
+      memberRows.forEach((row) => {
+        const attackCount = Number(row.getAttribute('data-attack-count') || '0');
+        const shouldHide = !showAll && attackCount >= 3;
+        row.classList.toggle('member-row-hidden-by-default', shouldHide);
+        row.style.display = shouldHide ? 'none' : (isMobile ? 'block' : 'table-row');
+      });
+
+      toggleButton.textContent = showAll ? '絞り込む' : '全て表示';
+      toggleButton.classList.toggle('is-active', showAll);
+      toggleButton.setAttribute('aria-pressed', showAll ? 'true' : 'false');
+    };
+
+    toggleButton.addEventListener('click', () => {
+      showAll = !showAll;
+      applyState();
+    });
+
+    applyState();
+  }
 </script>
 
 <style>
@@ -482,6 +520,42 @@
     padding-bottom: 10px;
   }
 
+  .clandata-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .clandata-members-header h3 {
+    flex: 1 1 auto;
+    margin-bottom: 15px;
+  }
+
+  .members-show-all-btn {
+    flex: 0 0 auto;
+    border: 1px solid #bcd0ea;
+    border-radius: 999px;
+    background: #f7fbff;
+    color: #1f4f79;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 8px 14px;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+
+  .members-show-all-btn:hover {
+    background: #edf5ff;
+    border-color: #8fb0d6;
+  }
+
+  .members-show-all-btn.is-active {
+    background: #1f4f79;
+    border-color: #1f4f79;
+    color: #fff;
+  }
+
   .members-table-wrapper {
     overflow-x: auto;
   }
@@ -524,6 +598,9 @@
   .member-history-entry {
     margin-bottom: 4px;
     line-height: 1.4;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .member-history-entry:last-child {
@@ -532,6 +609,8 @@
 
   .member-name-cell {
     white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .member-name-content {
@@ -647,6 +726,10 @@
     display: none;
   }
 
+  .member-row-hidden-by-default {
+    display: none;
+  }
+
   @media (max-width: 768px) {
     .clandata-detail-container {
       padding: 12px;
@@ -669,6 +752,27 @@
       margin-bottom: 12px;
       padding-bottom: 8px;
       font-size: 1rem;
+    }
+
+    .clandata-section-header {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .clandata-members-header h3 {
+      margin-bottom: 0;
+      padding-bottom: 0;
+      border-bottom: none;
+    }
+
+    .members-show-all-btn {
+      align-self: flex-end;
+    }
+
+    .clandata-members-header {
+      flex-direction: row;
+      align-items: center;
     }
 
     .bosscount-display {
@@ -739,6 +843,15 @@
       border-bottom: 0;
     }
 
+    .members-table th:nth-child(1),
+    .members-table td:nth-child(1),
+    .members-table th:nth-child(2),
+    .members-table td:nth-child(2),
+    .members-table th:nth-child(4),
+    .members-table td:nth-child(4) {
+      width: 100%;
+    }
+
     .members-table td:nth-child(1)::before { content: '名前'; }
     .members-table td:nth-child(2)::before { content: '攻撃数'; }
     .members-table td:nth-child(3)::before { content: '履歴'; }
@@ -756,10 +869,16 @@
 
     .member-history-cell {
       min-width: 0;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
 
     .member-history-entry {
       margin-bottom: 3px;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      grid-column: 2;
     }
 
     .bosshistory-table,
