@@ -173,6 +173,15 @@
         %>
         <section class="clandata-section">
           <h3>ボス履歴</h3>
+          <div class="bosshistory-mobile-filter" role="group" aria-label="ボス履歴フィルタ">
+            <button type="button" class="bosshistory-filter-btn is-active" data-boss-filter="all">ALL</button>
+            <button type="button" class="bosshistory-filter-btn" data-boss-filter="0">1</button>
+            <button type="button" class="bosshistory-filter-btn" data-boss-filter="1">2</button>
+            <button type="button" class="bosshistory-filter-btn" data-boss-filter="2">3</button>
+            <button type="button" class="bosshistory-filter-btn" data-boss-filter="3">4</button>
+            <button type="button" class="bosshistory-filter-btn" data-boss-filter="4">5</button>
+          </div>
+          <div class="bosshistory-mobile-selected-boss" aria-live="polite"></div>
           <div class="bosshistory-table-wrapper">
             <table class="bosshistory-table">
               <thead>
@@ -187,7 +196,7 @@
               </thead>
               <tbody>
                 <% for (let loop = maxLoop; loop >= minLoop; loop -= 1) { %>
-                  <tr>
+                  <tr data-loop-number="<%= loop + 1 %>">
                     <td class="bosshistory-loop"><%= loop + 1 %></td>
                     <% for (let bossid = 0; bossid < 5; bossid += 1) { %>
                       <% 
@@ -201,7 +210,10 @@
                             return Number(a.sortie) - Number(b.sortie);
                           });
                       %>
-                      <td class="bosshistory-cell">
+                      <td class="bosshistory-cell" data-boss-index="<%= bossid %>">
+                        <div class="bosshistory-mobile-boss-label">
+                          <span class="boss-name-label" data-boss-index="<%= bossid %>">ボス<%= bossid + 1 %></span>
+                        </div>
                         <% cellItems.forEach((item) => { %>
                           <% 
                             const memberIdText = item.member === null || item.member === undefined
@@ -212,6 +224,7 @@
                             const memberName = memberData && typeof memberData.name === 'string'
                               ? memberData.name
                               : '(不明)';
+                            const hasKnownMemberName = memberName !== '(不明)';
 
                             let option = '';
                             if (item.defeat === true) {
@@ -223,7 +236,7 @@
                             const entryText = `${Number(item.sortie) + 1}凸 ${memberName}${option}`;
                             const fadedClass = Number(item.day) !== maxDay ? 'history-old-day' : '';
                           %>
-                          <div class="bosshistory-entry <%= fadedClass %>"><%= entryText %></div>
+                          <div class="bosshistory-entry <%= fadedClass %>" data-has-player-name="<%= hasKnownMemberName ? '1' : '0' %>"><%= entryText %></div>
                         <% }); %>
                       </td>
                     <% } %>
@@ -279,8 +292,133 @@
     }
   }
 
-  document.addEventListener('DOMContentLoaded', () => {
-    replaceBossCountLabelsFromClanBattleSettings();
+  function initBossHistoryMobileFilter() {
+    if (!window.matchMedia || !window.matchMedia('(max-width: 768px)').matches) {
+      return;
+    }
+
+    const filterContainer = document.querySelector('.bosshistory-mobile-filter');
+    const filterButtons = Array.from(document.querySelectorAll('.bosshistory-filter-btn[data-boss-filter]'));
+    const selectedBossLine = document.querySelector('.bosshistory-mobile-selected-boss');
+    const historyRows = Array.from(document.querySelectorAll('.bosshistory-table tbody tr'));
+
+    if (!filterContainer || filterButtons.length === 0 || historyRows.length === 0) {
+      return;
+    }
+
+    const getBossName = (bossIndex) => {
+      const label = document.querySelector(`.bosshistory-table thead .boss-name-label[data-boss-index="${bossIndex}"]`);
+      const text = label ? String(label.textContent || '').trim() : '';
+      if (text.length > 0) {
+        return text;
+      }
+      return `ボス${Number(bossIndex) + 1}`;
+    };
+
+    const setFilter = (bossFilter) => {
+      const isAll = bossFilter === 'all';
+
+      filterButtons.forEach((button) => {
+        button.classList.toggle('is-active', button.getAttribute('data-boss-filter') === bossFilter);
+      });
+
+      if (selectedBossLine) {
+        if (isAll) {
+          selectedBossLine.textContent = '';
+          selectedBossLine.classList.remove('is-visible');
+        } else {
+          selectedBossLine.textContent = getBossName(bossFilter);
+          selectedBossLine.classList.add('is-visible');
+        }
+      }
+
+      const rowStates = [];
+
+      historyRows.forEach((row) => {
+        const cells = Array.from(row.querySelectorAll('.bosshistory-cell[data-boss-index]'));
+        let hasVisibleEntryInRow = false;
+
+        cells.forEach((cell) => {
+          const cellBossIndex = String(cell.getAttribute('data-boss-index'));
+          const showCell = isAll || cellBossIndex === bossFilter;
+          cell.style.display = showCell ? '' : 'none';
+
+          const cellBossLabel = cell.querySelector('.bosshistory-mobile-boss-label');
+          if (cellBossLabel) {
+            cellBossLabel.style.display = isAll ? '' : 'none';
+          }
+
+          const entries = Array.from(cell.querySelectorAll('.bosshistory-entry'));
+          if (isAll || !showCell) {
+            entries.forEach((entry) => {
+              entry.style.display = '';
+            });
+            if (showCell && entries.length > 0) {
+              hasVisibleEntryInRow = true;
+            }
+            return;
+          }
+
+          let hasVisibleEntryInCell = false;
+          entries.forEach((entry) => {
+            const hasPlayerName = entry.getAttribute('data-has-player-name') === '1';
+            entry.style.display = hasPlayerName ? '' : 'none';
+            if (hasPlayerName) {
+              hasVisibleEntryInCell = true;
+            }
+          });
+
+          if (hasVisibleEntryInCell) {
+            hasVisibleEntryInRow = true;
+          }
+        });
+
+        rowStates.push({
+          row,
+          hasVisibleEntryInRow,
+          loopNumber: Number(row.getAttribute('data-loop-number') || '0')
+        });
+      });
+
+      if (isAll) {
+        rowStates.forEach(({ row }) => {
+          row.style.display = '';
+        });
+        return;
+      }
+
+      const highestLoopWithPlayer = rowStates.reduce((max, state) => {
+        if (!state.hasVisibleEntryInRow) {
+          return max;
+        }
+        return Math.max(max, state.loopNumber);
+      }, -1);
+
+      rowStates.forEach(({ row, hasVisibleEntryInRow, loopNumber }) => {
+        const shouldShowRow = highestLoopWithPlayer >= 0 && (hasVisibleEntryInRow || loopNumber <= highestLoopWithPlayer);
+        row.style.display = shouldShowRow ? '' : 'none';
+      });
+    };
+
+    filterContainer.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+      const button = target.closest('.bosshistory-filter-btn[data-boss-filter]');
+      if (!(button instanceof HTMLElement)) {
+        return;
+      }
+      const bossFilter = String(button.getAttribute('data-boss-filter') || 'all');
+      setFilter(bossFilter);
+    });
+
+    setFilter('all');
+  }
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    await replaceBossCountLabelsFromClanBattleSettings();
+    initBossHistoryMobileFilter();
   });
 </script>
 
@@ -451,6 +589,10 @@
     min-width: 150px;
   }
 
+  .bosshistory-mobile-boss-label {
+    display: none;
+  }
+
   .bosshistory-entry {
     color: #111;
     line-height: 1.45;
@@ -465,5 +607,231 @@
 
   .bosshistory-entry.history-old-day {
     color: #6ea8d9;
+  }
+
+  .bosshistory-mobile-filter,
+  .bosshistory-mobile-selected-boss {
+    display: none;
+  }
+
+  @media (max-width: 768px) {
+    .clandata-detail-container {
+      padding: 12px;
+    }
+
+    .clandata-header {
+      padding: 14px;
+      margin-bottom: 16px;
+    }
+
+    .clandata-content {
+      gap: 16px;
+    }
+
+    .clandata-section {
+      padding: 14px;
+    }
+
+    .clandata-section h3 {
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      font-size: 1rem;
+    }
+
+    .bosscount-display {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .bosscount-item {
+      padding: 8px;
+    }
+
+    .bosscount-item p {
+      font-size: 13px;
+      line-height: 1.3;
+    }
+
+    .members-table,
+    .members-table thead,
+    .members-table tbody,
+    .members-table tr,
+    .members-table th,
+    .members-table td {
+      display: block;
+      width: 100%;
+    }
+
+    .members-table {
+      min-width: 0;
+      border: 0;
+      background: transparent;
+    }
+
+    .members-table thead {
+      display: none;
+    }
+
+    .members-table tbody tr {
+      border: 1px solid #d8e6f5;
+      border-radius: 10px;
+      background: #f9fcff;
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+
+    .members-table tbody tr:last-child {
+      margin-bottom: 0;
+    }
+
+    .members-table tbody tr:nth-child(even),
+    .members-table tbody tr:hover {
+      background: #f9fcff;
+    }
+
+    .members-table td {
+      border: 0;
+      border-bottom: 1px solid #e9eef5;
+      padding: 8px 10px;
+      display: grid;
+      grid-template-columns: 68px 1fr;
+      gap: 8px;
+      align-items: start;
+      white-space: normal;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .members-table td:last-child {
+      border-bottom: 0;
+    }
+
+    .members-table td:nth-child(1)::before { content: '名前'; }
+    .members-table td:nth-child(2)::before { content: '攻撃数'; }
+    .members-table td:nth-child(3)::before { content: '履歴'; }
+    .members-table td:nth-child(4)::before { content: '前日'; }
+    .members-table td:nth-child(5)::before { content: 'タスキル'; }
+
+    .members-table td::before {
+      font-weight: 700;
+      color: #2f5d88;
+      white-space: nowrap;
+    }
+
+    .member-history-cell {
+      min-width: 0;
+    }
+
+    .member-history-entry {
+      margin-bottom: 3px;
+    }
+
+    .bosshistory-table,
+    .bosshistory-table thead,
+    .bosshistory-table tbody,
+    .bosshistory-table tr,
+    .bosshistory-table th,
+    .bosshistory-table td {
+      display: block;
+      width: 100%;
+    }
+
+    .bosshistory-table {
+      min-width: 0;
+      border: 0;
+      background: transparent;
+    }
+
+    .bosshistory-table thead {
+      display: none;
+    }
+
+    .bosshistory-mobile-filter {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .bosshistory-filter-btn {
+      border: 1px solid #c8d7ea;
+      background: #f7fbff;
+      color: #2f5d88;
+      border-radius: 999px;
+      font-size: 12px;
+      line-height: 1;
+      font-weight: 700;
+      padding: 8px 0;
+      cursor: pointer;
+    }
+
+    .bosshistory-filter-btn.is-active {
+      border-color: #0b5ed7;
+      background: #0b5ed7;
+      color: #ffffff;
+    }
+
+    .bosshistory-mobile-selected-boss {
+      display: none;
+      margin-bottom: 8px;
+      font-size: 13px;
+      line-height: 1.35;
+      color: #244d74;
+      font-weight: 700;
+    }
+
+    .bosshistory-mobile-selected-boss.is-visible {
+      display: block;
+    }
+
+    .bosshistory-table tbody tr {
+      border: 1px solid #d8e6f5;
+      border-radius: 10px;
+      background: #ffffff;
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+
+    .bosshistory-table tbody tr:last-child {
+      margin-bottom: 0;
+    }
+
+    .bosshistory-table td {
+      border: 0;
+      border-bottom: 1px solid #e9eef5;
+      padding: 8px 10px;
+      font-size: 13px;
+      line-height: 1.45;
+      min-width: 0;
+    }
+
+    .bosshistory-table td:last-child {
+      border-bottom: 0;
+    }
+
+    .bosshistory-loop {
+      width: 100%;
+      text-align: left;
+      background: #f3f8ff;
+      color: #244d74;
+      font-weight: 700;
+      border-bottom: 1px solid #d8e6f5;
+    }
+
+    .bosshistory-loop::before {
+      content: '周回: ';
+    }
+
+    .bosshistory-mobile-boss-label {
+      display: block;
+      font-weight: 700;
+      color: #2f5d88;
+      margin-bottom: 2px;
+    }
+
+    .bosshistory-entry {
+      white-space: normal;
+      margin-bottom: 3px;
+    }
   }
 </style>
