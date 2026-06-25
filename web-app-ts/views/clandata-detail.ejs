@@ -59,7 +59,6 @@
                   <th>攻撃数</th>
                   <th>履歴</th>
                   <th>前日</th>
-                  <th>タスキル</th>
                 </tr>
               </thead>
               <tbody>
@@ -85,6 +84,7 @@
                 <% for (const member of sortedMembers) { %>
                   <% 
                     const attackCount = calcAttackCount(member);
+                    const hasTaskkill = !!(member.taskkill && member.taskkill !== 0);
 
                     const sortedPlan = Array.isArray(member.plan)
                       ? [...member.plan].sort((a, b) => Number(a) - Number(b))
@@ -104,7 +104,14 @@
                       : [];
                   %>
                   <tr>
-                    <td><%= member.name || 'Unknown' %></td>
+                    <td class="member-name-cell">
+                      <div class="member-name-content">
+                        <span class="member-name-text"><%= member.name || 'Unknown' %></span>
+                        <% if (hasTaskkill) { %>
+                          <span class="member-taskkill-badge" aria-label="タスキルあり" title="タスキルあり">！</span>
+                        <% } %>
+                      </div>
+                    </td>
                     <td><%= attackCount %></td>
                     <td class="member-history-cell">
                       <% historyList.forEach((item) => { %>
@@ -121,7 +128,6 @@
                       <% }); %>
                     </td>
                     <td><%= previousDay %></td>
-                    <td><%= member.taskkill && member.taskkill !== 0 ? '❗' : '' %></td>
                   </tr>
                 <% } %>
               </tbody>
@@ -524,6 +530,31 @@
     margin-bottom: 0;
   }
 
+  .member-name-cell {
+    white-space: normal;
+  }
+
+  .member-name-content {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .member-name-text {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .member-taskkill-badge {
+    flex: 0 0 auto;
+    margin-left: auto;
+    color: #d9534f;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
   .bosscount-display {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -598,7 +629,9 @@
     line-height: 1.45;
     font-size: 13px;
     margin-bottom: 4px;
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .bosshistory-entry:last-child {
@@ -710,12 +743,15 @@
     .members-table td:nth-child(2)::before { content: '攻撃数'; }
     .members-table td:nth-child(3)::before { content: '履歴'; }
     .members-table td:nth-child(4)::before { content: '前日'; }
-    .members-table td:nth-child(5)::before { content: 'タスキル'; }
 
     .members-table td::before {
       font-weight: 700;
       color: #2f5d88;
       white-space: nowrap;
+    }
+
+    .member-name-content {
+      gap: 6px;
     }
 
     .member-history-cell {
