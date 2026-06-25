@@ -745,6 +745,40 @@ body {
     background: #fff9d9;
 }
 
+.ub-table tbody tr[data-timing="true"] td {
+    background: #ffd9d9 !important;
+}
+
+.ub-event-cell-inner {
+    position: relative;
+    display: inline-block;
+}
+
+.ub-timing-hoshi {
+    display: none;
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    width: 28px;
+    height: 28px;
+    pointer-events: none;
+    z-index: 2;
+    filter: hue-rotate(15deg) saturate(1.5) brightness(1.1);
+}
+
+tr[data-timing="true"] .ub-timing-hoshi {
+    display: block;
+}
+
+.ub-action-btn-timing.is-timing-active {
+    background: #ffd9d9;
+    border-color: #e03030;
+}
+
+.ub-action-btn-timing.is-timing-active .ub-action-btn-image {
+    filter: none;
+}
+
 .ub-time-cell {
     font-weight: 700;
     color: #2f3650;
