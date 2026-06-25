@@ -50,6 +50,7 @@ type BoardDetailUbRow = {
   autoActive: boolean;
   comment: string;
   isAddedRow: boolean;
+  timing: boolean;
 };
 
 type TimelineUbEvent = {
@@ -265,6 +266,7 @@ function resolveBoardDetailUbRows(article: any): BoardDetailUbRow[] {
         autoActive?: unknown;
         comment?: unknown;
         isAddedRow?: unknown;
+        timing?: unknown;
       };
       const time = typeof event.time === 'string' ? event.time : '';
       const ubText = typeof event.character === 'string' ? event.character.trim() : '';
@@ -279,6 +281,7 @@ function resolveBoardDetailUbRows(article: any): BoardDetailUbRow[] {
       const autoActive = typeof event.autoActive === 'boolean' ? event.autoActive : false;
       const comment = typeof event.comment === 'string' ? event.comment : '';
       const isAddedRow = typeof event.isAddedRow === 'boolean' ? event.isAddedRow : false;
+      const timing = typeof event.timing === 'boolean' ? event.timing : false;
       rows.push({
         time,
         ubText,
@@ -286,7 +289,8 @@ function resolveBoardDetailUbRows(article: any): BoardDetailUbRow[] {
         activeIcons,
         autoActive,
         comment,
-        isAddedRow
+        isAddedRow,
+        timing
       });
     }
 
@@ -315,7 +319,8 @@ function resolveBoardDetailUbRows(article: any): BoardDetailUbRow[] {
         activeIcons: [],
         autoActive: false,
         comment: '',
-        isAddedRow: false
+        isAddedRow: false,
+        timing: false
       });
     }
   }

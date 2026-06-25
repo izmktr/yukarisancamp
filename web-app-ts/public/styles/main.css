@@ -749,6 +749,10 @@ body {
     background: #ffd9d9 !important;
 }
 
+.ub-table tbody tr[data-timing="true"] + tr.ub-comment-row td {
+    background: #ffd9d9 !important;
+}
+
 .ub-event-cell-inner {
     position: relative;
     display: inline-block;
@@ -757,13 +761,12 @@ body {
 .ub-timing-hoshi {
     display: none;
     position: absolute;
-    top: -2px;
-    left: -2px;
-    width: 28px;
-    height: 28px;
+    top: calc(-6px * var(--ub-icon-scale, 1));
+    left: calc(-6px * var(--ub-icon-scale, 1));
+    width: calc(34px * var(--ub-icon-scale, 1));
+    height: calc(34px * var(--ub-icon-scale, 1));
     pointer-events: none;
     z-index: 2;
-    filter: hue-rotate(15deg) saturate(1.5) brightness(1.1);
 }
 
 tr[data-timing="true"] .ub-timing-hoshi {
@@ -1131,6 +1134,11 @@ tr[data-timing="true"] .ub-timing-hoshi {
 .ub-comment-cell {
     background: #fff9d9;
     padding: 0.35rem 0.45rem 0.55rem 0.45rem;
+}
+
+.ub-table tbody tr[data-timing="true"] + tr.ub-comment-row .ub-comment-prefix-cell,
+.ub-table tbody tr[data-timing="true"] + tr.ub-comment-row .ub-comment-cell {
+    background: #ffd9d9;
 }
 
 .ub-comment-content {
