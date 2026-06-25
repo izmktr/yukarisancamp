@@ -1,12 +1,45 @@
 <div class="page-content">
-    <h2>記事詳細</h2>
+        <% 
+            const difficultyLabelByLevel = {
+                1: 'フルオート',
+                2: 'セミオート',
+                3: '簡単',
+                4: '普通',
+                5: '高難度'
+            };
+            const difficultyLabel = `難易度: ${difficultyLabelByLevel[Number(article.difficulty)] || ''}`;
+            const postCommentText = article.postComment || article.postcomment || '';
+            const visibilityRaw = String(article.visibility || article.visibilality || '').toLowerCase();
+            const visibilityLabelByValue = {
+                all: '全体',
+                clan: 'クラン',
+                self: '自分'
+            };
+            const visibilityLabel = `公開範囲: ${visibilityLabelByValue[visibilityRaw] || visibilityRaw}`;
+            const bossDamageText = `${article.bossname || ''} : ${article.damage || ''} damage`;
+        %>
+        <h2><%= article.postTitle || '記事詳細' %></h2>
     <div class="board-detail">
-        <p><strong>年月:</strong> <%= article.yearmonth || '' %></p>
-        <p><strong>ボス名:</strong> <%= article.bossname || '' %></p>
-        <p><strong>モード:</strong> <%= article.mode || '' %></p>
-        <p><strong>ダメージ:</strong> <%= article.damage || '' %></p>
-        <p><strong>バトル時間:</strong> <%= article.battleTime || '' %></p>
-        <p><strong>バトル日時:</strong> <%= article.battleDate || '' %></p>
+        <section class="post-info-editor" aria-label="情報">
+            <h3>情報</h3>
+
+            <div class="post-info-row post-info-row-static">
+                <div class="post-info-static-value post-info-static-value-compact"><%= bossDamageText %></div>
+            </div>
+
+            <% if (postCommentText.trim().length > 0) { %>
+                <div class="post-info-row post-info-row-static">
+                    <div class="post-info-static-value post-info-static-value-multiline"><%= postCommentText %></div>
+                </div>
+            <% } %>
+
+            <div class="post-info-row post-info-row-static post-info-row-inline">
+                <div class="post-info-inline-group">
+                    <div class="post-info-static-value post-info-static-value-compact"><%= difficultyLabel %></div>
+                    <div class="post-info-static-value post-info-static-value-compact"><%= visibilityLabel %></div>
+                </div>
+            </div>
+        </section>
 
         <h3>パーティ編成</h3>
         <% if (partyMembers && partyMembers.length > 0) { %>

@@ -418,6 +418,22 @@ body {
     margin-bottom: 0;
 }
 
+.post-info-row-static {
+    grid-template-columns: 1fr;
+    gap: 0;
+}
+
+.post-info-row-inline {
+    margin-bottom: 0.7rem;
+}
+
+.post-info-inline-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+    align-items: flex-start;
+}
+
 .post-info-row label {
     font-weight: 700;
     font-size: 0.88rem;
@@ -459,6 +475,33 @@ body {
     outline: none;
     border-color: #667eea;
     box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.14);
+}
+
+.post-info-static-value {
+    width: 100%;
+    min-height: 36px;
+    border: 1px solid #c8d0e1;
+    border-radius: 9px;
+    background: #ffffff;
+    color: #2f3650;
+    font-size: 0.9rem;
+    padding: 0.45rem 0.65rem;
+    line-height: 1.5;
+    cursor: default;
+    user-select: text;
+}
+
+.post-info-static-value-compact {
+    width: fit-content;
+    display: inline-block;
+    max-width: 100%;
+    justify-self: start;
+    flex: 0 0 auto;
+}
+
+.post-info-static-value-multiline {
+    min-height: 76px;
+    white-space: pre-wrap;
 }
 
 .post-info-toggle-wrap {

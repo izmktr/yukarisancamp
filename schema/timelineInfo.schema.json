@@ -115,6 +115,10 @@
           "isAddedRow": {
             "description": "Whether this row was user-added.",
             "type": "boolean"
+          },
+          "timing": {
+            "description": "Whether timing is active for this row.",
+            "type": "boolean"
           }
         },
         "required": ["time", "character"]
