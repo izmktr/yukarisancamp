@@ -8,7 +8,7 @@
     "start": "node dist/index.js",
     "build": "npm run generate-types && tsc",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "generate-types": "cd ../schema && npx json-schema-to-typescript --input userProfile.schema.json --output ../web-app-ts/src/types.ts"
+    "generate-types": "npx json-schema-to-typescript --input ../schema/userProfile.schema.json --output src/types.ts"
   },
   "keywords": [],
   "author": "",

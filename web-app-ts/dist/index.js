@@ -188,7 +188,7 @@ app.get('/chara-check', (req, res) => {
         unindexedImages
     });
 });
-app.get('/clandata', ensureAdmin, (req, res) => {
+app.get('/clanlist', ensureAdmin, (req, res) => {
     const clanDataDirPath = path_1.default.join(__dirname, '../clandata');
     let clans = [];
     try {
@@ -224,9 +224,9 @@ app.get('/clandata', ensureAdmin, (req, res) => {
     catch (error) {
         console.error('Failed to load clan data list:', error);
     }
-    res.render('clandata-list', {
+    res.render('clanlist', {
         title: 'ゆかりさん△',
-        currentPage: 'clandata-list',
+        currentPage: 'clanlist',
         ...getAuthViewData(req),
         clans
     });
