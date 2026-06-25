@@ -1,0 +1,45 @@
+<div class="page-content">
+    <h2>クラン一覧</h2>
+    <p>登録されているクランデータの一覧です。（<%= clans.length %>件）</p>
+
+    <% if (!clans || clans.length === 0) { %>
+        <div class="card">
+            <p>クランデータが見つかりませんでした。</p>
+        </div>
+    <% } else { %>
+        <div class="clan-list-table-wrapper">
+            <table class="clan-list-table">
+                <thead>
+                    <tr>
+                        <th>クラン名</th>
+                        <th>メンバー数</th>
+                        <th>bosscount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% clans.forEach((clan) => { %>
+                        <tr class="clan-list-row" data-href="/clandata/<%= clan.id %>">
+                            <td><%= clan.name %></td>
+                            <td><%= clan.memberCount %></td>
+                            <td><%= clan.bossCountText %></td>
+                        </tr>
+                    <% }) %>
+                </tbody>
+            </table>
+        </div>
+    <% } %>
+</div>
+
+<script>
+    document.addEventListener('click', (event) => {
+        const row = event.target instanceof Element ? event.target.closest('.clan-list-row') : null;
+        if (!(row instanceof HTMLElement)) {
+            return;
+        }
+
+        const href = row.dataset.href;
+        if (typeof href === 'string' && href.length > 0) {
+            window.location.href = href;
+        }
+    });
+</script>

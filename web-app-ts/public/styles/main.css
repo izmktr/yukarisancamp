@@ -1070,6 +1070,48 @@ body {
     word-break: break-word;
 }
 
+.clan-list-table-wrapper {
+    margin-top: 1rem;
+    overflow-x: auto;
+}
+
+.clan-list-table {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid #e6ebf5;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #ffffff;
+}
+
+.clan-list-table th,
+.clan-list-table td {
+    padding: 0.75rem 0.9rem;
+    border-bottom: 1px solid #eef2f8;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.clan-list-table th {
+    background: #f7f9ff;
+    color: #34406a;
+    font-size: 0.86rem;
+    font-weight: 700;
+}
+
+.clan-list-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.clan-list-row {
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.clan-list-row:hover {
+    background: #f8fbff;
+}
+
 /* レスポンシブデザイン */
 @media (max-width: 768px) {
     .header-content {

@@ -69,6 +69,21 @@ function parseClanDataJson(raw) {
     const normalized = raw.replace(/("member"\s*:\s*)(\d{16,})/g, '$1"$2"');
     return JSON.parse(normalized);
 }
+function getAuthViewData(req) {
+    const userSession = req.session.user;
+    return {
+        isLoggedIn: !!userSession,
+        userName: userSession?.displayName || '',
+        isAdmin: userSession?.role === 'admin'
+    };
+}
+function ensureAdmin(req, res, next) {
+    const { isAdmin } = getAuthViewData(req);
+    if (!isAdmin) {
+        return res.status(403).send('管理者のみ閲覧できます');
+    }
+    next();
+}
 const app = (0, express_1.default)();
 const port = 3000;
 function getFirebaseConfigValue(key, fallback) {
@@ -106,23 +121,17 @@ app.use('/api/board', board_1.default);
 console.log('Web app starting...');
 // ルート定義
 app.get('/', (req, res) => {
-    const userSession = req.session.user;
     res.render('info', {
         title: 'ゆかりさん△',
         currentPage: 'info',
-        isLoggedIn: !!userSession,
-        userName: userSession?.displayName || '',
-        isAdmin: userSession?.role === 'admin'
+        ...getAuthViewData(req)
     });
 });
 app.get('/info', (req, res) => {
-    const userSession = req.session.user;
     res.render('info', {
         title: 'ゆかりさん△',
         currentPage: 'info',
-        isLoggedIn: !!userSession,
-        userName: userSession?.displayName || '',
-        isAdmin: userSession?.role === 'admin'
+        ...getAuthViewData(req)
     });
 });
 app.get('/users', (_req, res) => {
@@ -131,27 +140,20 @@ app.get('/users', (_req, res) => {
 const board_2 = __importDefault(require("./routes/board"));
 app.use('/board', board_2.default);
 app.get('/settings', (req, res) => {
-    const userSession = req.session.user;
     res.render('settings', {
         title: 'ゆかりさん△',
         currentPage: 'settings',
-        isLoggedIn: !!userSession,
-        userName: userSession?.displayName || '',
-        isAdmin: userSession?.role === 'admin'
+        ...getAuthViewData(req)
     });
 });
 app.get('/clanbattle-settings', (req, res) => {
-    const userSession = req.session.user;
     res.render('clanbattle-settings', {
         title: 'ゆかりさん△',
         currentPage: 'clanbattle-settings',
-        isLoggedIn: !!userSession,
-        userName: userSession?.displayName || '',
-        isAdmin: userSession?.role === 'admin'
+        ...getAuthViewData(req)
     });
 });
 app.get('/chara-check', (req, res) => {
-    const userSession = req.session.user;
     const charaIndexPath = path_1.default.join(__dirname, '../chara/charaindex.json');
     const charaDirPath = path_1.default.join(__dirname, '../chara');
     let characters = [];
@@ -181,11 +183,52 @@ app.get('/chara-check', (req, res) => {
     res.render('chara-check', {
         title: 'ゆかりさん△',
         currentPage: 'chara-check',
-        isLoggedIn: !!userSession,
-        userName: userSession?.displayName || '',
-        isAdmin: userSession?.role === 'admin',
+        ...getAuthViewData(req),
         characters,
         unindexedImages
+    });
+});
+app.get('/clandata', ensureAdmin, (req, res) => {
+    const clanDataDirPath = path_1.default.join(__dirname, '../clandata');
+    let clans = [];
+    try {
+        const files = fs_1.default.readdirSync(clanDataDirPath)
+            .filter((fileName) => fileName.toLowerCase().endsWith('.json'));
+        clans = files.map((fileName) => {
+            const clanId = fileName.replace(/\.json$/i, '');
+            const filePath = path_1.default.join(clanDataDirPath, fileName);
+            let parsed = {};
+            try {
+                parsed = parseClanDataJson(fs_1.default.readFileSync(filePath, 'utf-8'));
+            }
+            catch (error) {
+                console.error(`Failed to parse clan data (${fileName}):`, error);
+            }
+            const clanName = typeof parsed?.name === 'string' && parsed.name.trim().length > 0
+                ? parsed.name.trim()
+                : clanId;
+            const memberCount = parsed?.members && typeof parsed.members === 'object'
+                ? Object.keys(parsed.members).length
+                : 0;
+            const bossCountText = Array.isArray(parsed?.bosscount)
+                ? parsed.bosscount.map((value) => String(value)).join(', ')
+                : '-';
+            return {
+                id: clanId,
+                name: clanName,
+                memberCount,
+                bossCountText
+            };
+        }).sort((left, right) => left.name.localeCompare(right.name, 'ja'));
+    }
+    catch (error) {
+        console.error('Failed to load clan data list:', error);
+    }
+    res.render('clandata-list', {
+        title: 'ゆかりさん△',
+        currentPage: 'clandata-list',
+        ...getAuthViewData(req),
+        clans
     });
 });
 // クランデータ詳細表示
@@ -207,13 +250,10 @@ app.get('/clandata/:id', (req, res) => {
         console.error('Failed to load clan data:', err);
         error = `クランデータの読み込みに失敗しました: ${err instanceof Error ? err.message : '不明なエラー'}`;
     }
-    const userSession = req.session.user;
     res.render('clandata-detail', {
         title: 'ゆかりさん△ - クランデータ',
         currentPage: 'clandata',
-        isLoggedIn: !!userSession,
-        userName: userSession?.displayName || '',
-        isAdmin: userSession?.role === 'admin',
+        ...getAuthViewData(req),
         clanId,
         clanData,
         error
