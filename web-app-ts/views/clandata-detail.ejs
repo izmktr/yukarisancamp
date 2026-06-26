@@ -49,11 +49,35 @@
 
       <!-- メンバー情報セクション -->
       <% if (clanData.members) { %>
+        <% 
+          const calcAttackCount = (member) => {
+            const attackTimes = Array.isArray(member?.attacktime) ? member.attacktime : [];
+            return attackTimes.reduce((sum, t) => {
+              if (t === 0) return sum + 1;
+              if (t === null) return sum;
+              return sum + 0.5;
+            }, 0);
+          };
+
+          const sortedMembers = Object.values(clanData.members).sort((left, right) => {
+            const diff = calcAttackCount(left) - calcAttackCount(right);
+            if (diff !== 0) {
+              return diff;
+            }
+            return String(left?.name ?? '').localeCompare(String(right?.name ?? ''), 'ja');
+          });
+
+          const fullAttackMemberCount = sortedMembers.filter((member) => calcAttackCount(member) >= 3).length;
+          const totalMemberCount = sortedMembers.length;
+          const totalAttackCount = sortedMembers.reduce((sum, member) => sum + calcAttackCount(member), 0);
+          const maxAttackCount = totalMemberCount * 3;
+        %>
         <section class="clandata-section">
           <div class="clandata-section-header clandata-members-header">
             <h3>メンバー</h3>
             <button type="button" id="members-show-all-btn" class="members-show-all-btn" aria-pressed="false">全て表示</button>
           </div>
+          <p class="members-attack-summary">完凸 <%= fullAttackMemberCount %>人/<%= totalMemberCount %>人(<%= totalAttackCount %>凸/<%= maxAttackCount %>凸)</p>
           <div class="members-table-wrapper">
             <table class="members-table">
               <thead>
@@ -65,25 +89,6 @@
                 </tr>
               </thead>
               <tbody>
-                <% 
-                  const calcAttackCount = (member) => {
-                    const attackTimes = Array.isArray(member?.attacktime) ? member.attacktime : [];
-                    return attackTimes.reduce((sum, t) => {
-                      if (t === 0) return sum + 1;
-                      if (t === null) return sum;
-                      return sum + 0.5;
-                    }, 0);
-                  };
-
-                  const sortedMembers = Object.values(clanData.members).sort((left, right) => {
-                    const diff = calcAttackCount(left) - calcAttackCount(right);
-                    if (diff !== 0) {
-                      return diff;
-                    }
-                    return String(left?.name ?? '').localeCompare(String(right?.name ?? ''), 'ja');
-                  });
-                %>
-
                 <% for (const member of sortedMembers) { %>
                   <% 
                     const attackCount = calcAttackCount(member);
@@ -117,7 +122,7 @@
                       </div>
                     </td>
                     <td><%= attackCount %></td>
-                    <td class="member-history-cell">
+                    <td class="member-history-cell member-mobile-optional-cell" data-mobile-hide-empty="1">
                       <% historyList.forEach((item) => { %>
                         <% 
                           const sortieNumber = Number(item.sortie);
@@ -131,7 +136,7 @@
                         </div>
                       <% }); %>
                     </td>
-                    <td><%= previousDay %></td>
+                    <td class="member-mobile-optional-cell" data-mobile-hide-empty="1"><%= previousDay %></td>
                   </tr>
                 <% } %>
               </tbody>
@@ -177,8 +182,21 @@
             return String(a.updatetime ?? '').localeCompare(String(b.updatetime ?? ''));
           });
 
+          const bossCountLoopNumbers = Array.isArray(clanData.bosscount)
+            ? clanData.bosscount
+                .map((value) => Number(value) + 1)
+                .filter((value) => Number.isFinite(value) && value > 0)
+            : [];
+          const bossCountMaxLoopZeroBased = Array.isArray(clanData.bosscount)
+            ? clanData.bosscount
+                .map((value) => Number(value))
+                .filter((value) => Number.isFinite(value) && value >= 0)
+                .reduce((max, value) => Math.max(max, value), 0)
+            : 0;
+
           const maxDay = historyList.reduce((max, item) => Math.max(max, Number(item.day)), 0);
-          const maxLoop = historyList.reduce((max, item) => Math.max(max, Math.floor(Number(item.boss) / 5)), 0);
+          const maxHistoryLoop = historyList.reduce((max, item) => Math.max(max, Math.floor(Number(item.boss) / 5)), 0);
+          const maxLoop = Math.max(maxHistoryLoop, bossCountMaxLoopZeroBased);
           const minLoop = Math.max(0, maxLoop - 5);
         %>
         <section class="clandata-section">
@@ -206,9 +224,11 @@
               </thead>
               <tbody>
                 <% for (let loop = maxLoop; loop >= minLoop; loop -= 1) { %>
-                  <tr data-loop-number="<%= loop + 1 %>">
-                    <td class="bosshistory-loop"><%= loop + 1 %></td>
+                  <% const loopNumber = loop + 1; %>
+                  <tr data-loop-number="<%= loopNumber %>">
+                    <td class="bosshistory-loop"><%= loopNumber %></td>
                     <% for (let bossid = 0; bossid < 5; bossid += 1) { %>
+                      <% const isBossCountMatchedCell = bossCountLoopNumbers[bossid] === loopNumber; %>
                       <% 
                         const cellItems = historyList
                           .filter((item) => Math.floor(Number(item.boss) / 5) === loop && Number(item.boss) % 5 === bossid)
@@ -220,7 +240,7 @@
                             return Number(a.sortie) - Number(b.sortie);
                           });
                       %>
-                      <td class="bosshistory-cell" data-boss-index="<%= bossid %>">
+                      <td class="bosshistory-cell <%= isBossCountMatchedCell ? 'bosshistory-cell-bosscount-match' : '' %>" data-boss-index="<%= bossid %>">
                         <div class="bosshistory-mobile-boss-label">
                           <span class="boss-name-label" data-boss-index="<%= bossid %>">ボス<%= bossid + 1 %></span>
                         </div>
@@ -452,6 +472,8 @@
         row.style.display = shouldHide ? 'none' : (isMobile ? 'block' : 'table-row');
       });
 
+      applyMembersMobileEmptyFieldVisibility(isMobile);
+
       toggleButton.textContent = showAll ? '絞り込む' : '全て表示';
       toggleButton.classList.toggle('is-active', showAll);
       toggleButton.setAttribute('aria-pressed', showAll ? 'true' : 'false');
@@ -463,6 +485,42 @@
     });
 
     applyState();
+
+    if (window.matchMedia) {
+      const mediaQuery = window.matchMedia('(max-width: 768px)');
+      const handleViewportChange = () => {
+        applyMembersMobileEmptyFieldVisibility(mediaQuery.matches);
+      };
+
+      if (typeof mediaQuery.addEventListener === 'function') {
+        mediaQuery.addEventListener('change', handleViewportChange);
+      } else if (typeof mediaQuery.addListener === 'function') {
+        mediaQuery.addListener(handleViewportChange);
+      }
+    }
+  }
+
+  function applyMembersMobileEmptyFieldVisibility(isMobile) {
+    const optionalCells = Array.from(document.querySelectorAll('.member-mobile-optional-cell[data-mobile-hide-empty="1"]'));
+
+    optionalCells.forEach((cell) => {
+      if (!(cell instanceof HTMLElement)) {
+        return;
+      }
+
+      if (!isMobile) {
+        cell.style.display = '';
+        return;
+      }
+
+      const hasHistoryEntry = cell.classList.contains('member-history-cell')
+        ? cell.querySelectorAll('.member-history-entry').length > 0
+        : false;
+
+      const textContent = String(cell.textContent || '').trim();
+      const hasContent = hasHistoryEntry || textContent.length > 0;
+      cell.style.display = hasContent ? 'grid' : 'none';
+    });
   }
 </script>
 
@@ -554,6 +612,14 @@
     background: #1f4f79;
     border-color: #1f4f79;
     color: #fff;
+  }
+
+  .members-attack-summary {
+    margin: 0 0 12px;
+    font-size: 14px;
+    line-height: 1.4;
+    color: #2b4f73;
+    font-weight: 700;
   }
 
   .members-table-wrapper {
@@ -699,6 +765,14 @@
     min-width: 150px;
   }
 
+  .bosshistory-table td.bosshistory-cell-bosscount-match {
+    background: #fff8c5;
+  }
+
+  .bosshistory-table tbody tr:hover td.bosshistory-cell-bosscount-match {
+    background: #fff3a3;
+  }
+
   .bosshistory-mobile-boss-label {
     display: none;
   }
@@ -773,6 +847,11 @@
     .clandata-members-header {
       flex-direction: row;
       align-items: center;
+    }
+
+    .members-attack-summary {
+      margin-bottom: 10px;
+      font-size: 13px;
     }
 
     .bosscount-display {
@@ -949,6 +1028,14 @@
 
     .bosshistory-table tbody tr:last-child {
       margin-bottom: 0;
+    }
+
+    .bosshistory-table td.bosshistory-cell-bosscount-match {
+      background: #fff8c5;
+    }
+
+    .bosshistory-table tbody tr:hover td.bosshistory-cell-bosscount-match {
+      background: #fff3a3;
     }
 
     .bosshistory-table td {
