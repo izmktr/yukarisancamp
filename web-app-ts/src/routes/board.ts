@@ -421,12 +421,18 @@ router.get('/', (req, res) => {
   const files = fs.readdirSync(DATA_DIR).filter(f => f.endsWith('.json'));
   const articles = files.map(file => {
     const data = JSON.parse(fs.readFileSync(path.join(DATA_DIR, file), 'utf-8'));
+    const partyMembers = resolveBoardDetailPartyMembers(data.party).slice().reverse();
     return {
       id: file.replace('.json', ''),
-      mode: data.mode,
+      title: typeof data.postTitle === 'string' && data.postTitle.trim().length > 0
+        ? data.postTitle.trim()
+        : (typeof data.mode === 'string' && data.mode.trim().length > 0 ? data.mode.trim() : '無題'),
+      authorName: resolveArticleAuthorName(data) || '未設定',
       damage: data.damage,
-      battleTime: data.battleTime,
-      battleDate: data.battleDate
+      partyMembers: partyMembers.slice(0, 5).map((member) => ({
+        name: member.name,
+        imagePath: member.imagePath
+      }))
     };
   });
   res.render('board', {

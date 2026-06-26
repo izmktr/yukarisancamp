@@ -9,15 +9,43 @@
     </div>
     <div class="board-list">
         <% if (typeof articles !== 'undefined' && articles.length > 0) { %>
-            <ul>
-                <% articles.forEach(function(article) { %>
-                    <li>
-                        <a href="/board/<%= article.id %>"><%= article.mode %></a>
-                        <span class="author"><%= article.damage %></span>
-                        <span class="date"><%= article.battleDate %> <%= article.battleTime %></span>
-                    </li>
-                <% }); %>
-            </ul>
+            <div class="board-list-table-wrap">
+                <table class="board-list-table">
+                    <thead>
+                        <tr>
+                            <th>タイトル</th>
+                            <th>投稿者</th>
+                            <th>ダメージ</th>
+                            <th>編成</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% articles.forEach(function(article) { %>
+                            <tr>
+                                <td class="board-list-title-cell">
+                                    <a href="/board/<%= article.id %>"><%= article.title %></a>
+                                </td>
+                                <td><%= article.authorName %></td>
+                                <td class="board-list-damage-cell"><%= article.damage || '-' %></td>
+                                <td>
+                                    <div class="board-list-party-icons" aria-label="編成">
+                                        <% for (let i = 0; i < 5; i += 1) { %>
+                                            <% const member = article.partyMembers && article.partyMembers[i]; %>
+                                            <% if (member && member.imagePath) { %>
+                                                <img src="<%= member.imagePath %>" alt="<%= member.name %>" title="<%= member.name %>" class="board-list-party-icon" />
+                                            <% } else if (member) { %>
+                                                <div class="board-list-party-icon board-list-party-icon-missing"><%= member.name %></div>
+                                            <% } else { %>
+                                                <div class="board-list-party-icon board-list-party-icon-empty"></div>
+                                            <% } %>
+                                        <% } %>
+                                    </div>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
         <% } else { %>
             <div class="no-articles">記事がありません。</div>
         <% } %>

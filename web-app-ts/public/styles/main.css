@@ -323,6 +323,105 @@ body {
     color: #b42318;
 }
 
+.board-list-table-wrap {
+    overflow-x: auto;
+}
+
+.board-list-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0.75rem;
+    background: #ffffff;
+    border: 1px solid #e3e8f4;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.board-list-table th,
+.board-list-table td {
+    padding: 0.7rem 0.8rem;
+    border-bottom: 1px solid #edf1f8;
+    vertical-align: middle;
+    text-align: left;
+}
+
+.board-list-table th {
+    background: #f7f9ff;
+    color: #3a4568;
+    font-size: 0.92rem;
+    font-weight: 700;
+}
+
+.board-list-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.board-list-title-cell a {
+    color: #2a3a6c;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.board-list-title-cell a:hover {
+    text-decoration: underline;
+}
+
+.board-list-damage-cell {
+    white-space: nowrap;
+}
+
+.board-list-party-icons {
+    display: grid;
+    grid-template-columns: repeat(5, 40px);
+    gap: 0.35rem;
+    align-items: center;
+}
+
+.board-list-party-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    object-fit: cover;
+    background: #f2f5ff;
+    border: 1px solid #d9e0f0;
+}
+
+.board-list-party-icon-missing,
+.board-list-party-icon-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.58rem;
+    font-weight: 700;
+    color: #7c86a5;
+    text-align: center;
+    line-height: 1.05;
+    padding: 0.12rem;
+}
+
+.board-list-party-icon-empty {
+    border-style: dashed;
+    background: #fafbff;
+}
+
+@media (max-width: 768px) {
+    .board-list-table th,
+    .board-list-table td {
+        padding: 0.55rem;
+        font-size: 0.86rem;
+    }
+
+    .board-list-party-icons {
+        grid-template-columns: repeat(5, 34px);
+        gap: 0.25rem;
+    }
+
+    .board-list-party-icon {
+        width: 34px;
+        height: 34px;
+    }
+}
+
 .board-party-grid {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
