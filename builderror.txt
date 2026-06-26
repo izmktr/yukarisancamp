@@ -1,0 +1,113 @@
+src/components/board/BoardDetail.tsx:1:44 - error TS2307: Cannot find module 'react' or its corresponding type declarations.
+
+1 import React, { useEffect, useState } from 'react';
+                                             ~~~~~~~
+
+src/components/board/BoardDetail.tsx:13:50 - error TS7031: Binding element 'id' implicitly has an 'any' type.
+
+13 const BoardDetail: React.FC<{ id: string }> = ({ id }) => {
+                                                    ~~
+
+src/components/board/BoardDetail.tsx:22:24 - error TS7026: JSX element implicitly has type 'any' because no interface 'JSX.IntrinsicElements' exists.
+
+22   if (!article) return <div>読み込み中...</div>;
+                          ~~~~~
+
+src/components/board/BoardDetail.tsx:22:24 - error TS2875: This JSX tag requires the module path 'react/jsx-runtime' to exist, but none could be found. Make sure you have types for the appropriate package installed.
+
+22   if (!article) return <div>読み込み中...</div>;
+                          ~~~~~~~~~~~~~~~~~~~
+
+src/components/board/BoardDetail.tsx:22:37 - error TS7026: JSX element implicitly has type 'any' because no interface 'JSX.IntrinsicElements' exists.
+
+22   if (!article) return <div>読み込み中...</div>;
+                                       ~~~~~~
+
+src/components/board/BoardDetail.tsx:25:5 - error TS7026: JSX element implicitly has type 'any' because no interface 'JSX.IntrinsicElements' exists.
+
+25     <div>
+       ~~~~~
+
+src/components/board/BoardDetail.tsx:26:7 - error TS7026: JSX element implicitly has type 'any' because no interface 'JSX.IntrinsicElements' exists.
+
+26       <h2>記事詳細</h2>
+         ~~~~
+
+src/components/board/BoardDetail.tsx:26:15 - error TS7026: JSX element implicitly has type 'any' because no interface 'JSX.IntrinsicElements' exists.
+
+26       <h2>記事詳細</h2>
+                 ~~~~~
+
+src/components/board/BoardDetail.tsx:27:7 - error TS7026: JSX element implicitly has type 'any' because no interface 'JSX.IntrinsicElements' exists.
+
+27       <div>モード: {article.mode}</div>
+         ~~~~~
+
+src/components/board/BoardDetail.tsx:27:31 - error TS7026: JSX element implicitly has type 'any' because no interface 'JSX.IntrinsicElements' exists.
+
+27       <div>モード: {article.mode}</div>
+                                 ~~~~~~
+
+src/components/board/BoardDetail.tsx:28:7 - error TS7026: JSX element implicitly has type 'any' because no interface 'JSX.IntrinsicElements' exists.
+
+28       <div>ダメージ: {article.damage}</div>
+         ~~~~~
+
+src/components/board/BoardDetail.tsx:28:34 - error TS7026: JSX element implicitly has type 'any' because no interface 'JSX.IntrinsicElements' exists.
+
+28       <div>ダメージ: {article.damage}</div>
+                                    ~~~~~~
+
+src/components/board/BoardDetail.tsx:29:7 - error TS7026: JSX element implicitly has type 'any' because no interface 'JSX.IntrinsicElements' exists.
+
+29       <div>バトルタイム: {article.battleTime}</div>
+         ~~~~~
+
+src/components/board/BoardDetail.tsx:29:40 - error TS7026: JSX element implicitly has type 'any' because no interface 'JSX.IntrinsicElements' exists.
+
+29       <div>バトルタイム: {article.battleTime}</div>
+                                          ~~~~~~
+
+src/components/board/BoardDetail.tsx:30:7 - error TS7026: JSX element implicitly has type 'any' because no interface 'JSX.IntrinsicElements' exists.
+
+30       <div>投稿日付: {article.battleDate}</div>
+         ~~~~~
+
+src/components/board/BoardDetail.tsx:30:38 - error TS7026: JSX element implicitly has type 'any' because no interface 'JSX.IntrinsicElements' exists.
+
+30       <div>投稿日付: {article.battleDate}</div>
+                                        ~~~~~~
+
+src/components/board/BoardDetail.tsx:31:7 - error TS7026: JSX element implicitly has type 'any' because no interface 'JSX.IntrinsicElements' exists.
+
+31       <h3>パーティ編成</h3>
+         ~~~~
+
+src/components/board/BoardDetail.tsx:31:17 - error TS7026: JSX element implicitly has type 'any' because no interface 'JSX.IntrinsicElements' exists.
+
+31       <h3>パーティ編成</h3>
+                   ~~~~~
+
+src/components/board/BoardDetail.tsx:32:7 - error TS7026: JSX element implicitly has type 'any' because no interface 'JSX.IntrinsicElements' exists.
+
+32       <ul>
+         ~~~~
+
+src/components/board/BoardDetail.tsx:33:29 - error TS7006: Parameter 'p' implicitly has an 'any' type.
+
+33         {article.party.map((p, i) => (
+                               ~
+
+src/components/board/BoardDetail.tsx:33:32 - error TS7006: Parameter 'i' implicitly has an 'any' type.
+
+33         {article.party.map((p, i) => (
+                                  ~
+
+src/components/board/BoardDetail.tsx:34:11 - error TS7026: JSX element implicitly has type 'any' because no interface 'JSX.IntrinsicElements' exists.
+
+34           <li key={i}>{p.name} ★{p.star} Lv{p.level} RANK{p.rank}</li>
+             ~~~~~~~~~~~~
+
+src/components/board/BoardDetail.tsx:34:66 - error TS7026: JSX element implicitly has type 'any' because no interface 'JSX.IntrinsicElements' exists.
+
+34           <li key={i}>{p.name} ★{p.star} Lv{p.level} RANK{p.rank}</li>
