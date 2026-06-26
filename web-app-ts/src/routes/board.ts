@@ -14,6 +14,7 @@ const DATA_DIR = path.join(__dirname, '../../data/board');
 const CHARA_INDEX_PATH = path.join(__dirname, '../../chara/charaindex.json');
 
 type ParsedArticle = {
+  bossname: string;
   mode: string;
   damage: string;
   battleTime: string;
@@ -331,13 +332,18 @@ function resolveBoardDetailUbRows(article: any): BoardDetailUbRow[] {
 function parseTimelog(text: string): ParsedArticle {
   const lines = text.split(/\r?\n/);
   const result: ParsedArticle = {
-    mode: '', damage: '', battleTime: '', battleDate: '', party: [], ubTimes: []
+    bossname: '', mode: '', damage: '', battleTime: '', battleDate: '', party: [], ubTimes: []
   };
   let section = '';
   for (const rawLine of lines) {
     const line = rawLine.trim();
     if (!line) continue;
-    if (line.startsWith('クランモード')) result.mode = line;
+    if (line.startsWith('クランモード')) {
+      result.mode = line;
+      const modeBody = line.replace(/^クランモード\s*/, '').trim();
+      const bossMatch = modeBody.match(/^(?:\d+段階目\s+)?(.+)$/);
+      result.bossname = bossMatch ? bossMatch[1].trim() : modeBody;
+    }
     else if (line.match(/\d+ダメージ/)) result.damage = line;
     else if (line.startsWith('バトル時間')) result.battleTime = line.replace('バトル時間', '').trim();
     else if (line.startsWith('バトル日時')) result.battleDate = line.replace('バトル日時', '').trim();
@@ -413,12 +419,38 @@ router.get('/:id', (req, res) => {
 // 投稿処理（timelogテキスト→編集画面）
 router.post('/edit', (req, res) => {
   const auth = getAuthViewData(req);
-  const rawText = req.body.timelog;
+  const timelineInfoRaw = req.body.timelineInfo;
+  if (typeof timelineInfoRaw === 'string' && timelineInfoRaw.trim().length > 0) {
+    try {
+      const parsedTimelineInfo = JSON.parse(timelineInfoRaw);
+      if (!isTimelineInfo(parsedTimelineInfo)) {
+        return res.status(400).send('timelineInfo の形式が不正です');
+      }
+
+      req.session.editingArticle = parsedTimelineInfo;
+      const partyMembers = resolveBoardDetailPartyMembers(parsedTimelineInfo.party);
+      const ubRows = resolveBoardDetailUbRows(parsedTimelineInfo);
+      return res.render('board-edit', {
+        title: 'ゆかりさん△',
+        currentPage: 'board',
+        ...auth,
+        article: parsedTimelineInfo,
+        partyMembers,
+        ubRows,
+        timelog: req.body.timelog || '',
+        isNew: true
+      });
+    } catch {
+      return res.status(400).send('timelineInfo の読み込みに失敗しました');
+    }
+  }
+
+  const rawText = typeof req.body.timelog === 'string' ? req.body.timelog : '';
   const parsed = parseTimelog(rawText);
   req.session.editingArticle = parsed;
   const partyMembers = resolveBoardDetailPartyMembers(parsed.party);
   const ubRows = resolveBoardDetailUbRows(parsed);
-  res.render('board-edit', {
+  return res.render('board-edit', {
     title: 'ゆかりさん△',
     currentPage: 'board',
     ...auth,
@@ -477,6 +509,7 @@ router.post('/save', (req, res) => {
   }
 
   const article: ParsedArticle = {
+    bossname: req.body.bossname || '',
     mode: req.body.mode || '',
     damage: req.body.damage || '',
     battleTime: req.body.battleTime || '',
@@ -492,6 +525,7 @@ router.post('/save', (req, res) => {
   }
   if ((!article.mode && !article.damage) && typeof req.body.timelog === 'string') {
     const parsed = parseTimelog(req.body.timelog);
+    article.bossname = parsed.bossname;
     article.mode = parsed.mode;
     article.damage = parsed.damage;
     article.battleTime = parsed.battleTime;

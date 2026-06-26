@@ -1,6 +1,15 @@
 <div class="page-content">
+    <% if (isLoggedIn) { %>
     <h2>新規投稿</h2>
     <form id="board-post-form" action="/board/edit" method="post">
+        <div class="post-info-row post-info-row-static post-info-row-inline">
+            <div class="post-info-inline-group">
+                <div class="post-info-pill" role="group" aria-label="投稿者名">
+                    <span class="post-info-pill-key">投稿者名</span>
+                    <span class="post-info-pill-value"><%= userName || '' %></span>
+                </div>
+            </div>
+        </div>
         <div class="form-group">
             <label for="timelog">投稿内容</label>
             <textarea id="timelog" name="timelog" rows="15" class="form-control" style="width: 100%; max-width: 1200px;" placeholder="バトルTLのテキストを貼り付けてください"></textarea>
@@ -9,4 +18,7 @@
         <div id="board-post-error" style="display:none; color:#c00; margin: 8px 0;"></div>
         <button type="submit" class="btn btn-primary">投稿</button>
     </form>
+    <% } else { %>
+    Googleでログイン後に利用可能になります
+    <% } %>
 </div>

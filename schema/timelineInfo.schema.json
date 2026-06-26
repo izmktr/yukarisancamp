@@ -17,10 +17,6 @@
       "description": "The name of the boss fought in the battle.",
       "type": "string"
     },
-    "mode": {
-      "description": "Battle mode and boss name.",
-      "type": "string"
-    },
     "damage": {
       "description": "Total battle damage.",
       "type": "integer"
@@ -53,6 +49,23 @@
       "description": "Post visibility scope.",
       "type": "string",
       "enum": ["all", "clan", "self"]
+    },
+    "mode": {
+      "description": "Battle mode.",
+      "type": "string",
+      "enum": ["full", "agro", "rank2", "rank3"]
+    },
+    "authorid": {
+      "description": "Author of the timeline entry.",
+      "type": "string"
+    },
+    "authorname": {
+      "description": "Author's name.",
+      "type": "string"
+    },
+    "authorclanid": {
+      "description": "Author's clan ID.",
+      "type": "string"
     },
     "party": {
       "description": "Party members used in the battle.",

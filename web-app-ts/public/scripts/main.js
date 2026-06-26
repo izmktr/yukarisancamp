@@ -275,7 +275,21 @@ function parseTimelineUbEvent(line) {
     };
 }
 
-function convertTimelogToTimelineInfo(rawText, yearmonth, bossNames) {
+function resolveTimelineMode(modeLine, battleTime) {
+    const stageMatch = modeLine.match(/(\d+)段階目/);
+    const stageNumber = stageMatch ? Number(stageMatch[1]) : NaN;
+
+    if (stageNumber === 2) {
+        return 'rank2';
+    }
+    if (stageNumber === 3) {
+        return 'rank3';
+    }
+
+    return 'full';
+}
+
+function convertTimelogToTimelineInfo(rawText, yearmonth, bossNames, authorInfo) {
     const lines = rawText.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0);
     if (lines.length < 4) {
         throw new Error('投稿内容が不足しています。');
@@ -339,11 +353,17 @@ function convertTimelogToTimelineInfo(rawText, yearmonth, bossNames) {
         throw new Error('ユニオンバースト発動時間が見つかりませんでした。');
     }
 
+    const normalizedAuthorInfo = authorInfo || {};
+    const convertedMode = resolveTimelineMode(mode, battleTime);
+
     return {
         uniqueId: getCurrentTimestampId(),
         yearmonth,
         bossname: matchedBossname,
-        mode,
+        mode: convertedMode,
+        authorid: String(normalizedAuthorInfo.authorid || ''),
+        authorname: String(normalizedAuthorInfo.authorname || ''),
+        authorclanid: String(normalizedAuthorInfo.authorclanid || ''),
         damage: Number(damageMatch[1]),
         battleTime,
         battleDate,
@@ -388,8 +408,20 @@ function initializeBoardPostPage() {
                 }
             }
 
+            let profile = currentUserProfile;
+            if (!profile && currentAuthUser) {
+                profile = await ensureUserProfile(currentAuthUser);
+                currentUserProfile = profile;
+            }
+
+            const authorInfo = {
+                authorid: profile && profile.googleUserId ? String(profile.googleUserId) : '',
+                authorname: profile && profile.displayName ? String(profile.displayName) : '',
+                authorclanid: profile && profile.discordServer ? String(profile.discordServer) : ''
+            };
+
             const { yearmonth, bossNames } = await loadCurrentClanBattleBossNamesForPosting();
-            const timelineInfo = convertTimelogToTimelineInfo(rawText, yearmonth, bossNames);
+            const timelineInfo = convertTimelogToTimelineInfo(rawText, yearmonth, bossNames, authorInfo);
             timelineInfoInput.value = JSON.stringify(timelineInfo);
             form.submit();
         } catch (error) {
