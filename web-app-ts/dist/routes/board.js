@@ -38,8 +38,44 @@ function isTimelineInfo(value) {
         && Number.isInteger(article.damage)
         && /^\d{2}:\d{2}$/.test(article.battleTime)
         && /^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}$/.test(article.battleDate)
+        && (typeof article.authorid === 'undefined' || typeof article.authorid === 'string')
+        && (typeof article.authorname === 'undefined' || typeof article.authorname === 'string')
+        && (typeof article.authorName === 'undefined' || typeof article.authorName === 'string')
         && Array.isArray(article.party) && article.party.every(isTimelinePartyMember)
         && Array.isArray(article.ubTimeline) && article.ubTimeline.every(isTimelineUbEvent);
+}
+function resolveArticleAuthorId(article) {
+    if (!article || typeof article !== 'object') {
+        return '';
+    }
+    const candidateValues = [article.authorid, article.authorId, article.googleUserId];
+    const resolved = candidateValues.find((value) => typeof value === 'string' && value.trim().length > 0);
+    return typeof resolved === 'string' ? resolved.trim() : '';
+}
+function resolveArticleAuthorName(article) {
+    if (!article || typeof article !== 'object') {
+        return '';
+    }
+    const candidateValues = [article.authorname, article.authorName, article.displayName, article.userName];
+    const resolved = candidateValues.find((value) => typeof value === 'string' && value.trim().length > 0);
+    return typeof resolved === 'string' ? resolved.trim() : '';
+}
+function canEditArticle(article, userSession) {
+    const currentGoogleUserId = typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '';
+    const authorId = resolveArticleAuthorId(article);
+    return currentGoogleUserId.length > 0 && authorId.length > 0 && currentGoogleUserId === authorId;
+}
+function ensureArticleEditableByUser(article, req, res) {
+    const userSession = req.session.user;
+    if (!userSession) {
+        res.status(403).send('Googleでログイン後に編集可能になります');
+        return false;
+    }
+    if (!canEditArticle(article, userSession)) {
+        res.status(403).send('投稿者のみ編集可能です');
+        return false;
+    }
+    return true;
 }
 function loadCharaIndex() {
     try {
@@ -181,6 +217,7 @@ function resolveBoardDetailUbRows(article) {
             const autoActive = typeof event.autoActive === 'boolean' ? event.autoActive : false;
             const comment = typeof event.comment === 'string' ? event.comment : '';
             const isAddedRow = typeof event.isAddedRow === 'boolean' ? event.isAddedRow : false;
+            const timing = typeof event.timing === 'boolean' ? event.timing : false;
             rows.push({
                 time,
                 ubText,
@@ -188,7 +225,8 @@ function resolveBoardDetailUbRows(article) {
                 activeIcons,
                 autoActive,
                 comment,
-                isAddedRow
+                isAddedRow,
+                timing
             });
         }
         return rows;
@@ -213,7 +251,8 @@ function resolveBoardDetailUbRows(article) {
                 activeIcons: [],
                 autoActive: false,
                 comment: '',
-                isAddedRow: false
+                isAddedRow: false,
+                timing: false
             });
         }
     }
@@ -222,15 +261,19 @@ function resolveBoardDetailUbRows(article) {
 function parseTimelog(text) {
     const lines = text.split(/\r?\n/);
     const result = {
-        mode: '', damage: '', battleTime: '', battleDate: '', party: [], ubTimes: []
+        bossname: '', mode: '', damage: '', battleTime: '', battleDate: '', party: [], ubTimes: []
     };
     let section = '';
     for (const rawLine of lines) {
         const line = rawLine.trim();
         if (!line)
             continue;
-        if (line.startsWith('クランモード'))
+        if (line.startsWith('クランモード')) {
             result.mode = line;
+            const modeBody = line.replace(/^クランモード\s*/, '').trim();
+            const bossMatch = modeBody.match(/^(?:\d+段階目\s+)?(.+)$/);
+            result.bossname = bossMatch ? bossMatch[1].trim() : modeBody;
+        }
         else if (line.match(/\d+ダメージ/))
             result.damage = line;
         else if (line.startsWith('バトル時間'))
@@ -297,6 +340,9 @@ router.get('/:id', (req, res) => {
     const data = JSON.parse(fs_1.default.readFileSync(file, 'utf-8'));
     const partyMembers = resolveBoardDetailPartyMembers(data.party);
     const ubRows = resolveBoardDetailUbRows(data);
+    const currentUserSession = req.session.user;
+    const canEdit = canEditArticle(data, currentUserSession);
+    const showOwnerOnlyMessage = !!currentUserSession && !canEdit;
     res.render('board-detail', {
         title: 'ゆかりさん△',
         currentPage: 'board',
@@ -304,18 +350,45 @@ router.get('/:id', (req, res) => {
         article: data,
         partyMembers,
         ubRows,
-        id: req.params.id
+        id: req.params.id,
+        canEdit,
+        showOwnerOnlyMessage
     });
 });
 // 投稿処理（timelogテキスト→編集画面）
 router.post('/edit', (req, res) => {
     const auth = getAuthViewData(req);
-    const rawText = req.body.timelog;
+    const timelineInfoRaw = req.body.timelineInfo;
+    if (typeof timelineInfoRaw === 'string' && timelineInfoRaw.trim().length > 0) {
+        try {
+            const parsedTimelineInfo = JSON.parse(timelineInfoRaw);
+            if (!isTimelineInfo(parsedTimelineInfo)) {
+                return res.status(400).send('timelineInfo の形式が不正です');
+            }
+            req.session.editingArticle = parsedTimelineInfo;
+            const partyMembers = resolveBoardDetailPartyMembers(parsedTimelineInfo.party);
+            const ubRows = resolveBoardDetailUbRows(parsedTimelineInfo);
+            return res.render('board-edit', {
+                title: 'ゆかりさん△',
+                currentPage: 'board',
+                ...auth,
+                article: parsedTimelineInfo,
+                partyMembers,
+                ubRows,
+                timelog: req.body.timelog || '',
+                isNew: true
+            });
+        }
+        catch {
+            return res.status(400).send('timelineInfo の読み込みに失敗しました');
+        }
+    }
+    const rawText = typeof req.body.timelog === 'string' ? req.body.timelog : '';
     const parsed = parseTimelog(rawText);
     req.session.editingArticle = parsed;
     const partyMembers = resolveBoardDetailPartyMembers(parsed.party);
     const ubRows = resolveBoardDetailUbRows(parsed);
-    res.render('board-edit', {
+    return res.render('board-edit', {
         title: 'ゆかりさん△',
         currentPage: 'board',
         ...auth,
@@ -333,6 +406,9 @@ router.get('/:id/edit', (req, res) => {
     if (!fs_1.default.existsSync(file))
         return res.status(404).send('記事がありません');
     const data = JSON.parse(fs_1.default.readFileSync(file, 'utf-8'));
+    if (!ensureArticleEditableByUser(data, req, res)) {
+        return;
+    }
     const partyMembers = resolveBoardDetailPartyMembers(data.party);
     const ubRows = resolveBoardDetailUbRows(data);
     res.render('board-edit', {
@@ -350,6 +426,12 @@ router.get('/:id/edit', (req, res) => {
 router.post('/save', (req, res) => {
     const nowId = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
     const timelineInfoRaw = req.body.timelineInfo;
+    const userSession = req.session.user;
+    if (!userSession) {
+        return res.status(403).send('Googleでログイン後に編集可能になります');
+    }
+    const sessionGoogleUserId = typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '';
+    const sessionAuthorName = typeof userSession?.displayName === 'string' ? userSession.displayName : '';
     if (typeof timelineInfoRaw === 'string' && timelineInfoRaw.trim().length > 0) {
         try {
             const parsedTimelineInfo = JSON.parse(timelineInfoRaw);
@@ -357,11 +439,24 @@ router.post('/save', (req, res) => {
                 return res.status(400).send('timelineInfo の形式が不正です');
             }
             const id = parsedTimelineInfo.uniqueId || req.body.id || nowId;
+            const file = path_1.default.join(DATA_DIR, id + '.json');
+            if (fs_1.default.existsSync(file)) {
+                const existingArticle = JSON.parse(fs_1.default.readFileSync(file, 'utf-8'));
+                if (!canEditArticle(existingArticle, userSession)) {
+                    return res.status(403).send('投稿者のみ編集可能です');
+                }
+            }
             const timelineInfo = {
                 ...parsedTimelineInfo,
+                authorid: typeof parsedTimelineInfo.authorid === 'string' && parsedTimelineInfo.authorid.trim().length > 0
+                    ? parsedTimelineInfo.authorid
+                    : sessionGoogleUserId,
+                authorname: resolveArticleAuthorName(parsedTimelineInfo) || sessionAuthorName,
+                authorName: typeof parsedTimelineInfo.authorName === 'string' && parsedTimelineInfo.authorName.trim().length > 0
+                    ? parsedTimelineInfo.authorName
+                    : sessionAuthorName,
                 uniqueId: id
             };
-            const file = path_1.default.join(DATA_DIR, id + '.json');
             fs_1.default.writeFileSync(file, JSON.stringify(timelineInfo, null, 2), 'utf-8');
             return res.redirect('/board/' + id);
         }
@@ -370,10 +465,14 @@ router.post('/save', (req, res) => {
         }
     }
     const article = {
+        bossname: req.body.bossname || '',
         mode: req.body.mode || '',
         damage: req.body.damage || '',
         battleTime: req.body.battleTime || '',
         battleDate: req.body.battleDate || '',
+        authorid: sessionGoogleUserId,
+        authorname: sessionAuthorName,
+        authorName: sessionAuthorName,
         party: [],
         ubTimes: []
     };
@@ -385,6 +484,7 @@ router.post('/save', (req, res) => {
     }
     if ((!article.mode && !article.damage) && typeof req.body.timelog === 'string') {
         const parsed = parseTimelog(req.body.timelog);
+        article.bossname = parsed.bossname;
         article.mode = parsed.mode;
         article.damage = parsed.damage;
         article.battleTime = parsed.battleTime;
@@ -394,6 +494,12 @@ router.post('/save', (req, res) => {
     }
     const id = req.body.id || nowId;
     const file = path_1.default.join(DATA_DIR, id + '.json');
+    if (fs_1.default.existsSync(file)) {
+        const existingArticle = JSON.parse(fs_1.default.readFileSync(file, 'utf-8'));
+        if (!canEditArticle(existingArticle, userSession)) {
+            return res.status(403).send('投稿者のみ編集可能です');
+        }
+    }
     fs_1.default.writeFileSync(file, JSON.stringify(article, null, 2), 'utf-8');
     res.redirect('/board/' + id);
 });

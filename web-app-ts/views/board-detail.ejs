@@ -188,7 +188,11 @@
         <% } %>
 
         <p>
+            <% if (canEdit) { %>
             <a href="/board/<%= id %>/edit" class="btn btn-primary">編集</a>
+            <% } else if (showOwnerOnlyMessage) { %>
+            <span>投稿者のみ編集可能です</span>
+            <% } %>
             <a href="/board" class="btn">一覧へ戻る</a>
         </p>
     </div>

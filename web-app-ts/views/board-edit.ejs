@@ -1,4 +1,5 @@
 <div class="page-content">
+    <% if (isLoggedIn) { %>
     <textarea id="board-original-article-json" hidden><%- JSON.stringify(article || {}) %></textarea>
     <input id="board-current-id" type="hidden" value="<%= typeof id !== 'undefined' ? id : '' %>" />
     <div class="board-edit-toolbar">
@@ -6,11 +7,11 @@
     </div>
     <h2>記事編集</h2>
     <div class="board-detail">
-        <p><strong>ボス名:</strong> <%= article.bossname || '' %></p>
-        <p><strong>ダメージ:</strong> <%= article.damage || '' %></p>
-        <p><strong>バトル時間:</strong> <%= article.battleTime || '' %></p>
-
         <% 
+          const authorValue = article.authorname || article.authorName || article.displayName || article.userName || (isNew ? (userName || '') : '');
+          const bossValue = article.bossname || '';
+          const damageValue = article.damage || '';
+          const battleTimeValue = article.battleTime || '';
           const damageNum = parseInt(article.damage || 0);
           const afterRemoveLast4 = Math.floor(damageNum / 10000);
           const oku = Math.floor(afterRemoveLast4 / 10000);
@@ -22,6 +23,27 @@
         %>
         <section class="post-info-editor" aria-label="投稿情報">
             <h3>投稿情報</h3>
+
+            <div class="post-info-row post-info-row-static post-info-row-inline">
+                <div class="post-info-inline-group">
+                    <div class="post-info-pill" role="group" aria-label="投稿者名">
+                        <span class="post-info-pill-key">投稿者名</span>
+                        <span class="post-info-pill-value"><%= authorValue %></span>
+                    </div>
+                    <div class="post-info-pill" role="group" aria-label="ボス名">
+                        <span class="post-info-pill-key">ボス名</span>
+                        <span class="post-info-pill-value"><%= bossValue %></span>
+                    </div>
+                    <div class="post-info-pill" role="group" aria-label="ダメージ">
+                        <span class="post-info-pill-key">ダメージ</span>
+                        <span class="post-info-pill-value"><%= damageValue %></span>
+                    </div>
+                    <div class="post-info-pill" role="group" aria-label="バトル時間">
+                        <span class="post-info-pill-key">バトル時間</span>
+                        <span class="post-info-pill-value"><%= battleTimeValue %></span>
+                    </div>
+                </div>
+            </div>
 
             <div class="post-info-row">
                 <label for="post-title-input">タイトル</label>
@@ -56,6 +78,19 @@
                         <button type="button" class="post-toggle-btn" data-value="all">全体</button>
                         <button type="button" class="post-toggle-btn" data-value="clan">クラン</button>
                         <button type="button" class="post-toggle-btn is-active" data-value="self">自分</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="post-info-row">
+                <label>種別</label>
+                <div class="post-info-toggle-wrap">
+                    <input type="hidden" id="post-mode-value" value="full" />
+                    <div class="post-toggle-group" data-group="mode" role="group" aria-label="種別">
+                        <button type="button" class="post-toggle-btn is-active" data-value="full">フル</button>
+                        <button type="button" class="post-toggle-btn" data-value="agro">持ち越し</button>
+                        <button type="button" class="post-toggle-btn" data-value="rank2">2段階目</button>
+                        <button type="button" class="post-toggle-btn" data-value="rank3">3段階目</button>
                     </div>
                 </div>
             </div>
@@ -198,8 +233,16 @@
             <a href="/board" class="btn">一覧へ戻る</a>
         </p>
     </div>
+    <% } else { %>
+    <h2>記事編集</h2>
+    <p>Googleでログイン後に編集可能になります</p>
+    <p>
+        <a href="/board" class="btn">一覧へ戻る</a>
+    </p>
+    <% } %>
 </div>
 
+<% if (isLoggedIn) { %>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         const originalArticleRaw = document.getElementById('board-original-article-json');
@@ -314,6 +357,7 @@
             const commentInput = document.getElementById('post-comment-input');
             const difficultyInput = document.getElementById('post-difficulty-value');
             const visibilityInput = document.getElementById('post-visibility-value');
+            const modeInput = document.getElementById('post-mode-value');
 
             if (titleInput instanceof HTMLInputElement) {
                 base.postTitle = titleInput.value;
@@ -327,6 +371,9 @@
             }
             if (visibilityInput instanceof HTMLInputElement) {
                 base.visibility = visibilityInput.value || 'self';
+            }
+            if (modeInput instanceof HTMLInputElement) {
+                base.mode = modeInput.value || 'full';
             }
 
             base.ubTimeline = buildUbTimelinePayload();
@@ -370,6 +417,9 @@
 
             const visibilityValue = typeof originalArticle.visibility === 'string' ? originalArticle.visibility : 'self';
             setActiveToggle('visibility', visibilityValue);
+
+            const modeValue = typeof originalArticle.mode === 'string' ? originalArticle.mode : 'full';
+            setActiveToggle('mode', modeValue);
         }
 
         function setupPostInfoToggles() {
@@ -1124,3 +1174,4 @@
         applyRowFilter();
     });
 </script>
+<% } %>
