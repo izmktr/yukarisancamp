@@ -848,21 +848,27 @@
                 bindTimeInputValidation(row);
 
                 const commentText = getDecodedRowComment(row);
-                if (commentText && !getCommentRowFor(row)) {
-                    const commentRow = createCommentRow(row);
+                let commentRow = getCommentRowFor(row);
+                if (commentText && !commentRow) {
+                    commentRow = createCommentRow(row);
                     if (commentRow) {
                         row.insertAdjacentElement('afterend', commentRow);
                         row.classList.add('has-comment-row');
                         setCommentButtonState(row, true);
-                        const commentInput = commentRow.querySelector('.ub-comment-input');
-                        if (commentInput instanceof HTMLTextAreaElement) {
-                            commentInput.value = commentText;
-                            bindCommentInputAutoResize(commentInput);
-
-                                        setRowTiming(row, row.dataset.timing === 'true');
-                        }
                     }
                 }
+
+                if (commentRow) {
+                    const commentInput = commentRow.querySelector('.ub-comment-input');
+                    if (commentInput instanceof HTMLTextAreaElement) {
+                        if (commentText) {
+                            commentInput.value = commentText;
+                        }
+                        bindCommentInputAutoResize(commentInput);
+                    }
+                }
+
+                setRowTiming(row, row.dataset.timing === 'true');
             });
         }
 
