@@ -1325,17 +1325,31 @@ tr[data-timing="true"] .ub-timing-hoshi {
     transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
-.ub-auto-btn-inactive {
-    background: #d0d0d0;
-    border-color: #a0a0a0;
-    color: #666666;
+.ub-auto-btn-set {
+    background: #7de3f9;
+    border-color: #0a5a78;
+    color: #0a5a78;
 }
 
-.ub-auto-btn-active {
-    background: #7de3f9;
+.ub-auto-btn-set.ub-auto-btn-active {
     border-color: #e15252;
     box-shadow: 0 0 0 4px #e15252;
-    color: #0a5a78;
+}
+
+.ub-auto-btn-unset {
+    background: #f3f3f3;
+}
+
+.ub-auto-btn-unset.ub-auto-btn-inactive {
+    border-color: #d7d7d7;
+    color: #7a7a7a;
+}
+
+.ub-auto-btn-unset.ub-auto-btn-active {
+    background: #f7f7f7;
+    border-color: #e15252;
+    box-shadow: 0 0 0 4px #e15252;
+    color: #8f2f2f;
 }
 
 .ub-auto-label {

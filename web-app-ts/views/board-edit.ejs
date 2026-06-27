@@ -1113,7 +1113,12 @@
                     const isAutoActive = isIconActive(autoBox);
                     if (isAutoActive) hasActiveIcon = true;
                     const shouldAutoSet = computeSet(isAutoActive, previousSetByColumn[PARTY_COLUMN_COUNT], isBattleStart);
+                    const autoBtn = autoBox.querySelector('.ub-auto-btn');
                     const autoLabel = autoBox.querySelector('.ub-auto-label');
+                    if (autoBtn) {
+                        autoBtn.classList.toggle('ub-auto-btn-set', shouldAutoSet);
+                        autoBtn.classList.toggle('ub-auto-btn-unset', !shouldAutoSet);
+                    }
                     if (autoLabel) {
                         autoLabel.textContent = shouldAutoSet ? 'ON' : 'OFF';
                         autoLabel.classList.toggle('ub-auto-label-on', shouldAutoSet);
