@@ -131,7 +131,7 @@
                             <% const rowActiveIcons = Array.isArray(row.activeIcons) ? row.activeIcons : []; %>
                             <% const hasServerActive = rowActiveIcons.length > 0 || row.autoActive; %>
                             <% const isPartyCharRow = partySlots.some(function(s) { return s && s.name === row.ubText; }); %>
-                            <tr class="<%= hasServerActive ? 'ub-row-has-active' : '' %> <%= row.comment ? 'has-comment-row' : '' %>" data-is-battle-start="<%= row.ubText === 'バトル開始' ? 'true' : 'false' %>" data-is-battle-end="<%= row.ubText === 'バトル終了' ? 'true' : 'false' %>" data-is-added-row="<%= row.isAddedRow ? 'true' : 'false' %>" data-active-icons="<%= JSON.stringify(rowActiveIcons) %>" data-auto-active="<%= row.autoActive ? 'true' : 'false' %>" data-comment="<%= encodeURIComponent(row.comment || '') %>" data-ub-is-party-char="<%= isPartyCharRow ? 'true' : 'false' %>" data-timing="<%= row.timing ? 'true' : 'false' %>">
+                            <tr class="<%= hasServerActive ? 'ub-row-has-active' : '' %> <%= row.comment ? 'has-comment-row' : '' %>" data-is-battle-start="<%= row.ubText === 'バトル開始' ? 'true' : 'false' %>" data-is-battle-end="<%= row.ubText === 'バトル終了' ? 'true' : 'false' %>" data-is-added-row="<%= row.isAddedRow ? 'true' : 'false' %>" data-active-icons="<%= JSON.stringify(rowActiveIcons) %>" data-auto-active="<%= row.autoActive ? 'true' : 'false' %>" data-comment="<%= encodeURIComponent(row.comment || '') %>" data-ub-text="<%= encodeURIComponent(row.ubText || '') %>" data-ub-is-party-char="<%= isPartyCharRow ? 'true' : 'false' %>" data-timing="<%= row.timing ? 'true' : 'false' %>">
                                 <td class="ub-time-cell">
                                     <% if (row.isAddedRow) { %>
                                         <input type="text" class="ub-time-input" aria-label="残り時間" value="<%= row.time || '' %>" />
@@ -311,16 +311,29 @@
             }
         }
 
+        function getDecodedUbText(row) {
+            const raw = row.dataset.ubText || '';
+            if (!raw) {
+                return '';
+            }
+
+            try {
+                return decodeURIComponent(raw);
+            } catch {
+                return raw;
+            }
+        }
+
         function getUbEventLabel(row) {
             const eventCell = row.querySelector('.ub-event-cell');
             if (!eventCell) {
-                return '';
+                return getDecodedUbText(row);
             }
             const img = eventCell.querySelector('img');
             if (img) {
-                return (img.getAttribute('alt') || '').trim();
+                return getDecodedUbText(row) || (img.getAttribute('alt') || '').trim();
             }
-            return (eventCell.textContent || '').trim();
+            return getDecodedUbText(row) || (eventCell.textContent || '').trim();
         }
 
         function getActiveIconIndexes(row) {
@@ -341,7 +354,7 @@
                 const autoBox = row.querySelector('.ub-auto-cell .ub-icon-box');
                 return {
                     time: getRowTimeText(row),
-                    character: getUbEventLabel(row),
+                    character: getDecodedUbText(row) || getUbEventLabel(row),
                     activeIcons: getActiveIconIndexes(row),
                     autoActive: autoBox ? isIconActive(autoBox) : false,
                     comment: commentInput instanceof HTMLTextAreaElement ? commentInput.value : '',
@@ -914,7 +927,7 @@
                 timingButton.classList.toggle('is-timing-active', active);
             }
 
-            const ubCharName = getUbEventLabel(row);
+            const ubCharName = getDecodedUbText(row) || getUbEventLabel(row);
             const eventHoshi = row.querySelector('.ub-event-cell .ub-timing-hoshi');
             if (eventHoshi) {
                 eventHoshi.style.display = active ? 'block' : 'none';
