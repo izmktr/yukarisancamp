@@ -183,7 +183,7 @@ app.get('/users', (_req, res) => {
   res.redirect('/info');
 });
 
-import boardRouter from './routes/board';
+import boardRouter, { refreshBoardCharaImageCache } from './routes/board';
 app.use('/board', boardRouter);
 
 app.get('/settings', (req, res) => {
@@ -223,6 +223,8 @@ function getUploadFlashFromQuery(req: express.Request): UploadFlash {
   const addedFileName = typeof req.query.addedFileName === 'string' ? req.query.addedFileName : '';
   const editStatus = typeof req.query.editStatus === 'string' ? req.query.editStatus : '';
   const editedFileName = typeof req.query.editedFileName === 'string' ? req.query.editedFileName : '';
+  const cacheStatus = typeof req.query.cacheStatus === 'string' ? req.query.cacheStatus : '';
+  const cacheCount = typeof req.query.cacheCount === 'string' ? req.query.cacheCount : '';
 
   if (status === 'success' && fileName) {
     return {
@@ -326,6 +328,21 @@ function getUploadFlashFromQuery(req: express.Request): UploadFlash {
     return {
       type: 'error',
       message: 'キャラ名の更新に失敗しました。'
+    };
+  }
+
+  if (cacheStatus === 'success') {
+    const countText = /^\d+$/.test(cacheCount) ? `（${cacheCount}件）` : '';
+    return {
+      type: 'success',
+      message: `掲示板のキャラ画像キャッシュを再読込しました${countText}。`
+    };
+  }
+
+  if (cacheStatus === 'failed') {
+    return {
+      type: 'error',
+      message: '掲示板のキャラ画像キャッシュ再読込に失敗しました。'
     };
   }
 
@@ -520,6 +537,16 @@ app.post('/chara-check/update', ensureAdmin, (req, res) => {
   } catch (error) {
     console.error('Failed to update chara index entry:', error);
     redirectCharaEditStatus(res, 'failed');
+  }
+});
+
+app.post('/chara-check/refresh-cache', ensureAdmin, (_req, res) => {
+  try {
+    const cacheCount = refreshBoardCharaImageCache();
+    res.redirect(`/chara-check?cacheStatus=success&cacheCount=${cacheCount}`);
+  } catch (error) {
+    console.error('Failed to refresh board chara image cache:', error);
+    res.redirect('/chara-check?cacheStatus=failed');
   }
 });
 

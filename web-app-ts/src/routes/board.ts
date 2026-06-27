@@ -179,11 +179,25 @@ function loadCharaIndex(): CharaIndexEntry[] {
   }
 }
 
-const charaIndex = loadCharaIndex();
-const charaImageByName = new Map(charaIndex.map((entry) => [entry.name, entry.fileName]));
-const charaImageByNormalizedName = new Map(
-  charaIndex.map((entry) => [normalizeCharacterLookupKey(entry.name), entry.fileName])
-);
+let charaIndex: CharaIndexEntry[] = [];
+let charaImageByName = new Map<string, string>();
+let charaImageByNormalizedName = new Map<string, string>();
+
+function rebuildCharaImageCache(): number {
+  const loaded = loadCharaIndex();
+  charaIndex = loaded;
+  charaImageByName = new Map(loaded.map((entry) => [entry.name, entry.fileName]));
+  charaImageByNormalizedName = new Map(
+    loaded.map((entry) => [normalizeCharacterLookupKey(entry.name), entry.fileName])
+  );
+  return loaded.length;
+}
+
+export function refreshBoardCharaImageCache(): number {
+  return rebuildCharaImageCache();
+}
+
+rebuildCharaImageCache();
 
 function normalizeCharacterLookupKey(name: string): string {
   return (name || '')

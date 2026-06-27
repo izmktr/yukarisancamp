@@ -2,6 +2,7 @@
     <form id="chara-upload-form" class="chara-upload-toolbar" action="/chara-check/upload" method="post" enctype="multipart/form-data">
         <input id="chara-upload-input" type="file" name="charaPng" accept=".png,image/png" hidden>
         <button id="chara-upload-button" type="button" class="btn btn-primary">アップロード</button>
+        <button type="submit" class="btn" formaction="/chara-check/refresh-cache" formmethod="post">キャッシュ再読込</button>
         <span class="chara-upload-note">*.png のみ</span>
     </form>
 
