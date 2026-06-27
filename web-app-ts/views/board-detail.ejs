@@ -18,7 +18,14 @@
             const visibilityValue = visibilityLabelByValue[visibilityRaw] || visibilityRaw;
             const bossValue = article.bossname || '';
             const damageValue = article.damage || '';
+            const battleTimeMatch = String(article.battleTime || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+            const battleTimeSeconds = battleTimeMatch
+                ? (Number(battleTimeMatch[1]) * 60) + Number(battleTimeMatch[2])
+                : 0;
         %>
+        <p>
+            <a href="/board" class="btn">一覧へ戻る</a>
+        </p>
         <h2><%= article.postTitle || '記事詳細' %></h2>
     <div class="board-detail">
         <section class="post-info-editor" aria-label="情報">
@@ -82,17 +89,34 @@
             <% const partySlots = (partyMembers && partyMembers.length > 0) ? partyMembers.slice().reverse() : []; %>
             <% const DETAIL_COMMENT_COLSPAN = 7; %>
             <div class="ub-toolbar">
-                <div class="ub-display-toggle" role="group" aria-label="表示切り替え">
-                    <button type="button" class="ub-display-toggle-btn is-active" data-display-mode="all">すべて</button>
-                    <button type="button" class="ub-display-toggle-btn" data-display-mode="operation">操作</button>
-                    <button type="button" class="ub-display-toggle-btn" data-display-mode="operation-plus-prev">操作+1つ前</button>
+                <div class="ub-toolbar-main">
+                    <div class="ub-control-panel">
+                        <div class="ub-display-toggle" role="group" aria-label="表示切り替え">
+                            <button type="button" class="ub-display-toggle-btn is-active" data-display-mode="all">すべて</button>
+                            <button type="button" class="ub-display-toggle-btn" data-display-mode="operation">操作</button>
+                            <button type="button" class="ub-display-toggle-btn" data-display-mode="operation-plus-prev">操作+1つ前</button>
+                        </div>
+                        <div class="ub-size-toggle" role="group" aria-label="サイズ">
+                            <span class="ub-size-toggle-label">サイズ</span>
+                            <button type="button" class="ub-size-toggle-btn is-active" data-icon-size="large">大</button>
+                            <button type="button" class="ub-size-toggle-btn" data-icon-size="medium">中</button>
+                            <button type="button" class="ub-size-toggle-btn" data-icon-size="small">小</button>
+                        </div>
+                        <div class="ub-time-adjust" role="group" aria-label="残り時間の調整">
+                            <span class="ub-time-adjust-label">残り時間</span>
+                            <input type="text" id="ub-time-adjust-input" class="ub-time-adjust-input" inputmode="numeric" value="<%= battleTimeSeconds > 0 ? battleTimeSeconds : '' %>" data-battle-time="<%= battleTimeSeconds %>" aria-label="入力時間" />
+                            <button type="button" id="ub-time-adjust-button" class="ub-time-adjust-button">変更</button>
+                        </div>
+                    </div>
                 </div>
-                <div class="ub-size-toggle" role="group" aria-label="サイズ">
-                    <span class="ub-size-toggle-label">サイズ</span>
-                    <button type="button" class="ub-size-toggle-btn is-active" data-icon-size="large">大</button>
-                    <button type="button" class="ub-size-toggle-btn" data-icon-size="medium">中</button>
-                    <button type="button" class="ub-size-toggle-btn" data-icon-size="small">小</button>
+                <% if (canEdit) { %>
+                <div class="ub-toolbar-actions">
+                    <a href="/board/<%= id %>/edit" class="btn btn-primary">編集</a>
+                    <form method="post" action="/board/<%= id %>/delete" onsubmit="return confirm('この記事を削除します。よろしいですか？');">
+                        <button type="submit" class="btn btn-danger">削除</button>
+                    </form>
                 </div>
+                <% } %>
             </div>
             <div class="ub-table-wrapper">
                 <table class="ub-table">
@@ -188,11 +212,6 @@
         <% } %>
 
         <p>
-            <% if (canEdit) { %>
-            <a href="/board/<%= id %>/edit" class="btn btn-primary">編集</a>
-            <% } else if (showOwnerOnlyMessage) { %>
-            <span>投稿者のみ編集可能です</span>
-            <% } %>
             <a href="/board" class="btn">一覧へ戻る</a>
         </p>
     </div>
@@ -208,6 +227,10 @@
         const ICON_SIZE_MEDIUM = 'medium';
         const ICON_SIZE_SMALL = 'small';
         let currentDisplayMode = DISPLAY_MODE_ALL;
+        const timeAdjustInput = document.getElementById('ub-time-adjust-input');
+        const timeAdjustButton = document.getElementById('ub-time-adjust-button');
+        let currentBattleTimeSeconds = 0;
+        let currentInputSeconds = 0;
 
         function parseTimeToSeconds(timeText) {
             const raw = (timeText || '').trim();
@@ -223,7 +246,26 @@
             return (minutes * 60) + seconds;
         }
 
-        function renderTimeCell(cell, timeText, diffSeconds) {
+        function parseSecondsInput(value) {
+            const raw = String(value || '').trim();
+            if (!raw) {
+                return null;
+            }
+
+            if (!/^\d+$/.test(raw)) {
+                return null;
+            }
+
+            return Number(raw);
+        }
+
+        function formatSecondsToTime(totalSeconds) {
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+
+        function renderTimeCell(cell, timeText) {
             if (!cell) {
                 return;
             }
@@ -233,14 +275,6 @@
             timeMain.className = 'ub-time-main';
             timeMain.textContent = timeText || '';
             cell.appendChild(timeMain);
-
-            if (typeof diffSeconds === 'number') {
-                const timeDiff = document.createElement('div');
-                timeDiff.className = 'ub-time-diff';
-                const sign = diffSeconds >= 0 ? '+' : '';
-                timeDiff.textContent = `(${sign}${diffSeconds}s)`;
-                cell.appendChild(timeDiff);
-            }
         }
 
         function initializeTimeCells() {
@@ -252,36 +286,24 @@
                 }
                 const raw = (timeCell.textContent || '').trim();
                 row.dataset.timeRaw = raw;
-                renderTimeCell(timeCell, raw, null);
+                renderTimeCell(timeCell, raw);
             });
         }
 
-        function updateVisibleTimeDiffs() {
-            const rows = Array.from(document.querySelectorAll('.ub-table tbody tr:not(.ub-comment-row)'));
-            let previousVisibleSeconds = null;
+        function initializeBattleTimeControls() {
+            if (!(timeAdjustInput instanceof HTMLInputElement)) {
+                return;
+            }
 
-            rows.forEach((row) => {
-                const timeCell = row.querySelector('.ub-time-cell');
-                if (!timeCell) {
-                    return;
-                }
+            const parsedBattleTime = parseSecondsInput(timeAdjustInput.dataset.battleTime || timeAdjustInput.value || '');
+            currentBattleTimeSeconds = parsedBattleTime !== null ? parsedBattleTime : 0;
+            currentInputSeconds = currentBattleTimeSeconds;
+            timeAdjustInput.value = currentBattleTimeSeconds > 0 ? String(currentBattleTimeSeconds) : '';
+            timeAdjustInput.dataset.lastValidTime = timeAdjustInput.value;
+        }
 
-                const timeRaw = row.dataset.timeRaw || '';
-                const currentSeconds = parseTimeToSeconds(timeRaw);
-
-                if (row.hidden) {
-                    renderTimeCell(timeCell, timeRaw, null);
-                    return;
-                }
-
-                if (previousVisibleSeconds === null || currentSeconds === null) {
-                    renderTimeCell(timeCell, timeRaw, null);
-                } else {
-                    renderTimeCell(timeCell, timeRaw, previousVisibleSeconds - currentSeconds);
-                }
-
-                previousVisibleSeconds = currentSeconds;
-            });
+        function getTimeOffsetSeconds() {
+            return currentBattleTimeSeconds - currentInputSeconds;
         }
 
         function isIconActive(iconBox) {
@@ -362,22 +384,28 @@
                 return;
             }
 
-            const rows = Array.from(tbody.querySelectorAll('tr'));
-            if (currentDisplayMode === DISPLAY_MODE_ALL) {
-                rows.forEach((row) => {
-                    row.hidden = false;
-                });
-            } else if (currentDisplayMode === DISPLAY_MODE_OPERATION) {
-                rows.forEach((row) => {
-                    row.hidden = !isYellowRow(row);
-                });
-            } else {
-                const visibleRows = new Set();
-                rows.forEach((row) => {
-                    if (!isYellowRow(row)) {
+            const mainRows = Array.from(tbody.querySelectorAll('tr:not(.ub-comment-row)'));
+            const visibleMainRows = new Set();
+            const offsetSeconds = getTimeOffsetSeconds();
+
+            mainRows.forEach((row) => {
+                const timeRaw = row.dataset.timeRaw || '';
+                const baseSeconds = parseTimeToSeconds(timeRaw);
+                const timeVisible = baseSeconds === null || (baseSeconds - offsetSeconds) >= 0;
+                const modeVisible = currentDisplayMode === DISPLAY_MODE_ALL
+                    || (currentDisplayMode === DISPLAY_MODE_OPERATION && isYellowRow(row))
+                    || (currentDisplayMode === DISPLAY_MODE_OPERATION_PLUS_PREV && isYellowRow(row));
+
+                if (modeVisible && timeVisible) {
+                    visibleMainRows.add(row);
+                }
+            });
+
+            if (currentDisplayMode === DISPLAY_MODE_OPERATION_PLUS_PREV) {
+                mainRows.forEach((row) => {
+                    if (!visibleMainRows.has(row)) {
                         return;
                     }
-                    visibleRows.add(row);
 
                     const isBattleStartRow = row.dataset.isBattleStart === 'true';
                     const isBattleEndRow = row.dataset.isBattleEnd === 'true';
@@ -386,17 +414,45 @@
                     }
 
                     const previousRow = row.previousElementSibling;
-                    if (previousRow instanceof HTMLTableRowElement) {
-                        visibleRows.add(previousRow);
+                    if (previousRow instanceof HTMLTableRowElement && !previousRow.classList.contains('ub-comment-row')) {
+                        const previousBaseSeconds = parseTimeToSeconds(previousRow.dataset.timeRaw || '');
+                        const previousVisible = previousBaseSeconds === null || (previousBaseSeconds - offsetSeconds) >= 0;
+                        if (previousVisible) {
+                            visibleMainRows.add(previousRow);
+                        }
                     }
-                });
-
-                rows.forEach((row) => {
-                    row.hidden = !visibleRows.has(row);
                 });
             }
 
-            updateVisibleTimeDiffs();
+            mainRows.forEach((row) => {
+                row.hidden = !visibleMainRows.has(row);
+                const timeCell = row.querySelector('.ub-time-cell');
+                if (!timeCell) {
+                    return;
+                }
+
+                const timeRaw = row.dataset.timeRaw || '';
+                const baseSeconds = parseTimeToSeconds(timeRaw);
+                if (baseSeconds === null) {
+                    renderTimeCell(timeCell, timeRaw);
+                    return;
+                }
+
+                const adjustedSeconds = baseSeconds - offsetSeconds;
+                if (adjustedSeconds < 0) {
+                    renderTimeCell(timeCell, '');
+                    return;
+                }
+
+                renderTimeCell(timeCell, formatSecondsToTime(adjustedSeconds));
+            });
+
+            mainRows.forEach((row) => {
+                const commentRow = row.nextElementSibling;
+                if (commentRow instanceof HTMLTableRowElement && commentRow.classList.contains('ub-comment-row')) {
+                    commentRow.hidden = row.hidden;
+                }
+            });
         }
 
         function applyIconSize(sizeMode) {
@@ -457,7 +513,28 @@
             });
         });
 
+        if (timeAdjustButton) {
+            timeAdjustButton.addEventListener('click', () => {
+                if (!(timeAdjustInput instanceof HTMLInputElement)) {
+                    return;
+                }
+
+                const nextInputSeconds = parseSecondsInput(timeAdjustInput.value);
+                if (nextInputSeconds === null || nextInputSeconds <= 0 || nextInputSeconds > currentBattleTimeSeconds) {
+                    alert('入力時間は 1 秒以上で、バトル時間以下にしてください。');
+                    timeAdjustInput.value = timeAdjustInput.dataset.lastValidTime || (currentBattleTimeSeconds > 0 ? String(currentBattleTimeSeconds) : '');
+                    return;
+                }
+
+                currentInputSeconds = nextInputSeconds;
+                timeAdjustInput.value = String(nextInputSeconds);
+                timeAdjustInput.dataset.lastValidTime = timeAdjustInput.value;
+                applyRowFilter();
+            });
+        }
+
         initializeTimeCells();
+        initializeBattleTimeControls();
         updateSetBubbles();
         applyRowFilter();
         applyIconSize(ICON_SIZE_LARGE);

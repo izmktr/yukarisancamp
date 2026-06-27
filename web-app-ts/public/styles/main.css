@@ -107,6 +107,15 @@ body {
     background: #5568ca;
 }
 
+.btn-danger {
+    background: #d9534f;
+    color: #ffffff;
+}
+
+.btn-danger:hover:not(:disabled) {
+    background: #c9302c;
+}
+
 /* タブナビゲーション */
 .tabs {
     background: #f8f9fa;
@@ -724,6 +733,37 @@ body {
     margin-top: 0.6rem;
 }
 
+.ub-toolbar-main {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+}
+
+.ub-control-panel {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+    padding: 0.45rem;
+    border: 1px solid #d8e0f2;
+    border-radius: 999px;
+    background: #f7f9ff;
+}
+
+.ub-toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: auto;
+    flex-wrap: wrap;
+}
+
+.ub-toolbar-actions form {
+    display: inline-flex;
+    margin: 0;
+}
+
 .ub-size-toggle {
     display: inline-flex;
     align-items: center;
@@ -783,6 +823,55 @@ body {
     background: #667eea;
     color: #ffffff;
     box-shadow: 0 1px 4px rgba(29, 52, 137, 0.25);
+}
+
+.ub-time-adjust {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 4px 4px 8px;
+    border: 1px solid #d8e0f2;
+    border-radius: 999px;
+    background: #ffffff;
+}
+
+.ub-time-adjust-label {
+    color: #4a5783;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.ub-time-adjust-input {
+    width: 5.5rem;
+    border: 1px solid #cdd7ee;
+    border-radius: 999px;
+    padding: 7px 10px;
+    font-size: 0.9rem;
+    color: #2f3a59;
+    background: #ffffff;
+    text-align: right;
+}
+
+.ub-time-adjust-input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.14);
+}
+
+.ub-time-adjust-button {
+    border: none;
+    border-radius: 999px;
+    padding: 7px 12px;
+    background: #667eea;
+    color: #ffffff;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.ub-time-adjust-button:hover {
+    background: #5568ca;
 }
 
 .ub-table {

@@ -2,9 +2,12 @@
     <% if (isLoggedIn) { %>
     <textarea id="board-original-article-json" hidden><%- JSON.stringify(article || {}) %></textarea>
     <input id="board-current-id" type="hidden" value="<%= typeof id !== 'undefined' ? id : '' %>" />
+    <% if (!(ubRows && ubRows.length > 0)) { %>
     <div class="board-edit-toolbar">
         <button type="button" id="board-save-button" class="btn btn-primary">保存</button>
+        <button type="button" id="board-discard-button" class="btn">破棄</button>
     </div>
+    <% } %>
     <h2>記事編集</h2>
     <div class="board-detail">
         <% 
@@ -99,10 +102,18 @@
         <h3>ユニオンバースト発動時間</h3>
         <% if (ubRows && ubRows.length > 0) { %>
             <% const partySlots = (partyMembers && partyMembers.length > 0) ? partyMembers.slice().reverse() : []; %>
-            <div class="ub-display-toggle" role="group" aria-label="表示切り替え">
-                <button type="button" class="ub-display-toggle-btn is-active" data-display-mode="all">すべて</button>
-                <button type="button" class="ub-display-toggle-btn" data-display-mode="operation">操作</button>
-                <button type="button" class="ub-display-toggle-btn" data-display-mode="operation-plus-prev">操作+1つ前</button>
+            <div class="ub-toolbar">
+                <div class="ub-toolbar-main">
+                    <div class="ub-display-toggle" role="group" aria-label="表示切り替え">
+                        <button type="button" class="ub-display-toggle-btn is-active" data-display-mode="all">すべて</button>
+                        <button type="button" class="ub-display-toggle-btn" data-display-mode="operation">操作</button>
+                        <button type="button" class="ub-display-toggle-btn" data-display-mode="operation-plus-prev">操作+1つ前</button>
+                    </div>
+                </div>
+                <div class="ub-toolbar-actions">
+                    <button type="button" id="board-save-button" class="btn btn-primary">保存</button>
+                    <button type="button" id="board-discard-button" class="btn">破棄</button>
+                </div>
             </div>
             <div class="ub-table-wrapper">
                 <table class="ub-table">
@@ -229,9 +240,6 @@
             <p>未登録</p>
         <% } %>
 
-        <p>
-            <a href="/board" class="btn">一覧へ戻る</a>
-        </p>
     </div>
     <% } else { %>
     <h2>記事編集</h2>
@@ -413,6 +421,15 @@
 
             document.body.appendChild(form);
             form.submit();
+        }
+
+        function getArticleDetailUrl() {
+            const articleId = currentId || (typeof originalArticle.uniqueId === 'string' ? originalArticle.uniqueId : '');
+            return articleId ? `/board/${articleId}` : '/board';
+        }
+
+        function submitDiscard() {
+            window.location.href = getArticleDetailUrl();
         }
 
         function initializePostInfoFromArticle() {
@@ -1182,6 +1199,10 @@
         const saveButton = document.getElementById('board-save-button');
         if (saveButton) {
             saveButton.addEventListener('click', submitSave);
+        }
+        const discardButton = document.getElementById('board-discard-button');
+        if (discardButton) {
+            discardButton.addEventListener('click', submitDiscard);
         }
         updateSetBubbles();
         applyRowFilter();

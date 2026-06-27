@@ -428,6 +428,19 @@ router.get('/:id/edit', (req, res) => {
         isNew: false
     });
 });
+// 記事削除
+router.post('/:id/delete', (req, res) => {
+    const file = path_1.default.join(DATA_DIR, req.params.id + '.json');
+    if (!fs_1.default.existsSync(file)) {
+        return res.status(404).send('記事がありません');
+    }
+    const data = JSON.parse(fs_1.default.readFileSync(file, 'utf-8'));
+    if (!ensureArticleEditableByUser(data, req, res)) {
+        return;
+    }
+    fs_1.default.unlinkSync(file);
+    return res.redirect('/board');
+});
 // 編集保存（新規・既存）
 router.post('/save', (req, res) => {
     const nowId = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
