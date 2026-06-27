@@ -958,6 +958,16 @@ body {
     z-index: 2;
 }
 
+.ub-icon-box.ub-timing-target .ub-party-image.ub-party-image-mono {
+    filter: none;
+}
+
+.ub-icon-box.ub-timing-target .ub-party-image-missing-gray {
+    background: #cfe0ff;
+    border-color: #9db8ef;
+    color: #345a9f;
+}
+
 tr[data-timing="true"] .ub-timing-hoshi {
     display: block;
 }
@@ -1115,16 +1125,6 @@ tr[data-timing="true"] .ub-timing-hoshi {
     word-break: break-all;
 }
 
-.ub-icon-box .ub-party-image:not(.ub-party-image-mono) {
-    border-color: #e15252;
-    box-shadow: 0 0 0 4px #e15252;
-}
-
-.ub-icon-box .ub-party-image-missing-blue {
-    border-color: #e15252;
-    box-shadow: 0 0 0 4px #e15252;
-}
-
 .ub-event-image-missing-body {
     width: calc(84px * var(--ub-icon-scale, 1));
     height: calc(84px * var(--ub-icon-scale, 1));
@@ -1174,6 +1174,7 @@ tr[data-timing="true"] .ub-timing-hoshi {
     width: calc(10px * var(--ub-icon-scale, 1));
     height: calc(10px * var(--ub-icon-scale, 1));
     clip-path: polygon(0 0, 100% 0, 0 100%);
+    z-index: -1;
 }
 
 .ub-set-badge::before {
@@ -1195,8 +1196,46 @@ tr[data-timing="true"] .ub-timing-hoshi {
     display: inline-flex;
 }
 
+.ub-icon-box.has-set:not(.set-inactive) .ub-set-badge {
+    border-width: calc(2px * var(--ub-icon-scale, 1));
+    border-color: #ffffff;
+    box-shadow: 0 0 0 calc(5px * var(--ub-icon-scale, 1)) #e15252, 0 2px 6px rgba(21, 87, 128, 0.35);
+}
+
 .ub-icon-box.has-set.set-inactive .ub-set-badge {
-    filter: grayscale(100%);
+    background: #2daee6;
+    filter: none;
+}
+
+.ub-icon-box.has-set.set-inactive .ub-set-badge::before {
+    background: #2daee6;
+}
+
+.ub-icon-box:not(.has-set) .ub-party-image:not(.ub-party-image-mono) ~ .ub-set-badge,
+.ub-icon-box:not(.has-set) .ub-party-image-missing-blue ~ .ub-set-badge {
+    display: inline-flex;
+    background: transparent;
+    border-width: 0;
+    border-color: transparent;
+    color: transparent;
+    box-shadow: 0 0 0 calc(5px * var(--ub-icon-scale, 1)) #e15252;
+}
+
+.ub-icon-box:not(.has-set) .ub-party-image:not(.ub-party-image-mono) ~ .ub-set-badge::before,
+.ub-icon-box:not(.has-set) .ub-party-image-missing-blue ~ .ub-set-badge::before {
+    background: transparent;
+}
+
+.ub-icon-box:not(.has-set) .ub-party-image:not(.ub-party-image-mono) ~ .ub-set-badge::after,
+.ub-icon-box:not(.has-set) .ub-party-image-missing-blue ~ .ub-set-badge::after {
+    border-left: calc(2px * var(--ub-icon-scale, 1)) solid #e15252;
+    background: linear-gradient(
+        135deg,
+        transparent calc(50% - 1px),
+        #e15252 calc(50% - 1px),
+        #e15252 calc(50% + 1px),
+        transparent calc(50% + 1px)
+    );
 }
 
 .ub-party-empty {
