@@ -1,4 +1,14 @@
 <div class="page-content">
+    <form id="chara-upload-form" class="chara-upload-toolbar" action="/chara-check/upload" method="post" enctype="multipart/form-data">
+        <input id="chara-upload-input" type="file" name="charaPng" accept=".png,image/png" hidden>
+        <button id="chara-upload-button" type="button" class="btn btn-primary">アップロード</button>
+        <span class="chara-upload-note">*.png のみ</span>
+    </form>
+
+    <% if (uploadFlash) { %>
+        <p class="chara-upload-flash <%= uploadFlash.type === 'success' ? 'is-success' : 'is-error' %>"><%= uploadFlash.message %></p>
+    <% } %>
+
     <h2>キャラ確認</h2>
     <p>登録済みキャラを名前と画像で確認できます。（<%= characters.length %>件）</p>
 
@@ -16,6 +26,11 @@
                             loading="lazy"
                         >
                         <p class="chara-name"><%= fileName %></p>
+                        <form class="chara-add-form" action="/chara-check/add" method="post">
+                            <input type="hidden" name="fileName" value="<%= fileName %>">
+                            <input type="text" name="characterName" class="chara-add-input" placeholder="キャラ名" required>
+                            <button type="submit" class="btn btn-primary chara-add-button">追加</button>
+                        </form>
                     </div>
                 <% }) %>
             </div>
@@ -37,8 +52,66 @@
                         loading="lazy"
                     >
                     <p class="chara-name"><%= character.name %></p>
+                    <button type="button" class="btn chara-edit-toggle">編集</button>
+                    <form class="chara-edit-form" action="/chara-check/update" method="post" hidden>
+                        <input type="hidden" name="fileName" value="<%= character.fileName %>">
+                        <input type="text" name="characterName" class="chara-add-input" value="<%= character.name %>" required>
+                        <button type="submit" class="btn btn-primary chara-add-button">変更</button>
+                    </form>
                 </div>
             <% }) %>
         </div>
     <% } %>
 </div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const uploadButton = document.getElementById('chara-upload-button');
+        const uploadInput = document.getElementById('chara-upload-input');
+        const uploadForm = document.getElementById('chara-upload-form');
+
+        if (!(uploadButton instanceof HTMLButtonElement) || !(uploadInput instanceof HTMLInputElement) || !(uploadForm instanceof HTMLFormElement)) {
+            return;
+        }
+
+        uploadButton.addEventListener('click', () => {
+            uploadInput.click();
+        });
+
+        uploadInput.addEventListener('change', () => {
+            if (uploadInput.files && uploadInput.files.length > 0) {
+                uploadForm.submit();
+            }
+        });
+
+        document.querySelectorAll('.chara-edit-toggle').forEach((toggleButton) => {
+            if (!(toggleButton instanceof HTMLButtonElement)) {
+                return;
+            }
+
+            toggleButton.addEventListener('click', () => {
+                const card = toggleButton.closest('.chara-card');
+                if (!(card instanceof HTMLElement)) {
+                    return;
+                }
+
+                const editForm = card.querySelector('.chara-edit-form');
+                if (!(editForm instanceof HTMLFormElement)) {
+                    return;
+                }
+
+                const isHidden = editForm.hidden;
+                editForm.hidden = !isHidden;
+                toggleButton.textContent = isHidden ? '閉じる' : '編集';
+
+                if (isHidden) {
+                    const input = editForm.querySelector('input[name="characterName"]');
+                    if (input instanceof HTMLInputElement) {
+                        input.focus();
+                        input.select();
+                    }
+                }
+            });
+        });
+    });
+</script>

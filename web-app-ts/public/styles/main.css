@@ -1649,6 +1649,37 @@ tr[data-timing="true"] .ub-timing-hoshi {
     box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
 }
 
+.chara-upload-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    margin-bottom: 0.75rem;
+}
+
+.chara-upload-note {
+    font-size: 0.9rem;
+    color: #5f6a8a;
+}
+
+.chara-upload-flash {
+    margin: 0 0 0.85rem 0;
+    padding: 0.6rem 0.8rem;
+    border-radius: 8px;
+    font-size: 0.92rem;
+}
+
+.chara-upload-flash.is-success {
+    background: #eefbf2;
+    border: 1px solid #b7e4c2;
+    color: #1d6c36;
+}
+
+.chara-upload-flash.is-error {
+    background: #fff4f4;
+    border: 1px solid #f2c9c9;
+    color: #9b1f1f;
+}
+
 .chara-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -1686,6 +1717,50 @@ tr[data-timing="true"] .ub-timing-hoshi {
     color: #2f3650;
     text-align: center;
     word-break: break-word;
+}
+
+.chara-add-form {
+    margin-top: 0.55rem;
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+}
+
+.chara-add-input {
+    flex: 1;
+    min-width: 0;
+    height: 34px;
+    padding: 0 0.55rem;
+    border: 1px solid #c8d0e1;
+    border-radius: 8px;
+    font-size: 0.88rem;
+}
+
+.chara-add-input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+}
+
+.chara-add-button {
+    padding: 7px 10px;
+    white-space: nowrap;
+}
+
+.chara-edit-toggle {
+    width: 100%;
+    margin-top: 0.45rem;
+}
+
+.chara-edit-form {
+    margin-top: 0.45rem;
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+}
+
+.chara-edit-form[hidden] {
+    display: none;
 }
 
 .clan-list-table-wrapper {

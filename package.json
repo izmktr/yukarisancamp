@@ -1,5 +1,9 @@
 {
   "name": "yukarisancamp",
   "private": true,
-  "description": "Monorepo root for project aggregation only"
+  "description": "Monorepo root for project aggregation only",
+  "dependencies": {
+    "@types/multer": "^2.1.0",
+    "multer": "^2.2.0"
+  }
 }

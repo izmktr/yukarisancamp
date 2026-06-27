@@ -15,6 +15,7 @@ const express_session_1 = __importDefault(require("express-session"));
 const express_ejs_layouts_1 = __importDefault(require("express-ejs-layouts"));
 const board_1 = __importDefault(require("./api/board"));
 const fs_1 = __importDefault(require("fs"));
+const multer_1 = __importDefault(require("multer"));
 const app_1 = require("firebase-admin/app");
 const auth_1 = require("firebase-admin/auth");
 const firestore_1 = require("firebase-admin/firestore");
@@ -77,12 +78,35 @@ function getAuthViewData(req) {
         isAdmin: userSession?.role === 'admin'
     };
 }
-function ensureAdmin(req, res, next) {
+async function ensureAdmin(req, res, next) {
     const { isAdmin } = getAuthViewData(req);
-    if (!isAdmin) {
-        return res.status(403).send('管理者のみ閲覧できます');
+    if (isAdmin) {
+        next();
+        return;
     }
-    next();
+    const userSession = req.session.user;
+    const googleUserId = typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '';
+    if (!googleUserId) {
+        res.status(403).send('管理者のみ閲覧できます');
+        return;
+    }
+    const latestRole = await getUserRoleFromFirestore(googleUserId);
+    if (latestRole !== 'admin') {
+        res.status(403).send('管理者のみ閲覧できます');
+        return;
+    }
+    req.session.user = {
+        ...userSession,
+        role: 'admin'
+    };
+    req.session.save((saveError) => {
+        if (saveError) {
+            console.error('Failed to refresh admin role in session:', saveError);
+            res.status(500).send('管理者セッションの更新に失敗しました');
+            return;
+        }
+        next();
+    });
 }
 const app = (0, express_1.default)();
 const port = 3000;
@@ -153,7 +177,123 @@ app.get('/clanbattle-settings', (req, res) => {
         ...getAuthViewData(req)
     });
 });
-app.get('/chara-check', (req, res) => {
+const charaIndexPath = path_1.default.join(__dirname, '../chara/charaindex.json');
+const charaDirPath = path_1.default.join(__dirname, '../chara');
+function sanitizeUploadFileName(originalName) {
+    const baseName = path_1.default.basename(originalName);
+    // Keep common readable characters (including Japanese) and replace forbidden path/file characters.
+    return baseName.replace(/[\\/:*?"<>|]/g, '_');
+}
+function getUploadFlashFromQuery(req) {
+    const status = typeof req.query.uploadStatus === 'string' ? req.query.uploadStatus : '';
+    const fileName = typeof req.query.fileName === 'string' ? req.query.fileName : '';
+    const addStatus = typeof req.query.addStatus === 'string' ? req.query.addStatus : '';
+    const addedFileName = typeof req.query.addedFileName === 'string' ? req.query.addedFileName : '';
+    const editStatus = typeof req.query.editStatus === 'string' ? req.query.editStatus : '';
+    const editedFileName = typeof req.query.editedFileName === 'string' ? req.query.editedFileName : '';
+    if (status === 'success' && fileName) {
+        return {
+            type: 'success',
+            message: `${fileName} をアップロードしました。`
+        };
+    }
+    if (status === 'invalid-type') {
+        return {
+            type: 'error',
+            message: 'アップロードできるファイルは .png のみです。'
+        };
+    }
+    if (status === 'missing-file') {
+        return {
+            type: 'error',
+            message: 'アップロードする .png ファイルを選択してください。'
+        };
+    }
+    if (status === 'failed') {
+        return {
+            type: 'error',
+            message: 'アップロードに失敗しました。時間をおいて再試行してください。'
+        };
+    }
+    if (addStatus === 'success' && addedFileName) {
+        return {
+            type: 'success',
+            message: `${addedFileName} を charaindex.json に追加しました。`
+        };
+    }
+    if (addStatus === 'missing-name') {
+        return {
+            type: 'error',
+            message: 'キャラ名を入力してください。'
+        };
+    }
+    if (addStatus === 'missing-file') {
+        return {
+            type: 'error',
+            message: '対象ファイル名が指定されていません。'
+        };
+    }
+    if (addStatus === 'invalid-file') {
+        return {
+            type: 'error',
+            message: '指定されたファイルは未登録PNGではありません。'
+        };
+    }
+    if (addStatus === 'already-exists') {
+        return {
+            type: 'error',
+            message: 'そのファイルはすでに charaindex.json に登録済みです。'
+        };
+    }
+    if (addStatus === 'failed') {
+        return {
+            type: 'error',
+            message: 'charaindex.json への追加に失敗しました。'
+        };
+    }
+    if (editStatus === 'success' && editedFileName) {
+        return {
+            type: 'success',
+            message: `${editedFileName} の名前を更新しました。`
+        };
+    }
+    if (editStatus === 'missing-name') {
+        return {
+            type: 'error',
+            message: '変更後のキャラ名を入力してください。'
+        };
+    }
+    if (editStatus === 'missing-file') {
+        return {
+            type: 'error',
+            message: '更新対象のファイル名が指定されていません。'
+        };
+    }
+    if (editStatus === 'not-found') {
+        return {
+            type: 'error',
+            message: '更新対象が charaindex.json に見つかりませんでした。'
+        };
+    }
+    if (editStatus === 'failed') {
+        return {
+            type: 'error',
+            message: 'キャラ名の更新に失敗しました。'
+        };
+    }
+    return null;
+}
+function redirectCharaAddStatus(res, status, fileName) {
+    const encodedFileName = fileName ? encodeURIComponent(fileName) : '';
+    const suffix = encodedFileName ? `&addedFileName=${encodedFileName}` : '';
+    res.redirect(`/chara-check?addStatus=${status}${suffix}`);
+}
+function redirectCharaEditStatus(res, status, fileName) {
+    const encodedFileName = fileName ? encodeURIComponent(fileName) : '';
+    const suffix = encodedFileName ? `&editedFileName=${encodedFileName}` : '';
+    res.redirect(`/chara-check?editStatus=${status}${suffix}`);
+}
+function loadCharaCheckData() {
     const charaIndexPath = path_1.default.join(__dirname, '../chara/charaindex.json');
     const charaDirPath = path_1.default.join(__dirname, '../chara');
     let characters = [];
@@ -180,13 +320,135 @@ app.get('/chara-check', (req, res) => {
     catch (error) {
         console.error('Failed to scan character image directory:', error);
     }
+    return {
+        characters,
+        unindexedImages
+    };
+}
+function renderCharaCheckPage(req, res) {
+    const { characters, unindexedImages } = loadCharaCheckData();
+    const uploadFlash = getUploadFlashFromQuery(req);
     res.render('chara-check', {
         title: 'ゆかりさん△',
         currentPage: 'chara-check',
         ...getAuthViewData(req),
         characters,
-        unindexedImages
+        unindexedImages,
+        uploadFlash
     });
+}
+const charaUpload = (0, multer_1.default)({
+    storage: multer_1.default.diskStorage({
+        destination: (_req, _file, callback) => {
+            callback(null, charaDirPath);
+        },
+        filename: (_req, file, callback) => {
+            callback(null, sanitizeUploadFileName(file.originalname));
+        }
+    }),
+    fileFilter: (_req, file, callback) => {
+        const extensionIsPng = path_1.default.extname(file.originalname).toLowerCase() === '.png';
+        const mimeIsPng = file.mimetype === 'image/png';
+        if (extensionIsPng && mimeIsPng) {
+            callback(null, true);
+            return;
+        }
+        callback(new Error('Only PNG files are allowed'));
+    },
+    limits: {
+        files: 1
+    }
+});
+app.get('/chara-check', ensureAdmin, (req, res) => {
+    renderCharaCheckPage(req, res);
+});
+app.post('/chara-check/upload', ensureAdmin, (req, res) => {
+    charaUpload.single('charaPng')(req, res, (error) => {
+        if (error) {
+            console.error('Character image upload failed:', error);
+            const status = error instanceof multer_1.default.MulterError ? 'failed' : 'invalid-type';
+            res.redirect(`/chara-check?uploadStatus=${status}`);
+            return;
+        }
+        const uploadedFile = req.file;
+        if (!uploadedFile) {
+            res.redirect('/chara-check?uploadStatus=missing-file');
+            return;
+        }
+        const fileName = encodeURIComponent(uploadedFile.filename);
+        res.redirect(`/chara-check?uploadStatus=success&fileName=${fileName}`);
+    });
+});
+app.post('/chara-check/add', ensureAdmin, (req, res) => {
+    const fileName = typeof req.body.fileName === 'string' ? req.body.fileName.trim() : '';
+    const name = typeof req.body.characterName === 'string' ? req.body.characterName.trim() : '';
+    if (!fileName) {
+        redirectCharaAddStatus(res, 'missing-file');
+        return;
+    }
+    if (!name) {
+        redirectCharaAddStatus(res, 'missing-name');
+        return;
+    }
+    const safeFileName = path_1.default.basename(fileName);
+    const imagePath = path_1.default.join(charaDirPath, safeFileName);
+    if (!safeFileName.toLowerCase().endsWith('.png') || !fs_1.default.existsSync(imagePath)) {
+        redirectCharaAddStatus(res, 'invalid-file');
+        return;
+    }
+    try {
+        const raw = fs_1.default.readFileSync(charaIndexPath, 'utf-8');
+        const parsed = JSON.parse(raw);
+        const entries = Array.isArray(parsed) ? parsed.filter((item) => {
+            return item && typeof item.fileName === 'string' && typeof item.name === 'string';
+        }) : [];
+        if (entries.some((entry) => entry.fileName === safeFileName)) {
+            redirectCharaAddStatus(res, 'already-exists', safeFileName);
+            return;
+        }
+        entries.push({
+            fileName: safeFileName,
+            name
+        });
+        fs_1.default.writeFileSync(charaIndexPath, `${JSON.stringify(entries, null, 2)}\n`, 'utf-8');
+        redirectCharaAddStatus(res, 'success', safeFileName);
+    }
+    catch (error) {
+        console.error('Failed to append chara index entry:', error);
+        redirectCharaAddStatus(res, 'failed');
+    }
+});
+app.post('/chara-check/update', ensureAdmin, (req, res) => {
+    const fileName = typeof req.body.fileName === 'string' ? req.body.fileName.trim() : '';
+    const name = typeof req.body.characterName === 'string' ? req.body.characterName.trim() : '';
+    if (!fileName) {
+        redirectCharaEditStatus(res, 'missing-file');
+        return;
+    }
+    if (!name) {
+        redirectCharaEditStatus(res, 'missing-name');
+        return;
+    }
+    const safeFileName = path_1.default.basename(fileName);
+    try {
+        const raw = fs_1.default.readFileSync(charaIndexPath, 'utf-8');
+        const parsed = JSON.parse(raw);
+        const entries = Array.isArray(parsed) ? parsed.filter((item) => {
+            return item && typeof item.fileName === 'string' && typeof item.name === 'string';
+        }) : [];
+        const target = entries.find((entry) => entry.fileName === safeFileName);
+        if (!target) {
+            redirectCharaEditStatus(res, 'not-found', safeFileName);
+            return;
+        }
+        target.name = name;
+        fs_1.default.writeFileSync(charaIndexPath, `${JSON.stringify(entries, null, 2)}\n`, 'utf-8');
+        redirectCharaEditStatus(res, 'success', safeFileName);
+    }
+    catch (error) {
+        console.error('Failed to update chara index entry:', error);
+        redirectCharaEditStatus(res, 'failed');
+    }
 });
 app.get('/clanlist', ensureAdmin, (req, res) => {
     const clanDataDirPath = path_1.default.join(__dirname, '../clandata');
