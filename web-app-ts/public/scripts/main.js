@@ -109,12 +109,11 @@ function renderSettings(user, profile) {
     const firebaseError = document.getElementById('settings-firebase-error');
     const profileSection = document.getElementById('settings-profile');
     const displayNameInput = document.getElementById('settings-display-name');
-    const googleIdValue = document.getElementById('settings-google-id');
-    const discordIdValue = document.getElementById('settings-discord-id');
+    const emailValue = document.getElementById('settings-email');
     const discordServerValue = document.getElementById('settings-discord-server');
     const createdAtValue = document.getElementById('settings-created-at');
 
-    if (!loginRequired || !firebaseError || !profileSection || !displayNameInput || !googleIdValue || !discordIdValue || !discordServerValue || !createdAtValue) {
+    if (!loginRequired || !firebaseError || !profileSection || !displayNameInput || !discordServerValue || !createdAtValue) {
         return;
     }
 
@@ -139,8 +138,9 @@ function renderSettings(user, profile) {
 
     displayNameInput.value = profile.displayName;
     displayNameInput.dataset.originalValue = profile.displayName;
-    googleIdValue.textContent = profile.googleUserId;
-    discordIdValue.textContent = getLinkedDisplayValue(profile.discordId);
+    if (emailValue) {
+        emailValue.textContent = user.email || '（未設定）';
+    }
     discordServerValue.textContent = getLinkedDisplayValue(profile.discordServer);
     createdAtValue.textContent = new Date(profile.createdAt).toLocaleString('ja-JP');
     renderSettingsStatus('', '');
