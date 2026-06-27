@@ -418,22 +418,39 @@ function getAuthViewData(req: any) {
 // 記事一覧
 router.get('/', (req, res) => {
   const auth = getAuthViewData(req);
+  const userSession = req.session.user as any;
+  const currentGoogleUserId = typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '';
   const files = fs.readdirSync(DATA_DIR).filter(f => f.endsWith('.json'));
-  const articles = files.map(file => {
+  const articles = files.flatMap((file) => {
     const data = JSON.parse(fs.readFileSync(path.join(DATA_DIR, file), 'utf-8'));
+    const visibilityRaw = String(data.visibility || data.visibilality || '').toLowerCase().trim();
+    const authorId = resolveArticleAuthorId(data);
+    const isVisibleToCurrentUser = visibilityRaw === 'all'
+      || (visibilityRaw === 'self' && authorId.length > 0 && authorId === currentGoogleUserId);
+    if (!isVisibleToCurrentUser) {
+      return [];
+    }
+
+    const visibilityLabelByValue: Record<string, string> = {
+      all: '全体',
+      clan: 'クラン',
+      self: '自分'
+    };
+
     const partyMembers = resolveBoardDetailPartyMembers(data.party).slice().reverse();
-    return {
+    return [{
       id: file.replace('.json', ''),
       title: typeof data.postTitle === 'string' && data.postTitle.trim().length > 0
         ? data.postTitle.trim()
         : (typeof data.mode === 'string' && data.mode.trim().length > 0 ? data.mode.trim() : '無題'),
       authorName: resolveArticleAuthorName(data) || '未設定',
       damage: data.damage,
+      visibilityLabel: visibilityLabelByValue[visibilityRaw] || visibilityRaw || '-',
       partyMembers: partyMembers.slice(0, 5).map((member) => ({
         name: member.name,
         imagePath: member.imagePath
       }))
-    };
+    }];
   });
   res.render('board', {
     title: 'ゆかりさん△',

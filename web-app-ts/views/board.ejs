@@ -1,6 +1,5 @@
 <div class="page-content">
     <h2>掲示板</h2>
-    <p>クランメンバーとの情報共有スペースです。</p>
     
     <div class="board-header">
         <% if (isLoggedIn) { %>
@@ -17,6 +16,7 @@
                             <th>投稿者</th>
                             <th>ダメージ</th>
                             <th>編成</th>
+                            <th>公開範囲</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -41,6 +41,7 @@
                                         <% } %>
                                     </div>
                                 </td>
+                                <td><%= article.visibilityLabel || '-' %></td>
                             </tr>
                         <% }); %>
                     </tbody>
