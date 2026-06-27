@@ -958,6 +958,41 @@ body {
     z-index: 2;
 }
 
+.ub-state-badge {
+    position: absolute;
+    left: calc(-10px * var(--ub-icon-scale, 1));
+    bottom: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: calc(46px * var(--ub-icon-scale, 1));
+    height: calc(24px * var(--ub-icon-scale, 1));
+    padding: 0 calc(7px * var(--ub-icon-scale, 1));
+    border-radius: 999px;
+    background: #ffffff;
+    border: 1px solid #222222;
+    color: #222222;
+    font-size: calc(0.62rem * var(--ub-icon-scale, 1));
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    box-shadow: none;
+    pointer-events: none;
+    z-index: 3;
+    line-height: 1;
+}
+
+.ub-state-badge.is-unknown {
+    background: #e15252;
+    color: #ffffff;
+}
+
+.ub-state-badge.is-set,
+.ub-state-badge.is-auto,
+.ub-state-badge.is-timing {
+    background: #ffffff;
+    color: #222222;
+}
+
 .ub-icon-box.ub-timing-target .ub-party-image.ub-party-image-mono {
     filter: none;
 }

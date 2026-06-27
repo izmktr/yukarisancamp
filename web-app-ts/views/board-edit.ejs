@@ -158,6 +158,9 @@
                                             <div class="ub-event-image-missing ub-event-image-missing-blue"><%= row.ubText %></div>
                                         <% } %>
                                         <% if (isPartyCharRow) { %>
+                                            <span class="ub-state-badge" aria-hidden="true"></span>
+                                        <% } %>
+                                        <% if (isPartyCharRow) { %>
                                             <img src="/images/icon_bomb.png" alt="目押し" class="ub-timing-hoshi" />
                                         <% } %>
                                     </div>
@@ -171,9 +174,9 @@
                                             <div class="ub-icon-box ub-party-toggleable-char <%= (row.timing && isUbChar) ? 'ub-timing-target' : '' %>" data-icon-type="image" data-party-slot-name="<%= partySlot.name %>">
                                                 <img src="<%= partySlot.imagePath %>" alt="<%= partySlot.name %>" title="<%= partySlot.name %>" class="ub-party-image <%= isPartyActive ? '' : 'ub-party-image-mono' %>" />
                                                 <span class="ub-set-badge">SET!</span>
-                                                    <% if (isUbChar) { %>
-                                                        <img src="/images/icon_bomb.png" alt="目押し" class="ub-timing-hoshi" />
-                                                    <% } %>
+                                                <% if (isUbChar) { %>
+                                                    <img src="/images/icon_bomb.png" alt="目押し" class="ub-timing-hoshi" />
+                                                <% } %>
                                             </div>
                                         <% } else if (partySlot) { %>
                                             <div class="ub-icon-box ub-party-toggleable-char <%= (row.timing && isUbChar) ? 'ub-timing-target' : '' %>" data-icon-type="placeholder" data-party-slot-name="<%= partySlot.name %>">
@@ -966,6 +969,8 @@
                 iconBox.classList.toggle('ub-timing-target', Boolean(isTimingTarget));
             });
 
+            updateStateBadges();
+
             applyRowFilter();
         }
 
@@ -1055,6 +1060,75 @@
             return placeholder ? placeholder.classList.contains('ub-party-image-missing-blue') : false;
         }
 
+        function getDecodedUbText(row) {
+            const raw = row.dataset.ubText || '';
+            if (!raw) {
+                return '';
+            }
+
+            try {
+                return decodeURIComponent(raw);
+            } catch {
+                return raw;
+            }
+        }
+
+        function getAutoBadgeState(autoBox) {
+            if (!(autoBox instanceof HTMLElement)) {
+                return 'inactive-unset';
+            }
+
+            const autoBtn = autoBox.querySelector('.ub-auto-btn');
+            const isAutoActive = autoBtn ? autoBtn.classList.contains('ub-auto-btn-active') : false;
+            const isAutoSet = autoBtn ? autoBtn.classList.contains('ub-auto-btn-set') : false;
+
+            if (isAutoActive && isAutoSet) return 'active-set';
+            if (!isAutoActive && isAutoSet) return 'inactive-set';
+            if (isAutoActive && !isAutoSet) return 'active-unset';
+            return 'inactive-unset';
+        }
+
+        function updateStateBadges() {
+            const rows = Array.from(document.querySelectorAll('.ub-table tbody tr:not(.ub-comment-row)'));
+
+            rows.forEach((row) => {
+                const isTimingRow = row.dataset.timing === 'true';
+                const bodyBadge = row.querySelector('.ub-event-cell .ub-state-badge');
+                if (!(bodyBadge instanceof HTMLElement)) {
+                    return;
+                }
+
+                const rowUbText = getDecodedUbText(row);
+                const targetIconBox = Array.from(row.querySelectorAll('.ub-party-cell .ub-icon-box')).find((iconBox) => {
+                    return iconBox.dataset.partySlotName === rowUbText;
+                });
+
+                const autoBox = row.querySelector('.ub-auto-cell .ub-icon-box');
+                const autoState = getAutoBadgeState(autoBox);
+                const targetIsActive = targetIconBox ? isIconActive(targetIconBox) : false;
+                const targetHasSet = targetIconBox ? targetIconBox.classList.contains('has-set') : false;
+                const targetSetInactive = targetIconBox ? targetIconBox.classList.contains('set-inactive') : false;
+                const hasSetState = targetSetInactive || (targetIsActive && !targetHasSet);
+
+                let label = '???';
+                let badgeClass = 'ub-state-badge is-unknown';
+
+                if (isTimingRow) {
+                    label = 'TIMING';
+                    badgeClass = 'ub-state-badge is-timing';
+                } else if (hasSetState) {
+                    label = 'SET';
+                    badgeClass = 'ub-state-badge is-set';
+                } else if (autoState === 'inactive-set' || autoState === 'active-unset') {
+                    label = 'AUTO';
+                    badgeClass = 'ub-state-badge is-auto';
+                }
+
+                bodyBadge.className = badgeClass;
+                bodyBadge.textContent = label;
+            });
+        }
+
         function setIconActive(iconBox, active) {
             const iconType = iconBox.dataset.iconType;
             if (iconType === 'image') {
@@ -1129,6 +1203,7 @@
                 row.classList.toggle('ub-row-has-active', hasActiveIcon);
             });
 
+            updateStateBadges();
             applyRowFilter();
         }
 
