@@ -193,22 +193,7 @@ function normalizeCharacterLookupKey(name: string): string {
 }
 
 function normalizeCharacterName(name: string): string {
-  const trimmed = name.trim();
-  const swimsuitMatch = trimmed.match(/^水着(.+)$/);
-  if (swimsuitMatch && !trimmed.includes('（')) {
-    return `${swimsuitMatch[1].trim()}（サマー）`;
-  }
-
-  return trimmed;
-}
-
-function getSwimsuitAliasName(name: string): string | null {
-  const match = normalizeCharacterName(name).match(/^(.*)（サマー）$/);
-  if (!match) {
-    return null;
-  }
-
-  return `水着${match[1].trim()}`;
+  return name.trim();
 }
 
 function splitCharacterName(name: string): { base: string; suffix: string | null } {
@@ -226,18 +211,14 @@ function splitCharacterName(name: string): { base: string; suffix: string | null
 
 function resolveCharacterImagePath(name: string): string | null {
   const normalizedName = normalizeCharacterName(name);
-  const swimsuitAliasName = getSwimsuitAliasName(normalizedName);
   const exact = charaImageByName.get(normalizedName)
-    || charaImageByName.get(name)
-    || (swimsuitAliasName ? charaImageByName.get(swimsuitAliasName) : undefined);
+    || charaImageByName.get(name);
   if (exact) {
     return `/chara-images/${exact}`;
   }
 
   const normalizedKey = normalizeCharacterLookupKey(normalizedName);
-  const normalizedAliasKey = swimsuitAliasName ? normalizeCharacterLookupKey(swimsuitAliasName) : '';
-  const normalizedMatch = charaImageByNormalizedName.get(normalizedKey)
-    || (normalizedAliasKey ? charaImageByNormalizedName.get(normalizedAliasKey) : undefined);
+  const normalizedMatch = charaImageByNormalizedName.get(normalizedKey);
   if (normalizedMatch) {
     return `/chara-images/${normalizedMatch}`;
   }
