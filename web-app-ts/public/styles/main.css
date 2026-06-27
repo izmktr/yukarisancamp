@@ -897,6 +897,7 @@ body {
 .ub-table thead th:nth-child(2),
 .ub-table tbody td.ub-event-cell {
     padding-right: 0.95rem;
+    border-right: 2px solid #7f8fb2;
 }
 
 .ub-table thead th:nth-child(3),
@@ -1293,7 +1294,8 @@ tr[data-timing="true"] .ub-timing-hoshi {
 
 .ub-auto-btn-active {
     background: #7de3f9;
-    border-color: #29b6d9;
+    border-color: #e15252;
+    box-shadow: 0 0 0 4px #e15252;
     color: #0a5a78;
 }
 
@@ -1377,9 +1379,9 @@ tr[data-timing="true"] .ub-timing-hoshi {
     cursor: pointer;
 }
 
-/* ON + 活性 → 赤 */
+/* ON + 活性 → 青 */
 .ub-auto-btn-active .ub-auto-label-on {
-    color: #e15252;
+    color: #0a5a78;
 }
 
 /* OFF + 非活性 → 背景色に近い薄い色 */
