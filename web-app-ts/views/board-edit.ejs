@@ -8,7 +8,24 @@
         <button type="button" id="board-discard-button" class="btn">破棄</button>
     </div>
     <% } %>
-    <h2>記事編集</h2>
+    <div class="board-page-title-row">
+        <h2>記事編集</h2>
+        <button id="board-help-toggle" type="button" class="btn board-help-toggle-btn" aria-controls="board-help-panel" aria-expanded="false">使い方</button>
+    </div>
+    <section id="board-help-panel" class="board-help-panel" hidden>
+        <h3>記事編集の使い方</h3>
+        <ul>
+            <li>投稿情報でタイトル、コメント、難易度、公開範囲、種別を編集します。</li>
+            <li>ユニオンバースト発動時間のキャラアイコン、Autoをクリックすると、Setを切り替えます。</li>
+            <li><img src="/images/icon_comment.png" alt="コメント追加" class="ub-action-btn-image" /> コメント追加: コメント入力欄が追加されます。タイミング指示や注意事項を記入できます。</li>
+            <li><img src="/images/icon_add_line.png" alt="下に行を追加" class="ub-action-btn-image" /> 下に行を追加: 編集行が1行追加されます。UB発動タイミング以外で切り替える時に使用します。</li>
+            <li><img src="/images/icon_trash.png" alt="行を削除" class="ub-action-btn-image" /> 行を削除: 追加した行を削除します。</li>
+            <li><img src="/images/icon_hit.png" alt="目押し設定" class="ub-action-btn-image" /> 目押し設定: 目押しでUBを発動する場合に使用します。</li>
+            <li>UBのアイコンには、「UBの発動理由」が表示されます。???が表示された場合、UBが発動されない状態なので、TLを修正してください</li>
+            <li>「保存」で内容を確定し、「破棄」で未保存の変更を取り消せます。</li>
+            <li>表示切り替えを使うと、必要な操作行だけを確認できます。</li>
+        </ul>
+    </section>
     <div class="board-detail">
         <% 
           const authorValue = article.authorname || article.authorName || article.displayName || article.userName || (isNew ? (userName || '') : '');
@@ -121,18 +138,7 @@
                         <tr>
                             <th>残り時間</th>
                             <th>UB</th>
-                            <% for (let i = 0; i < 5; i += 1) { %>
-                                <% const headerSlot = partySlots[i]; %>
-                                <th class="ub-header-party-cell">
-                                    <% if (headerSlot && headerSlot.imagePath) { %>
-                                        <img src="<%= headerSlot.imagePath %>" alt="<%= headerSlot.name %>" title="<%= headerSlot.name %>" class="ub-party-image" />
-                                    <% } else if (headerSlot) { %>
-                                            <div class="ub-party-image-missing ub-party-image-missing-blue"><%= headerSlot.name %></div>
-                                    <% } else { %>
-                                        <span class="ub-party-empty">-</span>
-                                    <% } %>
-                                </th>
-                            <% } %>
+                            <th class="ub-header-party-cell" colspan="5">編成</th>
                             <th class="ub-auto-cell">Auto</th>
                             <th class="ub-actions-cell"></th>
                         </tr>

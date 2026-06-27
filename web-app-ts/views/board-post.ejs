@@ -1,6 +1,21 @@
 <div class="page-content">
+    <p>
+        <a href="/board" class="btn">一覧へ戻る</a>
+    </p>
     <% if (isLoggedIn) { %>
-    <h2>新規投稿</h2>
+    <div class="board-page-title-row">
+        <h2>新規投稿</h2>
+        <button id="board-help-toggle" type="button" class="btn board-help-toggle-btn" aria-controls="board-help-panel" aria-expanded="false">使い方</button>
+    </div>
+    <section id="board-help-panel" class="board-help-panel" hidden>
+        <h3>新規投稿の使い方</h3>
+        <ul>
+            <li>プリコネのバトルTLから「クリップボードにコピー」を選び、投稿内容欄にそのテキストをそのまま貼り付けます。</li>
+            <li>1行目にボス名、2行目にダメージ、3行目にバトル時間、4行目にバトル日時が必要です。</li>
+            <li>「投稿」を押すと内容を解析し、問題なければ編集画面に進みます。</li>
+            <li>エラーが表示された場合は形式を確認して再投稿してください。</li>
+        </ul>
+    </section>
     <form id="board-post-form" action="/board/edit" method="post">
         <div class="post-info-row post-info-row-static post-info-row-inline">
             <div class="post-info-inline-group">

@@ -1,5 +1,16 @@
 <div class="page-content">
-    <h2>掲示板</h2>
+    <div class="board-page-title-row">
+        <h2>掲示板</h2>
+        <button id="board-help-toggle" type="button" class="btn board-help-toggle-btn" aria-controls="board-help-panel" aria-expanded="false">使い方</button>
+    </div>
+
+    <section id="board-help-panel" class="board-help-panel" hidden>
+        <h3>掲示板の使い方</h3>
+        <ul>
+            <li>タイトルを押すと投稿詳細を開けます。</li>
+            <li>ログイン済みの場合は「新規投稿」から投稿を作成できます。</li>
+        </ul>
+    </section>
     
     <div class="board-header">
         <% if (isLoggedIn) { %>

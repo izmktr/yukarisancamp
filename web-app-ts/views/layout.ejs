@@ -33,16 +33,14 @@
     <nav class="tabs">
         <div class="tab-content">
             <a href="/info" class="tab <%= currentPage === 'info' ? 'active' : '' %>">情報</a>
-            <% if (isAdmin) { %>
-                <a href="/board" class="tab <%= currentPage === 'board' ? 'active' : '' %>">掲示板</a>
-            <% } %>
+            <a href="/board" class="tab <%= currentPage === 'board' ? 'active' : '' %>">掲示板</a>
             <% if (isLoggedIn) { %>
                 <a href="/settings" class="tab <%= currentPage === 'settings' ? 'active' : '' %>">設定</a>
             <% } %>
             <% if (isAdmin) { %>
-                <a href="/chara-check" class="tab <%= currentPage === 'chara-check' ? 'active' : '' %>">キャラ確認</a>
-                <a href="/clanlist" class="tab <%= currentPage === 'clanlist' ? 'active' : '' %>">クラン一覧</a>
-                <a href="/clanbattle-settings" class="tab <%= currentPage === 'clanbattle-settings' ? 'active' : '' %>">クラバト設定</a>
+                <a href="/chara-check" class="tab admin-tab <%= currentPage === 'chara-check' ? 'active' : '' %>">キャラ確認</a>
+                <a href="/clanlist" class="tab admin-tab <%= currentPage === 'clanlist' ? 'active' : '' %>">クラン一覧</a>
+                <a href="/clanbattle-settings" class="tab admin-tab <%= currentPage === 'clanbattle-settings' ? 'active' : '' %>">クラバト設定</a>
             <% } %>
         </div>
     </nav>

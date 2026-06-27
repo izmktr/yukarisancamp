@@ -177,6 +177,29 @@ body {
     border-radius: 8px 8px 0 0;
 }
 
+.tab.admin-tab {
+    color: #8a1c1c;
+    background: #fdeaea;
+    border-color: #f3c2c2;
+}
+
+.tab.admin-tab:hover {
+    background: #fde0e0;
+    color: #731515;
+    box-shadow: 0 2px 8px rgba(184, 54, 54, 0.15);
+}
+
+.tab.admin-tab.active {
+    background: #fff;
+    color: #b42323;
+    border-color: #d94d4d;
+    box-shadow: 0 -2px 8px rgba(184, 54, 54, 0.2);
+}
+
+.tab.admin-tab.active::before {
+    background: linear-gradient(90deg, #d94d4d, #b42323);
+}
+
 /* メインコンテンツ */
 .main-content {
     max-width: 1200px;
@@ -332,6 +355,60 @@ body {
     color: #b42318;
 }
 
+.board-page-title-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    border-bottom: 2px solid #f1f3f4;
+    margin-bottom: 1rem;
+}
+
+.board-page-title-row h2 {
+    margin-bottom: 0;
+    border-bottom: none;
+}
+
+.board-help-toggle-btn {
+    background: #eef3ff;
+    color: #2f4ca3;
+    border: 1px solid #c9d7ff;
+    font-weight: 600;
+    padding: 8px 14px;
+}
+
+.board-help-toggle-btn:hover {
+    background: #e3ebff;
+    color: #253d84;
+}
+
+.board-help-panel {
+    margin: 0 0 1rem 0;
+    padding: 0.85rem 1rem;
+    border-radius: 10px;
+    background: #f8faff;
+    border: 1px solid #dbe5ff;
+    color: #2e3d6b;
+}
+
+.board-help-panel h3 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1rem;
+}
+
+.board-help-panel ul {
+    margin: 0;
+    padding-left: 1.25rem;
+}
+
+.board-help-panel li + li {
+    margin-top: 0.35rem;
+}
+
+.board-header {
+    margin-bottom: 0.75rem;
+}
+
 .board-list-table-wrap {
     overflow-x: auto;
 }
@@ -414,6 +491,10 @@ body {
 }
 
 @media (max-width: 768px) {
+    .board-page-title-row {
+        align-items: center;
+    }
+
     .board-list-table th,
     .board-list-table td {
         padding: 0.55rem;
@@ -1278,6 +1359,12 @@ tr[data-timing="true"] .ub-timing-hoshi {
     color: #9aa5c4;
 }
 
+.ub-header-party-label {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #34406a;
+}
+
 .ub-party-image-missing-gray {
     width: calc(84px * var(--ub-icon-scale, 1));
     height: calc(84px * var(--ub-icon-scale, 1));
@@ -1730,6 +1817,16 @@ tr[data-timing="true"] .ub-timing-hoshi {
 
     .tab.active {
         border-radius: 6px;
+    }
+
+    .board-page-title-row {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 0.6rem;
+    }
+
+    .board-help-toggle-btn {
+        width: 100%;
     }
 
     .page-content h2 {

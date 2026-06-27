@@ -26,7 +26,17 @@
         <p>
             <a href="/board" class="btn">一覧へ戻る</a>
         </p>
-        <h2><%= article.postTitle || '記事詳細' %></h2>
+        <div class="board-page-title-row">
+            <h2><%= article.postTitle || '記事詳細' %></h2>
+            <button id="board-help-toggle" type="button" class="btn board-help-toggle-btn" aria-controls="board-help-panel" aria-expanded="false">使い方</button>
+        </div>
+        <section id="board-help-panel" class="board-help-panel" hidden>
+            <h3>記事詳細の使い方</h3>
+            <ul>
+                <li>表示切り替えやサイズ変更で見やすく調整できます。</li>
+                <li>自身が投稿したタイムラインであれば、画面右上の「編集」「削除」を利用できます。</li>
+            </ul>
+        </section>
     <div class="board-detail">
         <section class="post-info-editor" aria-label="情報">
             <h3>情報</h3>
@@ -124,18 +134,7 @@
                         <tr>
                             <th>残り時間</th>
                             <th>UB</th>
-                            <% for (let i = 0; i < 5; i += 1) { %>
-                                <% const headerSlot = partySlots[i]; %>
-                                <th class="ub-header-party-cell">
-                                    <% if (headerSlot && headerSlot.imagePath) { %>
-                                        <img src="<%= headerSlot.imagePath %>" alt="<%= headerSlot.name %>" title="<%= headerSlot.name %>" class="ub-party-image" />
-                                    <% } else if (headerSlot) { %>
-                                        <div class="ub-party-image-missing ub-party-image-missing-blue"><%= headerSlot.name %></div>
-                                    <% } else { %>
-                                        <span class="ub-party-empty">-</span>
-                                    <% } %>
-                                </th>
-                            <% } %>
+                            <th class="ub-header-party-cell" colspan="5">編成</th>
                             <th class="ub-auto-cell">Auto</th>
                         </tr>
                     </thead>

@@ -431,6 +431,30 @@ function initializeBoardPostPage() {
     });
 }
 
+function initializeBoardHelpToggle() {
+    const toggleButton = document.getElementById('board-help-toggle');
+    const helpPanel = document.getElementById('board-help-panel');
+
+    if (!toggleButton || !helpPanel) {
+        return;
+    }
+
+    let isOpen = false;
+
+    const render = () => {
+        helpPanel.hidden = !isOpen;
+        toggleButton.textContent = isOpen ? '閉じる' : '使い方';
+        toggleButton.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    };
+
+    render();
+
+    toggleButton.addEventListener('click', () => {
+        isOpen = !isOpen;
+        render();
+    });
+}
+
 function getPreviousYearMonth(yearmonth) {
     if (!/^\d{6}$/.test(yearmonth)) {
         return '';
@@ -1084,6 +1108,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeSettingsPage();
     initializeClanBattleSettingsPage();
     initializeBoardPostPage();
+    initializeBoardHelpToggle();
 
     const currentPath = window.location.pathname;
     switch (currentPath) {
