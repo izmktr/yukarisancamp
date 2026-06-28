@@ -3,6 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.refreshBoardCharaImageCache = refreshBoardCharaImageCache;
 const express_1 = require("express");
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
@@ -96,9 +97,20 @@ function loadCharaIndex() {
         return [];
     }
 }
-const charaIndex = loadCharaIndex();
-const charaImageByName = new Map(charaIndex.map((entry) => [entry.name, entry.fileName]));
-const charaImageByNormalizedName = new Map(charaIndex.map((entry) => [normalizeCharacterLookupKey(entry.name), entry.fileName]));
+let charaIndex = [];
+let charaImageByName = new Map();
+let charaImageByNormalizedName = new Map();
+function rebuildCharaImageCache() {
+    const loaded = loadCharaIndex();
+    charaIndex = loaded;
+    charaImageByName = new Map(loaded.map((entry) => [entry.name, entry.fileName]));
+    charaImageByNormalizedName = new Map(loaded.map((entry) => [normalizeCharacterLookupKey(entry.name), entry.fileName]));
+    return loaded.length;
+}
+function refreshBoardCharaImageCache() {
+    return rebuildCharaImageCache();
+}
+rebuildCharaImageCache();
 function normalizeCharacterLookupKey(name) {
     return (name || '')
         .toLowerCase()
@@ -106,19 +118,7 @@ function normalizeCharacterLookupKey(name) {
         .trim();
 }
 function normalizeCharacterName(name) {
-    const trimmed = name.trim();
-    const swimsuitMatch = trimmed.match(/^水着(.+)$/);
-    if (swimsuitMatch && !trimmed.includes('（')) {
-        return `${swimsuitMatch[1].trim()}（サマー）`;
-    }
-    return trimmed;
-}
-function getSwimsuitAliasName(name) {
-    const match = normalizeCharacterName(name).match(/^(.*)（サマー）$/);
-    if (!match) {
-        return null;
-    }
-    return `水着${match[1].trim()}`;
+    return name.trim();
 }
 function splitCharacterName(name) {
     const trimmed = normalizeCharacterName(name);
@@ -133,17 +133,13 @@ function splitCharacterName(name) {
 }
 function resolveCharacterImagePath(name) {
     const normalizedName = normalizeCharacterName(name);
-    const swimsuitAliasName = getSwimsuitAliasName(normalizedName);
     const exact = charaImageByName.get(normalizedName)
-        || charaImageByName.get(name)
-        || (swimsuitAliasName ? charaImageByName.get(swimsuitAliasName) : undefined);
+        || charaImageByName.get(name);
     if (exact) {
         return `/chara-images/${exact}`;
     }
     const normalizedKey = normalizeCharacterLookupKey(normalizedName);
-    const normalizedAliasKey = swimsuitAliasName ? normalizeCharacterLookupKey(swimsuitAliasName) : '';
-    const normalizedMatch = charaImageByNormalizedName.get(normalizedKey)
-        || (normalizedAliasKey ? charaImageByNormalizedName.get(normalizedAliasKey) : undefined);
+    const normalizedMatch = charaImageByNormalizedName.get(normalizedKey);
     if (normalizedMatch) {
         return `/chara-images/${normalizedMatch}`;
     }

@@ -8,17 +8,23 @@
         </div>
     <% } else { %>
         <div class="clan-list-table-wrapper">
-            <table class="clan-list-table">
+            <table class="clan-list-table" id="clanListTable">
                 <thead>
                     <tr>
-                        <th>クラン名</th>
-                        <th>メンバー数</th>
-                        <th>bosscount</th>
+                        <th class="sortable-header" data-sort-key="name">
+                            クラン名 <span class="sort-indicator"></span>
+                        </th>
+                        <th class="sortable-header" data-sort-key="memberCount">
+                            メンバー数 <span class="sort-indicator"></span>
+                        </th>
+                        <th class="sortable-header" data-sort-key="bossCountText">
+                            bosscount <span class="sort-indicator"></span>
+                        </th>
                     </tr>
                 </thead>
                 <tbody>
                     <% clans.forEach((clan) => { %>
-                        <tr class="clan-list-row" data-href="/clandata/<%= clan.id %>">
+                        <tr class="clan-list-row" data-href="/clandata/<%= clan.id %>" data-name="<%= clan.name %>" data-member-count="<%= clan.memberCount %>" data-boss-count-text="<%= clan.bossCountText %>">
                             <td><%= clan.name %></td>
                             <td><%= clan.memberCount %></td>
                             <td><%= clan.bossCountText %></td>
@@ -30,10 +36,115 @@
     <% } %>
 </div>
 
+<style>
+    .sortable-header {
+        cursor: pointer;
+        user-select: none;
+        white-space: nowrap;
+    }
+
+    .sortable-header:hover {
+        background-color: rgba(0, 0, 0, 0.05);
+    }
+
+    .sort-indicator {
+        display: inline-block;
+        margin-left: 0.5em;
+        font-size: 0.8em;
+        min-width: 1em;
+    }
+
+    .sort-indicator.asc::after {
+        content: "↑";
+    }
+
+    .sort-indicator.desc::after {
+        content: "↓";
+    }
+</style>
+
 <script>
+    let currentSortKey = 'name';
+    let currentSortOrder = 'asc';
+
+    const table = document.getElementById('clanListTable');
+    const headers = table.querySelectorAll('.sortable-header');
+    const tbody = table.querySelector('tbody');
+
+    headers.forEach((header) => {
+        header.addEventListener('click', () => {
+            const sortKey = header.dataset.sortKey;
+
+            // 同じカラムがクリックされた場合は昇順/降順を切り替え
+            if (currentSortKey === sortKey) {
+                currentSortOrder = currentSortOrder === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSortKey = sortKey;
+                currentSortOrder = 'asc';
+            }
+
+            updateSortIndicators();
+            sortTable();
+        });
+    });
+
+    function updateSortIndicators() {
+        headers.forEach((header) => {
+            const indicator = header.querySelector('.sort-indicator');
+            indicator.classList.remove('asc', 'desc');
+
+            if (header.dataset.sortKey === currentSortKey) {
+                indicator.classList.add(currentSortOrder);
+            }
+        });
+    }
+
+    function sortTable() {
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+
+        rows.sort((a, b) => {
+            let valueA, valueB;
+
+            if (currentSortKey === 'memberCount') {
+                valueA = parseInt(a.dataset.memberCount, 10);
+                valueB = parseInt(b.dataset.memberCount, 10);
+            } else {
+                valueA = a.dataset[toCamelCase(currentSortKey)];
+                valueB = b.dataset[toCamelCase(currentSortKey)];
+            }
+
+            if (typeof valueA === 'string') {
+                valueA = valueA.toLowerCase();
+                valueB = valueB.toLowerCase();
+                return currentSortOrder === 'asc'
+                    ? valueA.localeCompare(valueB, 'ja')
+                    : valueB.localeCompare(valueA, 'ja');
+            } else {
+                return currentSortOrder === 'asc'
+                    ? valueA - valueB
+                    : valueB - valueA;
+            }
+        });
+
+        rows.forEach((row) => {
+            tbody.appendChild(row);
+        });
+    }
+
+    function toCamelCase(str) {
+        return str.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
+    }
+
+    // 行クリックでリンク遷移
     document.addEventListener('click', (event) => {
         const row = event.target instanceof Element ? event.target.closest('.clan-list-row') : null;
         if (!(row instanceof HTMLElement)) {
+            return;
+        }
+
+        // ヘッダーのクリックイベント伝播を防ぐため、ヘッダーセルがクリックされた場合は無視
+        const isHeaderClick = event.target.closest('thead');
+        if (isHeaderClick) {
             return;
         }
 

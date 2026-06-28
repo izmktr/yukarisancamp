@@ -4,5 +4,6 @@ declare module 'express-session' {
     }
 }
 declare const router: import("express-serve-static-core").Router;
+export declare function refreshBoardCharaImageCache(): number;
 export default router;
 //# sourceMappingURL=board.d.ts.map

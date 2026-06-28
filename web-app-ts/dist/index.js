@@ -1,5 +1,38 @@
 "use strict";
 /// <reference path="./types/session.d.ts" />
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -161,7 +194,7 @@ app.get('/info', (req, res) => {
 app.get('/users', (_req, res) => {
     res.redirect('/info');
 });
-const board_2 = __importDefault(require("./routes/board"));
+const board_2 = __importStar(require("./routes/board"));
 app.use('/board', board_2.default);
 app.get('/settings', (req, res) => {
     res.render('settings', {
@@ -191,6 +224,8 @@ function getUploadFlashFromQuery(req) {
     const addedFileName = typeof req.query.addedFileName === 'string' ? req.query.addedFileName : '';
     const editStatus = typeof req.query.editStatus === 'string' ? req.query.editStatus : '';
     const editedFileName = typeof req.query.editedFileName === 'string' ? req.query.editedFileName : '';
+    const cacheStatus = typeof req.query.cacheStatus === 'string' ? req.query.cacheStatus : '';
+    const cacheCount = typeof req.query.cacheCount === 'string' ? req.query.cacheCount : '';
     if (status === 'success' && fileName) {
         return {
             type: 'success',
@@ -279,6 +314,19 @@ function getUploadFlashFromQuery(req) {
         return {
             type: 'error',
             message: 'キャラ名の更新に失敗しました。'
+        };
+    }
+    if (cacheStatus === 'success') {
+        const countText = /^\d+$/.test(cacheCount) ? `（${cacheCount}件）` : '';
+        return {
+            type: 'success',
+            message: `掲示板のキャラ画像キャッシュを再読込しました${countText}。`
+        };
+    }
+    if (cacheStatus === 'failed') {
+        return {
+            type: 'error',
+            message: '掲示板のキャラ画像キャッシュ再読込に失敗しました。'
         };
     }
     return null;
@@ -450,6 +498,16 @@ app.post('/chara-check/update', ensureAdmin, (req, res) => {
         redirectCharaEditStatus(res, 'failed');
     }
 });
+app.post('/chara-check/refresh-cache', ensureAdmin, (_req, res) => {
+    try {
+        const cacheCount = (0, board_2.refreshBoardCharaImageCache)();
+        res.redirect(`/chara-check?cacheStatus=success&cacheCount=${cacheCount}`);
+    }
+    catch (error) {
+        console.error('Failed to refresh board chara image cache:', error);
+        res.redirect('/chara-check?cacheStatus=failed');
+    }
+});
 app.get('/clanlist', ensureAdmin, (req, res) => {
     const clanDataDirPath = path_1.default.join(__dirname, '../clandata');
     let clans = [];
@@ -473,7 +531,16 @@ app.get('/clanlist', ensureAdmin, (req, res) => {
                 ? Object.keys(parsed.members).length
                 : 0;
             const bossCountText = Array.isArray(parsed?.bosscount)
-                ? parsed.bosscount.map((value) => String(value)).join(', ')
+                ? (() => {
+                    const numericBossCounts = parsed.bosscount
+                        .map((value) => Number(value))
+                        .filter((value) => Number.isFinite(value));
+                    if (numericBossCounts.length === 0) {
+                        return '-';
+                    }
+                    const maxBossCount = Math.max(...numericBossCounts);
+                    return String(maxBossCount + 1);
+                })()
                 : '-';
             return {
                 id: clanId,
