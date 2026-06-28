@@ -802,7 +802,7 @@ body {
 }
 
 .ub-table-wrapper.ub-icon-size-small {
-    --ub-icon-scale: 0.5;
+    --ub-icon-scale: 0.44;
 }
 
 .ub-toolbar {
@@ -991,6 +991,45 @@ body {
     color: #34406a;
     font-size: 0.82rem;
     font-weight: 700;
+}
+
+.ub-table-wrapper.ub-icon-size-large .ub-table thead th.ub-header-party-cell,
+.ub-table-wrapper.ub-icon-size-large .ub-table thead th.ub-auto-cell,
+.ub-table-wrapper.ub-icon-size-large .ub-table tbody td.ub-party-cell,
+.ub-table-wrapper.ub-icon-size-large .ub-table tbody td.ub-auto-cell {
+    padding-left: 0.24rem;
+    padding-right: 0.24rem;
+}
+
+.ub-table-wrapper.ub-icon-size-large .ub-table thead th:nth-child(3),
+.ub-table-wrapper.ub-icon-size-large .ub-table tbody td.ub-party-cell:first-of-type {
+    padding-left: 0.24rem;
+}
+
+.ub-table-wrapper.ub-icon-size-medium .ub-table thead th.ub-header-party-cell,
+.ub-table-wrapper.ub-icon-size-medium .ub-table thead th.ub-auto-cell,
+.ub-table-wrapper.ub-icon-size-medium .ub-table tbody td.ub-party-cell,
+.ub-table-wrapper.ub-icon-size-medium .ub-table tbody td.ub-auto-cell {
+    padding-left: 0.16rem;
+    padding-right: 0.16rem;
+}
+
+.ub-table-wrapper.ub-icon-size-medium .ub-table thead th:nth-child(3),
+.ub-table-wrapper.ub-icon-size-medium .ub-table tbody td.ub-party-cell:first-of-type {
+    padding-left: 0.16rem;
+}
+
+.ub-table-wrapper.ub-icon-size-small .ub-table thead th.ub-header-party-cell,
+.ub-table-wrapper.ub-icon-size-small .ub-table thead th.ub-auto-cell,
+.ub-table-wrapper.ub-icon-size-small .ub-table tbody td.ub-party-cell,
+.ub-table-wrapper.ub-icon-size-small .ub-table tbody td.ub-auto-cell {
+    padding-left: 0.06rem;
+    padding-right: 0.06rem;
+}
+
+.ub-table-wrapper.ub-icon-size-small .ub-table thead th:nth-child(3),
+.ub-table-wrapper.ub-icon-size-small .ub-table tbody td.ub-party-cell:first-of-type {
+    padding-left: 0.06rem;
 }
 
 .ub-table tbody tr:last-child td {
@@ -1581,7 +1620,6 @@ tr[data-timing="true"] .ub-timing-hoshi {
 
     .ub-table-wrapper.ub-icon-size-small .ub-table {
         width: 100%;
-        table-layout: fixed;
     }
 
     .ub-table-wrapper.ub-icon-size-small .ub-table th,
@@ -1601,6 +1639,26 @@ tr[data-timing="true"] .ub-timing-hoshi {
 
     .ub-table-wrapper.ub-icon-size-small .ub-time-cell {
         min-width: 46px;
+    }
+
+    .ub-table-wrapper.ub-icon-size-small .ub-table thead th {
+        font-size: 0.68rem;
+    }
+
+    .ub-table-wrapper.ub-icon-size-small .ub-time-main {
+        font-size: 0.82rem;
+    }
+
+    .ub-table-wrapper.ub-icon-size-small .ub-time-diff {
+        font-size: 0.62rem;
+    }
+
+    .ub-table-wrapper.ub-icon-size-small .ub-auto-label {
+        font-size: calc(0.72rem * var(--ub-icon-scale, 1));
+    }
+
+    .ub-table-wrapper.ub-icon-size-small .ub-set-badge {
+        font-size: calc(0.76rem * var(--ub-icon-scale, 1));
     }
 }
 
