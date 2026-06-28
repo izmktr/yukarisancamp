@@ -1,11 +1,90 @@
 <div class="page-content">
-    <h2>情報</h2>
-    <p>このアプリの概要ページです。</p>
+    <h2>紹介</h2>
+    <p>ようこそ！「ゆかりさん△」は、クラバトをサポートするDiscord/Webアプリです。</p>
 
-    <div class="placeholder-content">
-        <h3>ゆかりさん△ について</h3>
+    <div class="info-section">
+        <h3>📱 ゆかりさん△ とは</h3>
         <p>
-            クラン活動を支援するためのWebアプリです。
+            「ゆかりさん△」は、プリンセスコネクト！Re:Diveのクラン戦（クラバト）の進捗管理やメンバー情報を一元管理できるWebアプリです。
+            クラン内の情報共有を効率化し、皆で協力しながらクラン活動を進めるための支援ツールです。
         </p>
     </div>
+
+    <div class="info-section">
+        <h3>✨ 主な機能</h3>
+        <ul>
+            <li><strong>凸管理</strong> — クランメンバーの凸状況を管理できます</li>
+            <li><strong>ダメコン管理</strong> — ボスに与えたダメージを管理できます</li>
+            <li><strong>タイムライン支援</strong> — ボスのタイムラインを簡単に作成できます</li>
+            <li><strong>Discord連携</strong> — Discordと連携して、データを共有できます</li>
+        </ul>
+    </div>
+
+    <div class="info-section">
+        <h3>🚀 使い方</h3>
+        <ol>
+            <li>掲示板(タイムライン支援)はだれでも閲覧できますが、投稿にはGoogleIDを使ったログインが必要です</li>
+            <li>クラン管理機能は、Discord連携を通じて利用できます 「ゆかりさんbot」を自分のDiscordサーバーに招待してください</li>
+            <a href="https://discord.com/oauth2/authorize?client_id=857143280679387136" target="_blank">Discordサーバーに招待する</a>
+        </ol>
+    </div>
+
+    <div class="info-section">
+        <h3>🔐 セキュリティについて</h3>
+        <p>
+            このアプリでは、Google認証（Firebase）を使用してセキュアなログインを実現しています。
+        </p>
+        <h4>Googleアカウントでログインしたときの情報取得について</h4>
+        <p>
+            Googleアカウントでログインすると、以下の情報がサーバから取得されます：
+        </p>
+        <ul>
+            <li><strong>メールアドレス</strong> — アカウント管理や連絡用として使用します</li>
+            <li><strong>表示名</strong> — クラン内で他のメンバーに表示される名前です。設定ページで変更できます</li>
+        </ul>
+            <strong>プライバシー：</strong>取得した情報は本アプリの運用に限定され、第三者に共有されることはありません。
+        </p>
+    </div>
+
+    <div class="info-section">
+        <h3>❓ サポート関連</h3>
+        <p>
+            ご質問や不具合報告は、Discordサーバーで受け付けています。
+            また、アプリの改善提案やフィードバックも歓迎しています。皆様のご意見をお待ちしております。<br/>
+            <a href="https://discord.gg/SSwRNgCUb" target="_blank">Discordサーバーに参加する</a>
+        </p>
+    </div>
+
+    <style>
+        .info-section {
+            background-color: #f9f9f9;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            border-left: 4px solid #0066cc;
+        }
+
+        .info-section h3 {
+            margin-top: 0;
+            color: #0066cc;
+        }
+
+        .info-section ul {
+            padding-left: 20px;
+        }
+
+        .info-section li {
+            margin: 10px 0;
+            line-height: 1.6;
+        }
+
+        .info-section ol {
+            padding-left: 20px;
+        }
+
+        .info-section ol li {
+            margin: 10px 0;
+            line-height: 1.6;
+        }
+    </style>
 </div>
