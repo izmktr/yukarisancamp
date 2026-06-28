@@ -206,11 +206,18 @@ function initializeSettingsPage() {
     renderSettings(currentAuthUser, currentUserProfile);
 }
 
-function getCurrentYearMonth() {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    return `${year}${month}`;
+function getBaseYearMonth(referenceDate = new Date()) {
+    const year = referenceDate.getFullYear();
+    const month = referenceDate.getMonth();
+    const monthEndDate = new Date(year, month + 1, 0).getDate();
+    const currentMonthThreshold = monthEndDate - 9;
+    const baseDate = referenceDate.getDate() > currentMonthThreshold
+        ? referenceDate
+        : new Date(year, month, 0);
+
+    const baseYear = baseDate.getFullYear();
+    const baseMonth = String(baseDate.getMonth() + 1).padStart(2, '0');
+    return `${baseYear}${baseMonth}`;
 }
 
 function getCurrentTimestampId() {
@@ -229,7 +236,7 @@ async function loadCurrentClanBattleBossNamesForPosting() {
         throw new Error('Firestore に接続できませんでした。');
     }
 
-    const yearmonth = getCurrentYearMonth();
+    const yearmonth = getBaseYearMonth();
     const docRef = getClanBattleDocRef(yearmonth);
     if (!docRef) {
         throw new Error('クラバト設定を取得できませんでした。');
@@ -668,7 +675,7 @@ function getClanBattleDocRef(yearmonth) {
 }
 
 async function ensureClanBattleStateForCurrentMonth() {
-    const yearmonth = getCurrentYearMonth();
+    const yearmonth = getBaseYearMonth();
     currentClanBattleDocId = yearmonth;
 
     const currentDocRef = getClanBattleDocRef(yearmonth);

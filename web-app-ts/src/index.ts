@@ -585,7 +585,18 @@ app.get('/clanlist', ensureAdmin, (req, res) => {
         : 0;
 
       const bossCountText = Array.isArray(parsed?.bosscount)
-        ? parsed.bosscount.map((value: unknown) => String(value)).join(', ')
+        ? (() => {
+            const numericBossCounts = parsed.bosscount
+              .map((value: unknown) => Number(value))
+              .filter((value: number) => Number.isFinite(value));
+
+            if (numericBossCounts.length === 0) {
+              return '-';
+            }
+
+            const maxBossCount = Math.max(...numericBossCounts);
+            return String(maxBossCount + 1);
+          })()
         : '-';
 
       return {
