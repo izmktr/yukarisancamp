@@ -1,10 +1,6 @@
 # Supabase接続設定手順（web-app-ts）
 
-このドキュメントは、web-app-ts の「クラバト設定の保存」を Supabase に向けるために必要なサーバ設定をまとめたものです。
-
-現状の仕様:
-- 読み込み: Firebase（Firestore）
-- 保存: Supabase（サーバAPI経由）
+このドキュメントは、web-app-ts の「クラバト設定」と「設定画面プロフィール」の読み込み・保存を Supabase に向けるために必要なサーバ設定をまとめたものです。
 
 ## 1. 必須環境変数
 
@@ -13,7 +9,6 @@ web-app-ts/.env.local に以下を設定します。
 ```env
 SUPABASE_URL=
 SUPABASE_SECRET_KEY=
-SUPABASE_CLAN_BATTLE_TABLE=clan_battles
 
 # 既存で利用中（今回の保存APIでは未使用）
 SUPABASE_PUBLISHABLE_KEY=
@@ -21,8 +16,8 @@ SUPABASE_JWKS_URL=
 ```
 
 補足:
-- `SUPABASE_CLAN_BATTLE_TABLE` 未設定時は `clan_battles` を使用します。
-- 保存APIはサーバ側で `SUPABASE_SECRET_KEY` を使って Supabase REST API に `upsert` します。
+- テーブル名は `setting_clanbattle` と `setting_userprofile` の固定です。
+- APIはサーバ側で `SUPABASE_SECRET_KEY` を使って Supabase REST API に `upsert` します。
 
 ## 2. 値の取得場所
 
@@ -41,7 +36,7 @@ Supabaseダッシュボードから取得します。
 
 保存API（`POST /api/clanbattle-settings/save`）が期待するテーブル要件は以下です。
 
-- テーブル名: `SUPABASE_CLAN_BATTLE_TABLE`（デフォルト `clan_battles`）
+- テーブル名: `setting_clanbattle`（固定）
 - 主キーまたは一意制約: `yearmonth`
   - `upsert` の重複解決に必要
 - 想定カラム:
@@ -54,7 +49,7 @@ Supabaseダッシュボードから取得します。
 以下は作成例です。
 
 ```sql
-create table if not exists public.clan_battles (
+create table if not exists public.setting_clanbattle (
   yearmonth text primary key,
   bossname text[] not null,
   "bossHp" integer[] not null,
@@ -75,16 +70,55 @@ create table if not exists public.clan_battles (
 - ログにキー全文を出さないでください。
 - 本アプリでは `ensureAdmin` を通過したユーザーのみ保存APIを実行できます。
 
-## 5. 動作確認手順
+## 5. 設定画面プロフィールテーブル要件（schema準拠）
+
+設定画面API（`GET /api/settings/profile/current`, `POST /api/settings/profile/save`）が期待するテーブル要件です。
+
+- テーブル名: `setting_userprofile`（固定）
+- 主キーまたは一意制約: `googleUserId`
+- 想定カラム（`schema/userProfile.schema.json` 準拠）:
+  - `googleUserId` text
+  - `discordId` text null
+  - `discordServer` text null
+  - `displayName` text
+  - `createdAt` bigint
+  - `ownedCharacters` jsonb
+
+`ownedCharacters` の要素は以下の構造を想定します。
+
+```json
+{
+  "officialName": "string",
+  "nickname": "string",
+  "owned": true,
+  "connectRank": 0
+}
+```
+
+作成例:
+
+```sql
+create table if not exists public.setting_userprofile (
+  "googleUserId" text primary key,
+  "discordId" text null,
+  "discordServer" text null,
+  "displayName" text not null,
+  "createdAt" bigint not null,
+  "ownedCharacters" jsonb not null default '[]'::jsonb,
+  updated_at timestamptz not null default now()
+);
+```
+
+## 6. 動作確認手順
 
 1. `web-app-ts/.env.local` を設定
-2. Supabase に `clan_battles` テーブル（または指定テーブル）を作成
+2. Supabase に `setting_clanbattle` と `setting_userprofile` テーブルを作成
 3. web-app-ts を起動
-4. `/clanbattle-settings` を開いてログイン（管理者ユーザー）
-5. 値を変更して保存
-6. Supabase 側テーブルに `yearmonth` 行が insert/update されることを確認
+4. `/settings` を開いてログイン
+5. 表示名変更を保存し、`setting_userprofile` の対象 `googleUserId` 行が insert/update されることを確認
+6. `/clanbattle-settings` を開いて保存し、`setting_clanbattle` の `yearmonth` 行が insert/update されることを確認
 
-## 6. よくある問題
+## 7. よくある問題
 
 ### 502 Failed to save clanbattle settings to Supabase
 - 原因例: テーブル未作成、`yearmonth` の一意制約不足、カラム名不一致

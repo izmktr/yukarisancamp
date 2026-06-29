@@ -27,6 +27,28 @@ export interface UserProfile {
      * The timestamp when the profile was created.
      */
     createdAt: number;
+    /**
+     * 所持キャラ一覧。
+     */
+    ownedCharacters?: {
+        /**
+         * 公式名
+         */
+        officialName: string;
+        /**
+         * 愛称
+         */
+        nickname: string;
+        /**
+         * 所持しているかどうか
+         */
+        owned: boolean;
+        /**
+         * コネクトランク
+         */
+        connectRank: number;
+        [k: string]: unknown;
+    }[];
     [k: string]: unknown;
 }
 //# sourceMappingURL=types.d.ts.map

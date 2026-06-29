@@ -210,6 +210,229 @@ app.get('/clanbattle-settings', (req, res) => {
         ...getAuthViewData(req)
     });
 });
+const SUPABASE_CLAN_BATTLE_TABLE = 'setting_clanbattle';
+const SUPABASE_USER_PROFILE_TABLE = 'setting_userprofile';
+function getSupabaseConfig() {
+    const url = process.env.SUPABASE_URL;
+    const secretKey = process.env.SUPABASE_SECRET_KEY;
+    if (!url || !secretKey) {
+        return null;
+    }
+    return {
+        url,
+        secretKey
+    };
+}
+function getSupabaseTableEndpoint(config, table) {
+    return `${config.url.replace(/\/$/, '')}/rest/v1/${encodeURIComponent(table)}`;
+}
+function normalizeUserOwnedCharacters(rawValue) {
+    if (rawValue === undefined || rawValue === null) {
+        return [];
+    }
+    if (!Array.isArray(rawValue)) {
+        return null;
+    }
+    const normalized = [];
+    for (const entry of rawValue) {
+        if (!entry || typeof entry !== 'object') {
+            return null;
+        }
+        const item = entry;
+        if (typeof item.officialName !== 'string' || typeof item.nickname !== 'string' || typeof item.owned !== 'boolean') {
+            return null;
+        }
+        const connectRankNumber = Number(item.connectRank);
+        if (!Number.isFinite(connectRankNumber)) {
+            return null;
+        }
+        normalized.push({
+            officialName: item.officialName.trim(),
+            nickname: item.nickname.trim(),
+            owned: item.owned,
+            connectRank: Math.trunc(connectRankNumber)
+        });
+    }
+    return normalized;
+}
+function normalizeUserProfileSettingsPayload(rawValue, defaults) {
+    const source = rawValue && typeof rawValue === 'object' ? rawValue : {};
+    const googleUserIdRaw = typeof source.googleUserId === 'string' && source.googleUserId.trim().length > 0
+        ? source.googleUserId.trim()
+        : defaults.googleUserId;
+    if (!googleUserIdRaw) {
+        return null;
+    }
+    const displayNameRaw = typeof source.displayName === 'string' && source.displayName.trim().length > 0
+        ? source.displayName.trim()
+        : defaults.displayName;
+    if (!displayNameRaw) {
+        return null;
+    }
+    const discordIdRaw = source.discordId;
+    const discordServerRaw = source.discordServer;
+    const discordId = typeof discordIdRaw === 'string'
+        ? discordIdRaw
+        : discordIdRaw === null || typeof discordIdRaw === 'undefined'
+            ? null
+            : null;
+    const discordServer = typeof discordServerRaw === 'string'
+        ? discordServerRaw
+        : discordServerRaw === null || typeof discordServerRaw === 'undefined'
+            ? null
+            : null;
+    const ownedCharacters = normalizeUserOwnedCharacters(source.ownedCharacters);
+    if (!ownedCharacters) {
+        return null;
+    }
+    const createdAtRaw = source.createdAt;
+    const createdAtNumber = Number(createdAtRaw);
+    return {
+        googleUserId: googleUserIdRaw,
+        discordId,
+        discordServer,
+        displayName: displayNameRaw,
+        createdAt: Number.isFinite(createdAtNumber) ? createdAtNumber : Date.now(),
+        ownedCharacters
+    };
+}
+async function verifyFirebaseIdTokenFromRequest(req) {
+    if (!adminDb) {
+        throw new Error('Authentication service is not available');
+    }
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        throw new Error('Authorization header with Bearer token is required');
+    }
+    const idToken = authHeader.slice(7);
+    const decodedToken = await (0, auth_1.getAuth)().verifyIdToken(idToken);
+    const uid = typeof decodedToken.uid === 'string' ? decodedToken.uid : '';
+    if (!uid) {
+        throw new Error('Invalid ID token payload');
+    }
+    const displayName = typeof decodedToken.name === 'string' && decodedToken.name.trim().length > 0
+        ? decodedToken.name.trim()
+        : typeof decodedToken.email === 'string' && decodedToken.email.trim().length > 0
+            ? decodedToken.email.trim()
+            : 'ユーザー';
+    return { uid, displayName };
+}
+async function supabaseSelectUserProfileByGoogleUserId(config, googleUserId) {
+    const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_USER_PROFILE_TABLE);
+    const query = new URLSearchParams({
+        select: '*',
+        googleUserId: `eq.${googleUserId}`,
+        limit: '1'
+    });
+    const response = await fetch(`${endpointUrl}?${query.toString()}`, {
+        method: 'GET',
+        headers: {
+            apikey: config.secretKey,
+            Authorization: `Bearer ${config.secretKey}`
+        }
+    });
+    if (!response.ok) {
+        const responseText = await response.text();
+        throw new Error(`Supabase select user profile failed: ${response.status} ${responseText}`);
+    }
+    const rows = await response.json();
+    if (!Array.isArray(rows) || rows.length === 0) {
+        return null;
+    }
+    return normalizeUserProfileSettingsPayload(rows[0], {
+        googleUserId,
+        displayName: 'ユーザー'
+    });
+}
+async function supabaseUpsertUserProfile(config, payload) {
+    const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_USER_PROFILE_TABLE);
+    const response = await fetch(endpointUrl, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            apikey: config.secretKey,
+            Authorization: `Bearer ${config.secretKey}`,
+            Prefer: 'resolution=merge-duplicates,return=minimal'
+        },
+        body: JSON.stringify(payload)
+    });
+    if (!response.ok) {
+        const responseText = await response.text();
+        throw new Error(`Supabase upsert user profile failed: ${response.status} ${responseText}`);
+    }
+}
+async function ensureUserProfileSettingsFromSupabase(config, defaults) {
+    const existing = await supabaseSelectUserProfileByGoogleUserId(config, defaults.googleUserId);
+    if (existing) {
+        return existing;
+    }
+    const created = normalizeUserProfileSettingsPayload({}, defaults);
+    if (!created) {
+        throw new Error('Failed to construct default user profile payload');
+    }
+    await supabaseUpsertUserProfile(config, created);
+    return created;
+}
+function getBaseYearMonth(referenceDate = new Date()) {
+    const year = referenceDate.getFullYear();
+    const month = referenceDate.getMonth();
+    const monthEndDate = new Date(year, month + 1, 0).getDate();
+    const currentMonthThreshold = monthEndDate - 9;
+    const baseDate = referenceDate.getDate() > currentMonthThreshold
+        ? referenceDate
+        : new Date(year, month, 0);
+    const baseYear = baseDate.getFullYear();
+    const baseMonth = String(baseDate.getMonth() + 1).padStart(2, '0');
+    return `${baseYear}${baseMonth}`;
+}
+function getPreviousYearMonth(yearmonth) {
+    if (!/^\d{6}$/.test(yearmonth)) {
+        return '';
+    }
+    const year = Number(yearmonth.slice(0, 4));
+    const month = Number(yearmonth.slice(4, 6));
+    const date = new Date(year, month - 2, 1);
+    const prevYear = date.getFullYear();
+    const prevMonth = String(date.getMonth() + 1).padStart(2, '0');
+    return `${prevYear}${prevMonth}`;
+}
+function formatDateAsIsoLocal(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+function getClanBattleDefaultDates(baseDate = new Date()) {
+    const year = baseDate.getFullYear();
+    const month = baseDate.getMonth();
+    const lastDay = new Date(year, month + 1, 0);
+    const startDate = new Date(lastDay);
+    startDate.setDate(lastDay.getDate() - 5);
+    const endDate = new Date(lastDay);
+    endDate.setDate(lastDay.getDate() - 1);
+    return {
+        startDate: formatDateAsIsoLocal(startDate),
+        endDate: formatDateAsIsoLocal(endDate)
+    };
+}
+function getEmptyClanBattleState(yearmonth) {
+    const defaults = getClanBattleDefaultDates();
+    return {
+        yearmonth,
+        bossname: Array.from({ length: 5 }, () => ''),
+        bossHp: Array.from({ length: 5 }, () => null),
+        startDate: defaults.startDate,
+        endDate: defaults.endDate
+    };
+}
+function applyClanBattleDateDefaults(state) {
+    const defaults = getClanBattleDefaultDates();
+    return {
+        ...state,
+        startDate: state.startDate && state.startDate.trim().length > 0 ? state.startDate : defaults.startDate,
+        endDate: state.endDate && state.endDate.trim().length > 0 ? state.endDate : defaults.endDate
+    };
+}
 function isIsoDate(value) {
     return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
@@ -258,48 +481,99 @@ function normalizeClanBattleSettingsSavePayload(rawValue) {
         endDate
     };
 }
+async function supabaseSelectClanBattleByYearmonth(config, yearmonth) {
+    const endpointUrl = `${config.url.replace(/\/$/, '')}/rest/v1/${encodeURIComponent(SUPABASE_CLAN_BATTLE_TABLE)}`;
+    const query = new URLSearchParams({
+        select: '*',
+        yearmonth: `eq.${yearmonth}`,
+        limit: '1'
+    });
+    const response = await fetch(`${endpointUrl}?${query.toString()}`, {
+        method: 'GET',
+        headers: {
+            apikey: config.secretKey,
+            Authorization: `Bearer ${config.secretKey}`
+        }
+    });
+    if (!response.ok) {
+        const responseText = await response.text();
+        throw new Error(`Supabase select failed: ${response.status} ${responseText}`);
+    }
+    const rows = await response.json();
+    if (!Array.isArray(rows) || rows.length === 0) {
+        return null;
+    }
+    return normalizeClanBattleSettingsSavePayload(rows[0]);
+}
+async function supabaseUpsertClanBattleState(config, payload) {
+    const endpointUrl = `${config.url.replace(/\/$/, '')}/rest/v1/${encodeURIComponent(SUPABASE_CLAN_BATTLE_TABLE)}`;
+    const response = await fetch(endpointUrl, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            apikey: config.secretKey,
+            Authorization: `Bearer ${config.secretKey}`,
+            Prefer: 'resolution=merge-duplicates,return=minimal'
+        },
+        body: JSON.stringify(payload)
+    });
+    if (!response.ok) {
+        const responseText = await response.text();
+        throw new Error(`Supabase upsert failed: ${response.status} ${responseText}`);
+    }
+}
+async function ensureClanBattleStateFromSupabase(config, yearmonth) {
+    const currentState = await supabaseSelectClanBattleByYearmonth(config, yearmonth);
+    if (currentState) {
+        const normalizedCurrent = applyClanBattleDateDefaults(currentState);
+        if (normalizedCurrent.startDate !== currentState.startDate || normalizedCurrent.endDate !== currentState.endDate) {
+            await supabaseUpsertClanBattleState(config, normalizedCurrent);
+        }
+        return normalizedCurrent;
+    }
+    const prevYearmonth = getPreviousYearMonth(yearmonth);
+    const prevState = prevYearmonth ? await supabaseSelectClanBattleByYearmonth(config, prevYearmonth) : null;
+    const initialState = prevState
+        ? {
+            ...prevState,
+            yearmonth
+        }
+        : getEmptyClanBattleState(yearmonth);
+    const initialStateWithDefaults = applyClanBattleDateDefaults(initialState);
+    await supabaseUpsertClanBattleState(config, initialStateWithDefaults);
+    return initialStateWithDefaults;
+}
+app.get('/api/clanbattle-settings/current', async (req, res) => {
+    const config = getSupabaseConfig();
+    if (!config) {
+        return res.status(503).json({ error: 'Supabase is not configured' });
+    }
+    const requestedYearmonth = typeof req.query.yearmonth === 'string' ? req.query.yearmonth.trim() : '';
+    const yearmonth = /^\d{6}$/.test(requestedYearmonth) ? requestedYearmonth : getBaseYearMonth();
+    try {
+        const state = await ensureClanBattleStateFromSupabase(config, yearmonth);
+        return res.json({ state });
+    }
+    catch (error) {
+        console.error('Failed to load current clanbattle settings from Supabase:', error);
+        return res.status(502).json({ error: 'Failed to load clanbattle settings from Supabase' });
+    }
+});
 app.post('/api/clanbattle-settings/save', ensureAdmin, express_1.default.json(), async (req, res) => {
     const payload = normalizeClanBattleSettingsSavePayload(req.body);
     if (!payload) {
         return res.status(400).json({ error: 'Invalid payload' });
     }
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY;
-    const supabaseTable = (process.env.SUPABASE_CLAN_BATTLE_TABLE || 'clan_battles').trim();
-    if (!supabaseUrl || !supabaseSecretKey) {
+    const config = getSupabaseConfig();
+    if (!config) {
         return res.status(503).json({ error: 'Supabase is not configured' });
     }
-    if (!supabaseTable) {
-        return res.status(500).json({ error: 'SUPABASE_CLAN_BATTLE_TABLE is empty' });
-    }
-    const endpointUrl = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/${encodeURIComponent(supabaseTable)}`;
-    const upsertPayload = {
-        yearmonth: payload.yearmonth,
-        bossname: payload.bossname,
-        bossHp: payload.bossHp,
-        startDate: payload.startDate,
-        endDate: payload.endDate
-    };
     try {
-        const response = await fetch(endpointUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                apikey: supabaseSecretKey,
-                Authorization: `Bearer ${supabaseSecretKey}`,
-                Prefer: 'resolution=merge-duplicates,return=minimal'
-            },
-            body: JSON.stringify(upsertPayload)
-        });
-        if (!response.ok) {
-            const responseText = await response.text();
-            console.error('Supabase upsert failed:', response.status, responseText);
-            return res.status(502).json({ error: 'Failed to save clanbattle settings to Supabase' });
-        }
+        await supabaseUpsertClanBattleState(config, payload);
         return res.json({ success: true });
     }
     catch (error) {
-        console.error('Supabase request failed:', error);
+        console.error('Failed to save clanbattle settings to Supabase:', error);
         return res.status(502).json({ error: 'Failed to connect to Supabase' });
     }
 });
@@ -688,6 +962,80 @@ app.get('/api/time', (req, res) => {
 // APIユーザー情報取得
 app.get('/api/user', (req, res) => {
     res.json({ user: req.session.user || null });
+});
+app.get('/api/settings/profile/current', async (req, res) => {
+    const config = getSupabaseConfig();
+    if (!config) {
+        return res.status(503).json({ error: 'Supabase is not configured' });
+    }
+    try {
+        const verified = await verifyFirebaseIdTokenFromRequest(req);
+        const profile = await ensureUserProfileSettingsFromSupabase(config, {
+            googleUserId: verified.uid,
+            displayName: verified.displayName
+        });
+        return res.json({ profile });
+    }
+    catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage.includes('Authorization header') || errorMessage.includes('Invalid') || errorMessage.includes('token')) {
+            return res.status(401).json({ error: errorMessage });
+        }
+        if (errorMessage.includes('Authentication service is not available')) {
+            return res.status(503).json({ error: errorMessage });
+        }
+        console.error('Failed to load settings profile from Supabase:', error);
+        return res.status(502).json({ error: 'Failed to load settings profile from Supabase' });
+    }
+});
+app.post('/api/settings/profile/save', express_1.default.json(), async (req, res) => {
+    const config = getSupabaseConfig();
+    if (!config) {
+        return res.status(503).json({ error: 'Supabase is not configured' });
+    }
+    try {
+        const verified = await verifyFirebaseIdTokenFromRequest(req);
+        const currentProfile = await ensureUserProfileSettingsFromSupabase(config, {
+            googleUserId: verified.uid,
+            displayName: verified.displayName
+        });
+        const body = req.body && typeof req.body === 'object' ? req.body : {};
+        const patch = {
+            ...currentProfile
+        };
+        if (Object.prototype.hasOwnProperty.call(body, 'displayName')) {
+            patch.displayName = body.displayName;
+        }
+        if (Object.prototype.hasOwnProperty.call(body, 'discordId')) {
+            patch.discordId = body.discordId;
+        }
+        if (Object.prototype.hasOwnProperty.call(body, 'discordServer')) {
+            patch.discordServer = body.discordServer;
+        }
+        if (Object.prototype.hasOwnProperty.call(body, 'ownedCharacters')) {
+            patch.ownedCharacters = body.ownedCharacters;
+        }
+        const normalized = normalizeUserProfileSettingsPayload(patch, {
+            googleUserId: verified.uid,
+            displayName: currentProfile.displayName
+        });
+        if (!normalized) {
+            return res.status(400).json({ error: 'Invalid payload' });
+        }
+        await supabaseUpsertUserProfile(config, normalized);
+        return res.json({ success: true, profile: normalized });
+    }
+    catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage.includes('Authorization header') || errorMessage.includes('Invalid') || errorMessage.includes('token')) {
+            return res.status(401).json({ error: errorMessage });
+        }
+        if (errorMessage.includes('Authentication service is not available')) {
+            return res.status(503).json({ error: errorMessage });
+        }
+        console.error('Failed to save settings profile to Supabase:', error);
+        return res.status(502).json({ error: 'Failed to save settings profile to Supabase' });
+    }
 });
 app.post('/api/user/logout', (req, res) => {
     req.session.user = undefined;

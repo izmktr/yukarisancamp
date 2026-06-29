@@ -1,6 +1,5 @@
 let auth = null;
 let googleProvider = null;
-let db = null;
 let isAuthInitialized = false;
 let currentAuthUser = null;
 let currentUserProfile = null;
@@ -8,8 +7,6 @@ let currentProfileLoadErrorMessage = '';
 let currentAuthInitErrorMessage = '';
 let hasTriggeredAuthSyncReload = false;
 
-const USER_PROFILE_COLLECTION = 'userProfiles';
-const CLAN_BATTLE_COLLECTION = 'clanBattles';
 const CLAN_BATTLE_BOSS_COUNT = 5;
 
 let currentClanBattleDocId = '';
@@ -31,6 +28,17 @@ function getDefaultDisplayName(user) {
 
 function normalizeUserProfile(user, rawProfile) {
     const safeProfile = rawProfile || {};
+    const ownedCharacters = Array.isArray(safeProfile.ownedCharacters)
+        ? safeProfile.ownedCharacters
+            .filter((item) => item && typeof item === 'object')
+            .map((item) => ({
+                officialName: typeof item.officialName === 'string' ? item.officialName : '',
+                nickname: typeof item.nickname === 'string' ? item.nickname : '',
+                owned: Boolean(item.owned),
+                connectRank: Number.isFinite(Number(item.connectRank)) ? Math.trunc(Number(item.connectRank)) : 0
+            }))
+        : [];
+
     return {
         googleUserId: user.uid,
         displayName: typeof safeProfile.displayName === 'string' && safeProfile.displayName.trim().length > 0
@@ -38,32 +46,52 @@ function normalizeUserProfile(user, rawProfile) {
             : getDefaultDisplayName(user),
         discordId: safeProfile.discordId ?? null,
         discordServer: safeProfile.discordServer ?? null,
-        createdAt: typeof safeProfile.createdAt === 'number' ? safeProfile.createdAt : Date.now()
+        createdAt: typeof safeProfile.createdAt === 'number' ? safeProfile.createdAt : Date.now(),
+        ownedCharacters
     };
 }
 
-function getUserProfileDocRef(user) {
-    if (!db || !user) {
-        return null;
+async function getAuthIdToken(user) {
+    if (!user || typeof user.getIdToken !== 'function') {
+        throw new Error('ログイン情報を取得できませんでした。');
     }
-    return db.collection(USER_PROFILE_COLLECTION).doc(user.uid);
+    return user.getIdToken();
 }
 
 async function ensureUserProfile(user) {
-    const docRef = getUserProfileDocRef(user);
-    if (!docRef) {
-        return null;
+    const idToken = await getAuthIdToken(user);
+    const response = await fetch('/api/settings/profile/current', {
+        method: 'GET',
+        headers: {
+            'Authorization': `Bearer ${idToken}`
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error('プロフィールの読み込みに失敗しました。');
     }
 
-    const snap = await docRef.get();
-    if (snap.exists) {
-        const normalized = normalizeUserProfile(user, snap.data());
-        return normalized;
+    const payload = await response.json();
+    return normalizeUserProfile(user, payload && payload.profile ? payload.profile : null);
+}
+
+async function saveUserProfile(user, profilePatch) {
+    const idToken = await getAuthIdToken(user);
+    const response = await fetch('/api/settings/profile/save', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify(profilePatch || {})
+    });
+
+    if (!response.ok) {
+        throw new Error('プロフィールの保存に失敗しました。');
     }
 
-    const createdProfile = normalizeUserProfile(user, null);
-    await docRef.set(createdProfile);
-    return createdProfile;
+    const payload = await response.json();
+    return normalizeUserProfile(user, payload && payload.profile ? payload.profile : null);
 }
 
 function getLinkedDisplayValue(value) {
@@ -127,7 +155,7 @@ function renderSettings(user, profile) {
     if (!profile) {
         loginRequired.style.display = 'none';
         profileSection.style.display = 'none';
-        firebaseError.textContent = currentProfileLoadErrorMessage || 'Firebaseからユーザー情報を取得できませんでした。';
+        firebaseError.textContent = currentProfileLoadErrorMessage || 'Supabaseからユーザー情報を取得できませんでした。';
         firebaseError.style.display = 'block';
         return;
     }
@@ -161,20 +189,11 @@ async function saveSettingsDisplayName() {
         return;
     }
 
-    const docRef = getUserProfileDocRef(currentAuthUser);
-    if (!docRef) {
-        renderSettingsStatus('保存先に接続できませんでした。', 'error');
-        return;
-    }
-
     try {
         saveButton.disabled = true;
-        await docRef.update({ displayName: newDisplayName });
-
-        currentUserProfile = {
-            ...currentUserProfile,
+        currentUserProfile = await saveUserProfile(currentAuthUser, {
             displayName: newDisplayName
-        };
+        });
 
         displayNameInput.dataset.originalValue = newDisplayName;
         renderAuthState(currentAuthUser, currentUserProfile);
@@ -232,28 +251,24 @@ function getTimelineErrorMessage(error) {
 }
 
 async function loadCurrentClanBattleBossNamesForPosting() {
-    if (!db) {
-        throw new Error('Firestore に接続できませんでした。');
-    }
-
-    const yearmonth = getBaseYearMonth();
-    const docRef = getClanBattleDocRef(yearmonth);
-    if (!docRef) {
+    const response = await fetch('/api/clanbattle-settings/current');
+    if (!response.ok) {
         throw new Error('クラバト設定を取得できませんでした。');
     }
 
-    const snap = await docRef.get();
-    if (!snap.exists) {
-        throw new Error(`クラバト設定が見つかりませんでした。対象年月: ${yearmonth}`);
+    const payload = await response.json();
+    const state = payload && payload.state ? payload.state : null;
+    if (!state || !state.yearmonth) {
+        throw new Error('クラバト設定のレスポンス形式が不正です。');
     }
 
-    const normalizedState = normalizeClanBattleState(yearmonth, snap.data());
+    const normalizedState = normalizeClanBattleState(String(state.yearmonth), state);
     const bossNames = normalizedState.bossname.map((value) => value.trim()).filter((value) => value.length > 0);
     if (bossNames.length === 0) {
-        throw new Error(`クラバト設定の boss 名が未設定です。対象年月: ${yearmonth}`);
+        throw new Error(`クラバト設定の boss 名が未設定です。対象年月: ${normalizedState.yearmonth}`);
     }
 
-    return { yearmonth, bossNames };
+    return { yearmonth: normalizedState.yearmonth, bossNames };
 }
 
 function parseTimelinePartyMember(line) {
@@ -409,10 +424,8 @@ function initializeBoardPostPage() {
         }
 
         try {
-            if (!db) {
-                if (!initializeFirebaseAuth()) {
-                    throw new Error(currentAuthInitErrorMessage || 'Firebase の初期化に失敗しました。');
-                }
+            if (!initializeFirebaseAuth()) {
+                throw new Error(currentAuthInitErrorMessage || 'Firebase の初期化に失敗しました。');
             }
 
             let profile = currentUserProfile;
@@ -667,56 +680,20 @@ function renderClanBattleState(state) {
     renderClanBattleStatus('', '');
 }
 
-function getClanBattleDocRef(yearmonth) {
-    if (!db || !yearmonth) {
-        return null;
-    }
-    return db.collection(CLAN_BATTLE_COLLECTION).doc(yearmonth);
-}
-
 async function ensureClanBattleStateForCurrentMonth() {
     const yearmonth = getBaseYearMonth();
-    currentClanBattleDocId = yearmonth;
-
-    const currentDocRef = getClanBattleDocRef(yearmonth);
-    if (!currentDocRef) {
-        throw new Error('Firestore に接続できませんでした。');
+    const response = await fetch(`/api/clanbattle-settings/current?yearmonth=${encodeURIComponent(yearmonth)}`);
+    if (!response.ok) {
+        throw new Error('Supabase からクラバト設定を取得できませんでした。');
     }
 
-    const currentSnap = await currentDocRef.get();
-    if (currentSnap.exists) {
-        const normalizedCurrent = normalizeClanBattleState(yearmonth, currentSnap.data());
-        const withDefaultsCurrent = applyClanBattleDateDefaults(normalizedCurrent);
+    const payload = await response.json();
+    const state = payload && payload.state ? payload.state : null;
+    const normalizedState = normalizeClanBattleState(yearmonth, state);
+    const withDefaultsCurrent = applyClanBattleDateDefaults(normalizedState);
 
-        if (normalizedCurrent.startDate !== withDefaultsCurrent.startDate || normalizedCurrent.endDate !== withDefaultsCurrent.endDate) {
-            await currentDocRef.set({
-                startDate: withDefaultsCurrent.startDate,
-                endDate: withDefaultsCurrent.endDate
-            }, { merge: true });
-        }
-
-        return withDefaultsCurrent;
-    }
-
-    const prevYearmonth = getPreviousYearMonth(yearmonth);
-    const prevDocRef = getClanBattleDocRef(prevYearmonth);
-    const prevSnap = prevDocRef ? await prevDocRef.get() : null;
-
-    const initialState = prevSnap && prevSnap.exists
-        ? normalizeClanBattleState(yearmonth, prevSnap.data())
-        : getEmptyClanBattleState(yearmonth);
-
-    const initialStateWithDefaults = applyClanBattleDateDefaults(initialState);
-
-    await currentDocRef.set({
-        yearmonth: initialStateWithDefaults.yearmonth,
-        bossname: [...initialStateWithDefaults.bossname],
-        bossHp: initialStateWithDefaults.bossHp.map((value) => (value === '' ? null : Number(value))),
-        startDate: initialStateWithDefaults.startDate,
-        endDate: initialStateWithDefaults.endDate
-    });
-
-    return initialStateWithDefaults;
+    currentClanBattleDocId = withDefaultsCurrent.yearmonth;
+    return withDefaultsCurrent;
 }
 
 async function saveClanBattleSettings() {
@@ -800,14 +777,6 @@ async function renderClanBattleSettings(user) {
         return;
     }
 
-    if (!db) {
-        loginRequired.style.display = 'none';
-        settingsSection.style.display = 'none';
-        firebaseError.textContent = 'Firestore SDK の初期化に失敗したため、クラバト設定を読み込めません。';
-        firebaseError.style.display = 'block';
-        return;
-    }
-
     try {
         const state = await ensureClanBattleStateForCurrentMonth();
         renderClanBattleState(state);
@@ -818,7 +787,7 @@ async function renderClanBattleSettings(user) {
         console.error('クラバト設定の読み込みに失敗しました:', error);
         loginRequired.style.display = 'none';
         settingsSection.style.display = 'none';
-        firebaseError.textContent = 'クラバト設定を読み込めませんでした。権限設定またはネットワーク状態を確認してください。';
+        firebaseError.textContent = 'Supabase からクラバト設定を読み込めませんでした。サーバ設定またはネットワーク状態を確認してください。';
         firebaseError.style.display = 'block';
     }
 }
@@ -938,22 +907,17 @@ function initializeFirebaseAuth() {
 
         auth = window.firebase.auth();
         googleProvider = new window.firebase.auth.GoogleAuthProvider();
-        db = typeof window.firebase.firestore === 'function' ? window.firebase.firestore() : null;
     } catch (error) {
         currentAuthInitErrorMessage = 'Firebase 初期化時に例外が発生しました。ブラウザコンソールを確認してください。';
         console.error('Firebase 初期化例外:', error);
         return false;
     }
 
-    if (!db) {
-        console.error('Firestore SDK が読み込まれていません。');
-    }
-
     auth.onAuthStateChanged(async (user) => {
         currentAuthUser = user;
         currentProfileLoadErrorMessage = '';
 
-        if (user && db) {
+        if (user) {
             try {
                 currentUserProfile = await ensureUserProfile(user);
                 
@@ -987,12 +951,9 @@ function initializeFirebaseAuth() {
                 }
             } catch (error) {
                 console.error('userProfile の取得または作成に失敗しました:', error);
-                currentProfileLoadErrorMessage = 'Firebaseからユーザー情報を取得できませんでした。権限設定またはネットワーク状態を確認してください。';
+                currentProfileLoadErrorMessage = 'Supabaseからユーザー情報を取得できませんでした。サーバ設定またはネットワーク状態を確認してください。';
                 currentUserProfile = null;
             }
-        } else if (user && !db) {
-            currentProfileLoadErrorMessage = 'Firestore SDKの初期化に失敗したため、ユーザー情報を取得できません。';
-            currentUserProfile = null;
         } else {
             currentUserProfile = null;
         }
