@@ -720,7 +720,7 @@ async function ensureClanBattleStateForCurrentMonth() {
 }
 
 async function saveClanBattleSettings() {
-    if (!currentAuthUser || !db || !currentClanBattleDocId) {
+    if (!currentAuthUser || !currentClanBattleDocId) {
         return;
     }
 
@@ -737,11 +737,6 @@ async function saveClanBattleSettings() {
 
     try {
         saveButton.disabled = true;
-
-        const docRef = getClanBattleDocRef(currentClanBattleDocId);
-        if (!docRef) {
-            throw new Error('Firestore に接続できませんでした。');
-        }
 
         const payload = {
             yearmonth: formState.yearmonth,
@@ -760,7 +755,17 @@ async function saveClanBattleSettings() {
 
         const payloadWithDefaults = applyClanBattleDateDefaults(payload);
 
-        await docRef.set(payloadWithDefaults, { merge: true });
+        const response = await fetch('/api/clanbattle-settings/save', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payloadWithDefaults)
+        });
+
+        if (!response.ok) {
+            throw new Error('Supabase save failed');
+        }
 
         const normalized = normalizeClanBattleState(formState.yearmonth, payloadWithDefaults);
         currentClanBattleState = cloneClanBattleState(normalized);

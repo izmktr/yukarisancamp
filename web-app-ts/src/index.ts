@@ -202,6 +202,124 @@ app.get('/clanbattle-settings', (req, res) => {
   });
 });
 
+type ClanBattleSettingsSavePayload = {
+  yearmonth: string;
+  bossname: string[];
+  bossHp: Array<number | null>;
+  startDate: string;
+  endDate: string;
+};
+
+function isIsoDate(value: unknown): value is string {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function normalizeClanBattleSettingsSavePayload(rawValue: unknown): ClanBattleSettingsSavePayload | null {
+  if (!rawValue || typeof rawValue !== 'object') {
+    return null;
+  }
+
+  const source = rawValue as Record<string, unknown>;
+  const yearmonth = typeof source.yearmonth === 'string' ? source.yearmonth.trim() : '';
+  const bossnameSource = Array.isArray(source.bossname) ? source.bossname : [];
+  const bossHpSource = Array.isArray(source.bossHp) ? source.bossHp : [];
+
+  if (!/^\d{6}$/.test(yearmonth)) {
+    return null;
+  }
+
+  if (bossnameSource.length !== 5 || bossHpSource.length !== 5) {
+    return null;
+  }
+
+  const bossname = bossnameSource.map((value) => {
+    if (value === null || value === undefined) {
+      return '';
+    }
+    return String(value).trim();
+  });
+
+  const bossHp: Array<number | null> = [];
+  for (const value of bossHpSource) {
+    if (value === null || value === undefined || value === '') {
+      bossHp.push(null);
+      continue;
+    }
+
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue)) {
+      return null;
+    }
+    bossHp.push(Math.trunc(numericValue));
+  }
+
+  const startDate = source.startDate;
+  const endDate = source.endDate;
+  if (!isIsoDate(startDate) || !isIsoDate(endDate)) {
+    return null;
+  }
+
+  return {
+    yearmonth,
+    bossname,
+    bossHp,
+    startDate,
+    endDate
+  };
+}
+
+app.post('/api/clanbattle-settings/save', ensureAdmin, express.json(), async (req, res) => {
+  const payload = normalizeClanBattleSettingsSavePayload(req.body);
+  if (!payload) {
+    return res.status(400).json({ error: 'Invalid payload' });
+  }
+
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY;
+  const supabaseTable = (process.env.SUPABASE_CLAN_BATTLE_TABLE || 'clan_battles').trim();
+
+  if (!supabaseUrl || !supabaseSecretKey) {
+    return res.status(503).json({ error: 'Supabase is not configured' });
+  }
+
+  if (!supabaseTable) {
+    return res.status(500).json({ error: 'SUPABASE_CLAN_BATTLE_TABLE is empty' });
+  }
+
+  const endpointUrl = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/${encodeURIComponent(supabaseTable)}`;
+  const upsertPayload = {
+    yearmonth: payload.yearmonth,
+    bossname: payload.bossname,
+    bossHp: payload.bossHp,
+    startDate: payload.startDate,
+    endDate: payload.endDate
+  };
+
+  try {
+    const response = await fetch(endpointUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: supabaseSecretKey,
+        Authorization: `Bearer ${supabaseSecretKey}`,
+        Prefer: 'resolution=merge-duplicates,return=minimal'
+      },
+      body: JSON.stringify(upsertPayload)
+    });
+
+    if (!response.ok) {
+      const responseText = await response.text();
+      console.error('Supabase upsert failed:', response.status, responseText);
+      return res.status(502).json({ error: 'Failed to save clanbattle settings to Supabase' });
+    }
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Supabase request failed:', error);
+    return res.status(502).json({ error: 'Failed to connect to Supabase' });
+  }
+});
+
 const charaIndexPath = path.join(__dirname, '../chara/charaindex.json');
 const charaDirPath = path.join(__dirname, '../chara');
 
