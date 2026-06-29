@@ -197,10 +197,13 @@
           const maxDay = historyList.reduce((max, item) => Math.max(max, Number(item.day)), 0);
           const maxHistoryLoop = historyList.reduce((max, item) => Math.max(max, Math.floor(Number(item.boss) / 5)), 0);
           const maxLoop = Math.max(maxHistoryLoop, bossCountMaxLoopZeroBased);
-          const minLoop = Math.max(0, maxLoop - 5);
+          const defaultVisibleMinLoop = Math.max(0, maxLoop - 5);
         %>
         <section class="clandata-section">
-          <h3>ボス履歴</h3>
+          <div class="clandata-section-header clandata-bosshistory-header">
+            <h3>ボス履歴</h3>
+            <button type="button" id="bosshistory-show-all-btn" class="bosshistory-show-all-btn" aria-pressed="false">全て表示</button>
+          </div>
           <div class="bosshistory-mobile-filter" role="group" aria-label="ボス履歴フィルタ">
             <button type="button" class="bosshistory-filter-btn is-active" data-boss-filter="all">ALL</button>
             <button type="button" class="bosshistory-filter-btn" data-boss-filter="0">1</button>
@@ -223,9 +226,10 @@
                 </tr>
               </thead>
               <tbody>
-                <% for (let loop = maxLoop; loop >= minLoop; loop -= 1) { %>
+                <% for (let loop = maxLoop; loop >= 0; loop -= 1) { %>
                   <% const loopNumber = loop + 1; %>
-                  <tr data-loop-number="<%= loopNumber %>">
+                  <% const hideByDefault = loop < defaultVisibleMinLoop; %>
+                  <tr class="bosshistory-row <%= hideByDefault ? 'bosshistory-row-hidden-by-default' : '' %>" data-loop-number="<%= loopNumber %>" data-hidden-by-default="<%= hideByDefault ? '1' : '0' %>">
                     <td class="bosshistory-loop"><%= loopNumber %></td>
                     <% for (let bossid = 0; bossid < 5; bossid += 1) { %>
                       <% const isBossCountMatchedCell = bossCountLoopNumbers[bossid] === loopNumber; %>
@@ -274,6 +278,102 @@
                 <% } %>
               </tbody>
             </table>
+          </div>
+        </section>
+
+        <% 
+          const memberHistoryMap = new Map();
+          historyList.forEach((item) => {
+            const bossNumber = Number(item.boss);
+            const dayNumber = Number(item.day);
+            const sortieNumber = Number(item.sortie);
+            if (!Number.isFinite(bossNumber) || !Number.isFinite(dayNumber) || !Number.isFinite(sortieNumber)) {
+              return;
+            }
+
+            const bossId = ((bossNumber % 5) + 5) % 5;
+            const memberIdText = item.member === null || item.member === undefined
+              ? ''
+              : String(item.member);
+
+            if (!memberHistoryMap.has(memberIdText)) {
+              const matchedMemberEntry = Object.entries(membersMap).find(([memberId]) => String(memberId) === memberIdText);
+              const memberData = matchedMemberEntry ? matchedMemberEntry[1] : null;
+              const memberName = memberData && typeof memberData.name === 'string'
+                ? memberData.name
+                : '(不明)';
+
+              memberHistoryMap.set(memberIdText, {
+                memberName,
+                bossEntries: [[], [], [], [], []]
+              });
+            }
+
+            memberHistoryMap.get(memberIdText).bossEntries[bossId].push(item);
+          });
+
+          const memberHistoryRows = Array.from(memberHistoryMap.values())
+            .map((row) => ({
+              memberName: row.memberName,
+              bossEntries: row.bossEntries.map((entries) => [...entries].sort((a, b) => {
+                const timeDiff = String(a.updatetime ?? '').localeCompare(String(b.updatetime ?? ''));
+                if (timeDiff !== 0) {
+                  return timeDiff;
+                }
+                return Number(a.sortie) - Number(b.sortie);
+              }))
+            }))
+            .sort((left, right) => String(left.memberName ?? '').localeCompare(String(right.memberName ?? ''), 'ja'));
+        %>
+        <section class="clandata-section">
+          <div class="clandata-section-header clandata-memberhistory-header">
+            <h3>メンバー履歴</h3>
+            <button type="button" id="memberhistory-toggle-btn" class="memberhistory-toggle-btn" aria-pressed="false">表示する</button>
+          </div>
+          <div id="memberhistory-container" class="memberhistory-container">
+            <% if (memberHistoryRows.length > 0) { %>
+              <div class="memberhistory-table-wrapper">
+                <table class="memberhistory-table">
+                  <thead>
+                    <tr>
+                      <th>メンバー</th>
+                      <th><span class="boss-name-label" data-boss-index="0">ボス1</span></th>
+                      <th><span class="boss-name-label" data-boss-index="1">ボス2</span></th>
+                      <th><span class="boss-name-label" data-boss-index="2">ボス3</span></th>
+                      <th><span class="boss-name-label" data-boss-index="3">ボス4</span></th>
+                      <th><span class="boss-name-label" data-boss-index="4">ボス5</span></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <% memberHistoryRows.forEach((row) => { %>
+                      <tr>
+                        <td class="memberhistory-member-cell"><%= row.memberName %></td>
+                        <% for (let bossid = 0; bossid < 5; bossid += 1) { %>
+                          <td class="memberhistory-cell" data-boss-index="<%= bossid %>">
+                            <% row.bossEntries[bossid].forEach((item) => { %>
+                              <% 
+                                let option = '';
+                                if (item.defeat === true) {
+                                  option = ` [討伐:${Number(item.overtime ?? 0)}]`;
+                                } else if (item.defeat === false && Number(item.sortiecount ?? 0) < 1) {
+                                  option = ' [持]';
+                                }
+
+                                const entryText = `${Number(item.day) + 1}日目 ${Number(item.sortie) + 1}凸${option}`;
+                                const fadedClass = Number(item.day) !== maxDay ? 'history-old-day' : '';
+                              %>
+                              <div class="memberhistory-entry <%= fadedClass %>"><%= entryText %></div>
+                            <% }); %>
+                          </td>
+                        <% } %>
+                      </tr>
+                    <% }); %>
+                  </tbody>
+                </table>
+              </div>
+            <% } else { %>
+              <p class="memberhistory-empty">表示できる履歴がありません</p>
+            <% } %>
           </div>
         </section>
       <% } %>
@@ -345,6 +445,7 @@
     };
 
     const setFilter = (bossFilter) => {
+      const showAll = isBossHistoryShowAllEnabled();
       const isAll = bossFilter === 'all';
 
       filterButtons.forEach((button) => {
@@ -405,13 +506,15 @@
         rowStates.push({
           row,
           hasVisibleEntryInRow,
-          loopNumber: Number(row.getAttribute('data-loop-number') || '0')
+          loopNumber: Number(row.getAttribute('data-loop-number') || '0'),
+          hiddenByDefault: row.getAttribute('data-hidden-by-default') === '1'
         });
       });
 
       if (isAll) {
-        rowStates.forEach(({ row }) => {
-          row.style.display = '';
+        rowStates.forEach(({ row, hiddenByDefault }) => {
+          const shouldShowRow = showAll || !hiddenByDefault;
+          row.style.display = shouldShowRow ? '' : 'none';
         });
         return;
       }
@@ -423,8 +526,10 @@
         return Math.max(max, state.loopNumber);
       }, -1);
 
-      rowStates.forEach(({ row, hasVisibleEntryInRow, loopNumber }) => {
-        const shouldShowRow = highestLoopWithPlayer >= 0 && (hasVisibleEntryInRow || loopNumber <= highestLoopWithPlayer);
+      rowStates.forEach(({ row, hasVisibleEntryInRow, loopNumber, hiddenByDefault }) => {
+        const shouldShowByFilter = highestLoopWithPlayer >= 0 && (hasVisibleEntryInRow || loopNumber <= highestLoopWithPlayer);
+        const shouldShowByLoopToggle = showAll || !hiddenByDefault;
+        const shouldShowRow = shouldShowByFilter && shouldShowByLoopToggle;
         row.style.display = shouldShowRow ? '' : 'none';
       });
     };
@@ -442,14 +547,95 @@
       setFilter(bossFilter);
     });
 
+    document.addEventListener('bosshistory:showall-changed', () => {
+      const activeButton = filterContainer.querySelector('.bosshistory-filter-btn.is-active[data-boss-filter]');
+      const currentFilter = activeButton instanceof HTMLElement
+        ? String(activeButton.getAttribute('data-boss-filter') || 'all')
+        : 'all';
+      setFilter(currentFilter);
+    });
+
     setFilter('all');
   }
 
   document.addEventListener('DOMContentLoaded', async () => {
     await replaceBossCountLabelsFromClanBattleSettings();
+    initBossHistoryLoopToggle();
     initBossHistoryMobileFilter();
+    initMemberHistoryToggle();
     initMembersAttackCountToggle();
   });
+
+  function initMemberHistoryToggle() {
+    const toggleButton = document.getElementById('memberhistory-toggle-btn');
+    const historyContainer = document.getElementById('memberhistory-container');
+
+    if (!(toggleButton instanceof HTMLButtonElement) || !(historyContainer instanceof HTMLElement)) {
+      return;
+    }
+
+    let isOpen = false;
+
+    const applyState = () => {
+      historyContainer.classList.toggle('is-open', isOpen);
+      toggleButton.textContent = isOpen ? '閉じる' : '表示する';
+      toggleButton.classList.toggle('is-active', isOpen);
+      toggleButton.setAttribute('aria-pressed', isOpen ? 'true' : 'false');
+    };
+
+    toggleButton.addEventListener('click', () => {
+      isOpen = !isOpen;
+      applyState();
+    });
+
+    applyState();
+  }
+
+  function isBossHistoryShowAllEnabled() {
+    const toggleButton = document.getElementById('bosshistory-show-all-btn');
+    if (!(toggleButton instanceof HTMLButtonElement)) {
+      return false;
+    }
+    return toggleButton.getAttribute('aria-pressed') === 'true';
+  }
+
+  function initBossHistoryLoopToggle() {
+    const toggleButton = document.getElementById('bosshistory-show-all-btn');
+    const historyRows = Array.from(document.querySelectorAll('.bosshistory-row[data-hidden-by-default]'));
+
+    if (!(toggleButton instanceof HTMLButtonElement) || historyRows.length === 0) {
+      return;
+    }
+
+    let showAll = false;
+
+    const applyState = () => {
+      const isMobile = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
+
+      historyRows.forEach((row) => {
+        const hiddenByDefault = row.getAttribute('data-hidden-by-default') === '1';
+        const shouldHide = !showAll && hiddenByDefault;
+        row.classList.toggle('bosshistory-row-hidden-by-default', shouldHide);
+
+        if (!isMobile) {
+          row.style.display = shouldHide ? 'none' : 'table-row';
+        }
+      });
+
+      toggleButton.textContent = showAll ? '絞り込む' : '全て表示';
+      toggleButton.classList.toggle('is-active', showAll);
+      toggleButton.setAttribute('aria-pressed', showAll ? 'true' : 'false');
+
+      document.dispatchEvent(new CustomEvent('bosshistory:showall-changed'));
+    };
+
+    toggleButton.addEventListener('click', () => {
+      showAll = !showAll;
+      applyState();
+    });
+
+    applyState();
+  }
 
   function initMembersAttackCountToggle() {
     const toggleButton = document.getElementById('members-show-all-btn');
@@ -589,6 +775,16 @@
     margin-bottom: 15px;
   }
 
+  .clandata-bosshistory-header h3 {
+    flex: 1 1 auto;
+    margin-bottom: 15px;
+  }
+
+  .clandata-memberhistory-header h3 {
+    flex: 1 1 auto;
+    margin-bottom: 15px;
+  }
+
   .members-show-all-btn {
     flex: 0 0 auto;
     border: 1px solid #bcd0ea;
@@ -608,6 +804,54 @@
   }
 
   .members-show-all-btn.is-active {
+    background: #1f4f79;
+    border-color: #1f4f79;
+    color: #fff;
+  }
+
+  .bosshistory-show-all-btn {
+    flex: 0 0 auto;
+    border: 1px solid #bcd0ea;
+    border-radius: 999px;
+    background: #f7fbff;
+    color: #1f4f79;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 8px 14px;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+
+  .bosshistory-show-all-btn:hover {
+    background: #edf5ff;
+    border-color: #8fb0d6;
+  }
+
+  .bosshistory-show-all-btn.is-active {
+    background: #1f4f79;
+    border-color: #1f4f79;
+    color: #fff;
+  }
+
+  .memberhistory-toggle-btn {
+    flex: 0 0 auto;
+    border: 1px solid #bcd0ea;
+    border-radius: 999px;
+    background: #f7fbff;
+    color: #1f4f79;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 8px 14px;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+
+  .memberhistory-toggle-btn:hover {
+    background: #edf5ff;
+    border-color: #8fb0d6;
+  }
+
+  .memberhistory-toggle-btn.is-active {
     background: #1f4f79;
     border-color: #1f4f79;
     color: #fff;
@@ -790,6 +1034,68 @@
     margin-bottom: 0;
   }
 
+  .memberhistory-container {
+    display: none;
+  }
+
+  .memberhistory-container.is-open {
+    display: block;
+  }
+
+  .memberhistory-table-wrapper {
+    overflow-x: auto;
+  }
+
+  .memberhistory-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 900px;
+    background-color: #fff;
+  }
+
+  .memberhistory-table th,
+  .memberhistory-table td {
+    border: 1px solid #e0e0e0;
+    padding: 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .memberhistory-table th {
+    background-color: #f7fbff;
+    color: #1f4f79;
+    font-weight: 700;
+  }
+
+  .memberhistory-member-cell {
+    min-width: 150px;
+    font-weight: 700;
+  }
+
+  .memberhistory-cell {
+    min-width: 150px;
+  }
+
+  .memberhistory-entry {
+    color: #111;
+    line-height: 1.45;
+    font-size: 13px;
+    margin-bottom: 4px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .memberhistory-entry:last-child {
+    margin-bottom: 0;
+  }
+
+  .memberhistory-empty {
+    margin: 0;
+    font-size: 13px;
+    color: #4b6280;
+  }
+
   .bosshistory-entry.history-old-day {
     color: #6ea8d9;
   }
@@ -800,6 +1106,10 @@
   }
 
   .member-row-hidden-by-default {
+    display: none;
+  }
+
+  .bosshistory-row-hidden-by-default {
     display: none;
   }
 
@@ -839,11 +1149,41 @@
       border-bottom: none;
     }
 
+    .clandata-bosshistory-header h3 {
+      margin-bottom: 0;
+      padding-bottom: 0;
+      border-bottom: none;
+    }
+
+    .clandata-memberhistory-header h3 {
+      margin-bottom: 0;
+      padding-bottom: 0;
+      border-bottom: none;
+    }
+
     .members-show-all-btn {
       align-self: flex-end;
     }
 
+    .bosshistory-show-all-btn {
+      align-self: flex-end;
+    }
+
+    .memberhistory-toggle-btn {
+      align-self: flex-end;
+    }
+
     .clandata-members-header {
+      flex-direction: row;
+      align-items: center;
+    }
+
+    .clandata-bosshistory-header {
+      flex-direction: row;
+      align-items: center;
+    }
+
+    .clandata-memberhistory-header {
       flex-direction: row;
       align-items: center;
     }
