@@ -43,9 +43,9 @@
                                         <% for (let i = 0; i < 5; i += 1) { %>
                                             <% const member = article.partyMembers && article.partyMembers[i]; %>
                                             <% if (member && member.imagePath) { %>
-                                                <img src="<%= member.imagePath %>" alt="<%= member.name %>" title="<%= member.name %>" class="board-list-party-icon" />
+                                                <img src="<%= member.imagePath %>" alt="<%= member.name %>" title="<%= member.name %>" class="board-list-party-icon" data-party-official-name="<%= member.name %>" />
                                             <% } else if (member) { %>
-                                                <div class="board-list-party-icon board-list-party-icon-missing"><%= member.name %></div>
+                                                <div class="board-list-party-icon board-list-party-icon-missing" data-party-official-name="<%= member.name %>"><%= member.name %></div>
                                             <% } else { %>
                                                 <div class="board-list-party-icon board-list-party-icon-empty"></div>
                                             <% } %>
@@ -63,3 +63,107 @@
         <% } %>
     </div>
 </div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const IS_LOGGED_IN = <%- JSON.stringify(!!isLoggedIn) %>;
+
+        function getCurrentFirebaseUser() {
+            if (!window.firebase || typeof window.firebase.auth !== 'function') {
+                return null;
+            }
+            try {
+                return window.firebase.auth().currentUser || null;
+            } catch {
+                return null;
+            }
+        }
+
+        function sleep(ms) {
+            return new Promise((resolve) => {
+                window.setTimeout(resolve, ms);
+            });
+        }
+
+        async function waitForFirebaseUser(timeoutMs = 3000) {
+            const startedAt = Date.now();
+            while (Date.now() - startedAt <= timeoutMs) {
+                const user = getCurrentFirebaseUser();
+                if (user && typeof user.getIdToken === 'function') {
+                    return user;
+                }
+                await sleep(100);
+            }
+            return null;
+        }
+
+        async function fetchCurrentProfileWithToken() {
+            const user = await waitForFirebaseUser();
+            if (!user) {
+                return null;
+            }
+
+            const idToken = await user.getIdToken();
+            const response = await fetch('/api/settings/profile/current', {
+                method: 'GET',
+                headers: {
+                    Authorization: `Bearer ${idToken}`
+                }
+            });
+
+            if (!response.ok) {
+                return null;
+            }
+
+            const payload = await response.json();
+            return payload && payload.profile ? payload.profile : null;
+        }
+
+        function applyCustomNamesToBoardList(profile) {
+            const ownedCharacters = profile && Array.isArray(profile.ownedCharacters) ? profile.ownedCharacters : [];
+            const nicknameByOfficialName = new Map();
+
+            ownedCharacters.forEach((entry) => {
+                if (!entry || typeof entry !== 'object') {
+                    return;
+                }
+                const officialName = typeof entry.officialName === 'string' ? entry.officialName.trim() : '';
+                if (!officialName) {
+                    return;
+                }
+                const nickname = typeof entry.nickname === 'string' ? entry.nickname.trim() : '';
+                nicknameByOfficialName.set(officialName, nickname || officialName);
+            });
+
+            nicknameByOfficialName.forEach((nickname, officialName) => {
+                const selector = `[data-party-official-name="${CSS.escape(officialName)}"]`;
+                document.querySelectorAll(selector).forEach((element) => {
+                    if (element instanceof HTMLImageElement) {
+                        element.alt = nickname;
+                        element.title = nickname;
+                        return;
+                    }
+                    element.textContent = nickname;
+                });
+            });
+        }
+
+        async function hydrateCustomNamesIfNeeded() {
+            if (!IS_LOGGED_IN) {
+                return;
+            }
+
+            try {
+                const profile = await fetchCurrentProfileWithToken();
+                if (!profile) {
+                    return;
+                }
+                applyCustomNamesToBoardList(profile);
+            } catch (error) {
+                console.warn('一覧のカスタム名読み込みに失敗しました。', error);
+            }
+        }
+
+        hydrateCustomNamesIfNeeded();
+    });
+</script>

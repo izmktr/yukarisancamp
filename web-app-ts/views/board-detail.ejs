@@ -69,18 +69,23 @@
             <% } %>
         </section>
 
-        <h3>パーティ編成</h3>
+        <div class="board-party-heading">
+            <h3>パーティ編成</h3>
+            <% if (partyMembers && partyMembers.length > 0) { %>
+                <button type="button" id="board-party-customize-open" class="btn btn-primary">カスタム</button>
+            <% } %>
+        </div>
         <% if (partyMembers && partyMembers.length > 0) { %>
             <% const partyDisplayMembers = partyMembers.slice().reverse(); %>
             <div class="board-party-grid">
                 <% partyDisplayMembers.forEach(function(member) { %>
-                    <div class="board-party-card">
+                    <div class="board-party-card" data-party-official-name="<%= member.name %>">
                         <% if (member.imagePath) { %>
-                            <img src="<%= member.imagePath %>" alt="<%= member.name %>" class="board-party-image" />
+                            <img src="<%= member.imagePath %>" alt="<%= member.name %>" class="board-party-image" data-party-image="true" />
                         <% } else { %>
                             <div class="board-party-image board-party-image-missing">NO IMAGE</div>
                         <% } %>
-                        <div class="board-party-name"><%= member.name %></div>
+                        <div class="board-party-name" data-party-name-text="true"><%= member.name %></div>
                         <div class="board-party-stats"><%
                             const stats = [];
                             if (member.star !== null) stats.push(`★${member.star}`);
@@ -89,6 +94,21 @@
                         %><%= stats.length > 0 ? stats.join(' ') : '' %></div>
                     </div>
                 <% }); %>
+            </div>
+
+            <div id="board-party-customize-modal" class="board-party-modal" hidden>
+                <div class="board-party-modal-backdrop" data-party-modal-close="true"></div>
+                <div class="board-party-modal-window" role="dialog" aria-modal="true" aria-labelledby="board-party-modal-title">
+                    <div class="board-party-modal-header">
+                        <h4 id="board-party-modal-title">パーティカスタム</h4>
+                        <div class="board-party-modal-actions">
+                            <button type="button" id="board-party-customize-save" class="btn btn-primary">保存</button>
+                            <button type="button" id="board-party-customize-discard" class="btn">破棄</button>
+                        </div>
+                    </div>
+                    <div id="board-party-customize-status" class="board-party-customize-status" role="status" aria-live="polite"></div>
+                    <div id="board-party-customize-list" class="board-party-customize-list"></div>
+                </div>
             </div>
         <% } else { %>
             <p>未登録</p>
@@ -143,14 +163,14 @@
                             <% const rowActiveIcons = Array.isArray(row.activeIcons) ? row.activeIcons : []; %>
                             <% const hasServerActive = rowActiveIcons.length > 0 || row.autoActive; %>
                             <% const isPartyCharRow = partySlots.some(function(s) { return s && s.name === row.ubText; }); %>
-                            <tr class="<%= hasServerActive ? 'ub-row-has-active' : '' %> <%= row.comment ? 'has-comment-row' : '' %>" data-is-battle-start="<%= row.ubText === 'バトル開始' ? 'true' : 'false' %>" data-is-battle-end="<%= row.ubText === 'バトル終了' ? 'true' : 'false' %>" data-is-added-row="<%= row.isAddedRow ? 'true' : 'false' %>" data-timing="<%= row.timing ? 'true' : 'false' %>" data-ub-text="<%= encodeURIComponent(row.ubText || '') %>">
+                            <tr class="<%= hasServerActive ? 'ub-row-has-active' : '' %> <%= row.comment ? 'has-comment-row' : '' %>" data-is-battle-start="<%= row.ubText === 'バトル開始' ? 'true' : 'false' %>" data-is-battle-end="<%= row.ubText === 'バトル終了' ? 'true' : 'false' %>" data-is-added-row="<%= row.isAddedRow ? 'true' : 'false' %>" data-timing="<%= row.timing ? 'true' : 'false' %>" data-ub-text="<%= encodeURIComponent(row.ubText || '') %>" data-party-character-official-name="<%= isPartyCharRow ? row.ubText : '' %>">
                                 <td class="ub-time-cell"><%= row.time || '' %></td>
                                 <td class="ub-event-cell">
                                     <div class="ub-event-cell-inner">
                                         <% if (row.ubImagePath) { %>
-                                            <img src="<%= row.ubImagePath %>" alt="<%= row.ubText %>" title="<%= row.ubText %>" class="ub-event-image" />
+                                            <img src="<%= row.ubImagePath %>" alt="<%= row.ubText %>" title="<%= row.ubText %>" class="ub-event-image" data-ub-event-image="true" />
                                         <% } else if (row.ubText) { %>
-                                            <div class="ub-event-image-missing ub-event-image-missing-blue"><%= row.ubText %></div>
+                                            <div class="ub-event-image-missing ub-event-image-missing-blue" data-ub-event-text="true"><%= row.ubText %></div>
                                         <% } %>
                                         <% if (isPartyCharRow) { %>
                                             <span class="ub-state-badge" aria-hidden="true"></span>
@@ -165,7 +185,7 @@
                                     <% const isTimingPartySlot = row.timing && partySlot && partySlot.name === row.ubText; %>
                                     <td class="ub-party-cell">
                                         <% if (partySlot && partySlot.imagePath) { %>
-                                            <div class="ub-icon-box <%= isTimingPartySlot ? 'ub-timing-target' : '' %>" data-icon-type="image" data-is-active="<%= rowActiveIcons.includes(i) ? 'true' : 'false' %>" data-party-slot-name="<%= partySlot.name %>">
+                                            <div class="ub-icon-box <%= isTimingPartySlot ? 'ub-timing-target' : '' %>" data-icon-type="image" data-is-active="<%= rowActiveIcons.includes(i) ? 'true' : 'false' %>" data-party-slot-name="<%= partySlot.name %>" data-party-slot-official-name="<%= partySlot.name %>">
                                                 <img src="<%= partySlot.imagePath %>" alt="<%= partySlot.name %>" title="<%= partySlot.name %>" class="ub-party-image <%= rowActiveIcons.includes(i) ? '' : 'ub-party-image-mono' %>" />
                                                 <span class="ub-set-badge">SET!</span>
                                                 <% if (isTimingPartySlot) { %>
@@ -173,7 +193,7 @@
                                                 <% } %>
                                             </div>
                                         <% } else if (partySlot) { %>
-                                            <div class="ub-icon-box <%= isTimingPartySlot ? 'ub-timing-target' : '' %>" data-icon-type="placeholder" data-is-active="<%= rowActiveIcons.includes(i) ? 'true' : 'false' %>" data-party-slot-name="<%= partySlot.name %>">
+                                            <div class="ub-icon-box <%= isTimingPartySlot ? 'ub-timing-target' : '' %>" data-icon-type="placeholder" data-is-active="<%= rowActiveIcons.includes(i) ? 'true' : 'false' %>" data-party-slot-name="<%= partySlot.name %>" data-party-slot-official-name="<%= partySlot.name %>">
                                                 <div class="<%= rowActiveIcons.includes(i) ? 'ub-party-image-missing ub-party-image-missing-blue' : 'ub-party-image-missing ub-party-image-missing-gray' %>"><%= partySlot.name %></div>
                                                 <span class="ub-set-badge">SET!</span>
                                                 <% if (isTimingPartySlot) { %>
@@ -227,11 +247,461 @@
         const ICON_SIZE_LARGE = 'large';
         const ICON_SIZE_MEDIUM = 'medium';
         const ICON_SIZE_SMALL = 'small';
+        const IS_LOGGED_IN = <%- JSON.stringify(!!isLoggedIn) %>;
+        const INITIAL_PARTY_MEMBERS = <%- JSON.stringify(((partyMembers || []).slice().reverse()).map((member) => ({
+            officialName: member.name,
+            imagePath: member.imagePath || ''
+        }))) %>;
         let currentDisplayMode = DISPLAY_MODE_ALL;
         const timeAdjustInput = document.getElementById('ub-time-adjust-input');
         const timeAdjustButton = document.getElementById('ub-time-adjust-button');
         let currentBattleTimeSeconds = 0;
         let currentInputSeconds = 0;
+        const partyCustomizeOpenButton = document.getElementById('board-party-customize-open');
+        const partyCustomizeModal = document.getElementById('board-party-customize-modal');
+        const partyCustomizeList = document.getElementById('board-party-customize-list');
+        const partyCustomizeSaveButton = document.getElementById('board-party-customize-save');
+        const partyCustomizeDiscardButton = document.getElementById('board-party-customize-discard');
+        const partyCustomizeStatus = document.getElementById('board-party-customize-status');
+        const partyStateByOfficialName = new Map();
+        let partyDraftByOfficialName = new Map();
+
+        function clearPartyCustomizeStatus() {
+            if (!(partyCustomizeStatus instanceof HTMLElement)) {
+                return;
+            }
+            partyCustomizeStatus.textContent = '';
+            partyCustomizeStatus.classList.remove('is-success', 'is-error');
+        }
+
+        function renderPartyCustomizeStatus(message, statusType = '') {
+            if (!(partyCustomizeStatus instanceof HTMLElement)) {
+                return;
+            }
+            partyCustomizeStatus.textContent = message;
+            partyCustomizeStatus.classList.remove('is-success', 'is-error');
+            if (statusType === 'success') {
+                partyCustomizeStatus.classList.add('is-success');
+            }
+            if (statusType === 'error') {
+                partyCustomizeStatus.classList.add('is-error');
+            }
+        }
+
+        function clonePartyStateMap(sourceMap) {
+            const cloned = new Map();
+            sourceMap.forEach((value, key) => {
+                cloned.set(key, {
+                    officialName: value.officialName,
+                    nickname: value.nickname,
+                    owned: value.owned,
+                    connectRank: Number.isFinite(Number(value.connectRank)) ? Math.trunc(Number(value.connectRank)) : 0
+                });
+            });
+            return cloned;
+        }
+
+        function buildDefaultPartyStateMap() {
+            const map = new Map();
+            INITIAL_PARTY_MEMBERS.forEach((member) => {
+                if (!member || typeof member.officialName !== 'string') {
+                    return;
+                }
+                const officialName = member.officialName.trim();
+                if (!officialName || map.has(officialName)) {
+                    return;
+                }
+                map.set(officialName, {
+                    officialName,
+                    nickname: officialName,
+                    owned: true,
+                    connectRank: 0
+                });
+            });
+            return map;
+        }
+
+        function getDisplayNameByOfficialName(officialName) {
+            const current = partyStateByOfficialName.get(officialName);
+            if (!current) {
+                return officialName;
+            }
+            const nickname = String(current.nickname || '').trim();
+            return nickname || officialName;
+        }
+
+        function getCurrentFirebaseUser() {
+            if (!window.firebase || typeof window.firebase.auth !== 'function') {
+                return null;
+            }
+            try {
+                return window.firebase.auth().currentUser || null;
+            } catch {
+                return null;
+            }
+        }
+
+        function sleep(ms) {
+            return new Promise((resolve) => {
+                window.setTimeout(resolve, ms);
+            });
+        }
+
+        async function waitForFirebaseUser(timeoutMs = 3000) {
+            const startedAt = Date.now();
+            while (Date.now() - startedAt <= timeoutMs) {
+                const user = getCurrentFirebaseUser();
+                if (user && typeof user.getIdToken === 'function') {
+                    return user;
+                }
+                await sleep(100);
+            }
+            return null;
+        }
+
+        async function fetchCurrentProfileWithToken() {
+            const user = await waitForFirebaseUser();
+            if (!user) {
+                throw new Error('ログイン状態を確認できませんでした。Googleログインし直してください。');
+            }
+
+            const idToken = await user.getIdToken();
+            const response = await fetch('/api/settings/profile/current', {
+                method: 'GET',
+                headers: {
+                    Authorization: `Bearer ${idToken}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('プロフィールの取得に失敗しました。');
+            }
+
+            const payload = await response.json();
+            return payload && payload.profile ? payload.profile : null;
+        }
+
+        async function saveOwnedCharactersWithToken(ownedCharacters) {
+            const user = await waitForFirebaseUser();
+            if (!user) {
+                throw new Error('ログイン状態を確認できませんでした。Googleログインし直してください。');
+            }
+
+            const idToken = await user.getIdToken();
+            const response = await fetch('/api/settings/profile/save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${idToken}`
+                },
+                body: JSON.stringify({ ownedCharacters })
+            });
+
+            if (!response.ok) {
+                throw new Error('カスタム設定の保存に失敗しました。');
+            }
+
+            const payload = await response.json();
+            return payload && payload.profile ? payload.profile : null;
+        }
+
+        function mergeOwnedCharactersIntoPartyState(rawOwnedCharacters) {
+            if (!Array.isArray(rawOwnedCharacters)) {
+                return;
+            }
+
+            rawOwnedCharacters.forEach((item) => {
+                if (!item || typeof item !== 'object') {
+                    return;
+                }
+                const officialNameRaw = typeof item.officialName === 'string' ? item.officialName.trim() : '';
+                if (!officialNameRaw || !partyStateByOfficialName.has(officialNameRaw)) {
+                    return;
+                }
+
+                const current = partyStateByOfficialName.get(officialNameRaw);
+                if (!current) {
+                    return;
+                }
+
+                const nextNickname = typeof item.nickname === 'string' ? item.nickname.trim() : '';
+                const nextConnectRank = Number.isFinite(Number(item.connectRank)) ? Math.trunc(Number(item.connectRank)) : current.connectRank;
+
+                partyStateByOfficialName.set(officialNameRaw, {
+                    officialName: officialNameRaw,
+                    nickname: nextNickname || officialNameRaw,
+                    owned: Boolean(item.owned),
+                    connectRank: nextConnectRank
+                });
+            });
+        }
+
+        function applyPartyStateToView() {
+            partyStateByOfficialName.forEach((state, officialName) => {
+                const displayName = (state.nickname || '').trim() || officialName;
+                const safeDisplayName = displayName;
+
+                document.querySelectorAll(`.board-party-card[data-party-official-name="${CSS.escape(officialName)}"]`).forEach((card) => {
+                    const nameElement = card.querySelector('[data-party-name-text="true"]');
+                    if (nameElement) {
+                        nameElement.textContent = safeDisplayName;
+                    }
+
+                    const imageElement = card.querySelector('[data-party-image="true"]');
+                    if (imageElement instanceof HTMLImageElement) {
+                        imageElement.alt = safeDisplayName;
+                        imageElement.title = safeDisplayName;
+                    }
+
+                    card.classList.toggle('is-unowned', !state.owned);
+                });
+
+                document.querySelectorAll(`.ub-icon-box[data-party-slot-official-name="${CSS.escape(officialName)}"]`).forEach((iconBox) => {
+                    if (!(iconBox instanceof HTMLElement)) {
+                        return;
+                    }
+
+                    iconBox.dataset.partySlotName = safeDisplayName;
+                    iconBox.classList.toggle('is-unowned', !state.owned);
+
+                    const partyImage = iconBox.querySelector('img.ub-party-image');
+                    if (partyImage instanceof HTMLImageElement) {
+                        partyImage.alt = safeDisplayName;
+                        partyImage.title = safeDisplayName;
+                    }
+
+                    const missingText = iconBox.querySelector('.ub-party-image-missing');
+                    if (missingText) {
+                        missingText.textContent = safeDisplayName;
+                    }
+                });
+
+                document.querySelectorAll(`tr[data-party-character-official-name="${CSS.escape(officialName)}"]`).forEach((row) => {
+                    if (!(row instanceof HTMLElement)) {
+                        return;
+                    }
+
+                    row.dataset.ubText = encodeURIComponent(safeDisplayName);
+
+                    const eventImage = row.querySelector('[data-ub-event-image="true"]');
+                    if (eventImage instanceof HTMLImageElement) {
+                        eventImage.alt = safeDisplayName;
+                        eventImage.title = safeDisplayName;
+                    }
+
+                    const eventText = row.querySelector('[data-ub-event-text="true"]');
+                    if (eventText) {
+                        eventText.textContent = safeDisplayName;
+                    }
+                });
+            });
+
+            updateStateBadges();
+            applyRowFilter();
+        }
+
+        function getPartyStateListFromMap(sourceMap) {
+            const output = [];
+            sourceMap.forEach((value) => {
+                output.push({
+                    officialName: value.officialName,
+                    nickname: (value.nickname || '').trim() || value.officialName,
+                    owned: Boolean(value.owned),
+                    connectRank: Number.isFinite(Number(value.connectRank)) ? Math.trunc(Number(value.connectRank)) : 0
+                });
+            });
+            return output;
+        }
+
+        function renderPartyCustomizeList() {
+            if (!(partyCustomizeList instanceof HTMLElement)) {
+                return;
+            }
+
+            partyCustomizeList.innerHTML = '';
+            const fragment = document.createDocumentFragment();
+
+            INITIAL_PARTY_MEMBERS.forEach((member, index) => {
+                const officialName = member.officialName;
+                const state = partyDraftByOfficialName.get(officialName);
+                if (!state) {
+                    return;
+                }
+
+                const row = document.createElement('div');
+                row.className = 'board-party-customize-row';
+
+                const imageWrap = document.createElement('div');
+                imageWrap.className = 'board-party-customize-image-wrap';
+
+                if (member.imagePath) {
+                    const image = document.createElement('img');
+                    image.src = member.imagePath;
+                    image.alt = officialName;
+                    image.className = 'board-party-customize-image';
+                    imageWrap.appendChild(image);
+                } else {
+                    const missing = document.createElement('div');
+                    missing.className = 'board-party-customize-image board-party-customize-image-missing';
+                    missing.textContent = 'NO IMAGE';
+                    imageWrap.appendChild(missing);
+                }
+
+                const controls = document.createElement('div');
+                controls.className = 'board-party-customize-controls';
+
+                const nameInput = document.createElement('input');
+                nameInput.type = 'text';
+                nameInput.className = 'board-party-customize-name';
+                nameInput.value = state.nickname;
+                nameInput.placeholder = officialName;
+                nameInput.maxLength = 100;
+                nameInput.dataset.officialName = officialName;
+                nameInput.setAttribute('aria-label', `${officialName} の表示名`);
+
+                const ownedWrap = document.createElement('label');
+                ownedWrap.className = 'board-party-customize-owned';
+                const ownedInput = document.createElement('input');
+                ownedInput.type = 'checkbox';
+                ownedInput.checked = state.owned;
+                ownedInput.dataset.officialName = officialName;
+                ownedInput.setAttribute('aria-label', `${officialName} を所持している`);
+                const ownedText = document.createElement('span');
+                ownedText.textContent = '所持';
+                ownedWrap.appendChild(ownedInput);
+                ownedWrap.appendChild(ownedText);
+
+                nameInput.addEventListener('input', () => {
+                    const targetOfficialName = nameInput.dataset.officialName || '';
+                    const current = partyDraftByOfficialName.get(targetOfficialName);
+                    if (!current) {
+                        return;
+                    }
+                    current.nickname = nameInput.value;
+                    partyDraftByOfficialName.set(targetOfficialName, current);
+                    clearPartyCustomizeStatus();
+                });
+
+                ownedInput.addEventListener('change', () => {
+                    const targetOfficialName = ownedInput.dataset.officialName || '';
+                    const current = partyDraftByOfficialName.get(targetOfficialName);
+                    if (!current) {
+                        return;
+                    }
+                    current.owned = ownedInput.checked;
+                    partyDraftByOfficialName.set(targetOfficialName, current);
+                    clearPartyCustomizeStatus();
+                });
+
+                controls.appendChild(nameInput);
+                controls.appendChild(ownedWrap);
+                row.appendChild(imageWrap);
+                row.appendChild(controls);
+                fragment.appendChild(row);
+            });
+
+            partyCustomizeList.appendChild(fragment);
+        }
+
+        function openPartyCustomizeModal() {
+            if (!(partyCustomizeModal instanceof HTMLElement)) {
+                return;
+            }
+
+            partyDraftByOfficialName = clonePartyStateMap(partyStateByOfficialName);
+            renderPartyCustomizeList();
+            clearPartyCustomizeStatus();
+            partyCustomizeModal.hidden = false;
+        }
+
+        function closePartyCustomizeModal() {
+            if (!(partyCustomizeModal instanceof HTMLElement)) {
+                return;
+            }
+            partyCustomizeModal.hidden = true;
+        }
+
+        async function savePartyCustomize() {
+            partyStateByOfficialName.clear();
+            partyDraftByOfficialName.forEach((value, key) => {
+                partyStateByOfficialName.set(key, {
+                    officialName: value.officialName,
+                    nickname: (value.nickname || '').trim() || value.officialName,
+                    owned: Boolean(value.owned),
+                    connectRank: Number.isFinite(Number(value.connectRank)) ? Math.trunc(Number(value.connectRank)) : 0
+                });
+            });
+            applyPartyStateToView();
+
+            if (!IS_LOGGED_IN) {
+                renderPartyCustomizeStatus('この画面内で保存しました。', 'success');
+                closePartyCustomizeModal();
+                return;
+            }
+
+            if (!(partyCustomizeSaveButton instanceof HTMLButtonElement)) {
+                return;
+            }
+
+            partyCustomizeSaveButton.disabled = true;
+            try {
+                const profile = await fetchCurrentProfileWithToken();
+                const existingOwnedCharacters = Array.isArray(profile?.ownedCharacters) ? profile.ownedCharacters : [];
+                const mergedMap = new Map();
+
+                existingOwnedCharacters.forEach((entry) => {
+                    if (!entry || typeof entry !== 'object') {
+                        return;
+                    }
+                    const officialName = typeof entry.officialName === 'string' ? entry.officialName.trim() : '';
+                    if (!officialName) {
+                        return;
+                    }
+                    mergedMap.set(officialName, {
+                        officialName,
+                        nickname: typeof entry.nickname === 'string' ? entry.nickname : officialName,
+                        owned: Boolean(entry.owned),
+                        connectRank: Number.isFinite(Number(entry.connectRank)) ? Math.trunc(Number(entry.connectRank)) : 0
+                    });
+                });
+
+                const latestPartyStateList = getPartyStateListFromMap(partyStateByOfficialName);
+                latestPartyStateList.forEach((entry) => {
+                    const previous = mergedMap.get(entry.officialName);
+                    mergedMap.set(entry.officialName, {
+                        officialName: entry.officialName,
+                        nickname: entry.nickname,
+                        owned: entry.owned,
+                        connectRank: previous ? previous.connectRank : entry.connectRank
+                    });
+                });
+
+                const mergedOwnedCharacters = Array.from(mergedMap.values());
+                await saveOwnedCharactersWithToken(mergedOwnedCharacters);
+
+                renderPartyCustomizeStatus('Supabase に保存しました。', 'success');
+                closePartyCustomizeModal();
+            } catch (error) {
+                console.error('パーティカスタムの保存に失敗しました:', error);
+                renderPartyCustomizeStatus('保存に失敗しました。画面反映はされています。', 'error');
+            } finally {
+                partyCustomizeSaveButton.disabled = false;
+            }
+        }
+
+        async function hydratePartyStateIfLoggedIn() {
+            if (!IS_LOGGED_IN || partyStateByOfficialName.size === 0) {
+                return;
+            }
+
+            try {
+                const profile = await fetchCurrentProfileWithToken();
+                mergeOwnedCharactersIntoPartyState(profile?.ownedCharacters);
+                applyPartyStateToView();
+            } catch (error) {
+                console.warn('パーティカスタムの読み込みに失敗しました。ローカル表示を使用します。', error);
+            }
+        }
 
         function parseTimeToSeconds(timeText) {
             const raw = (timeText || '').trim();
@@ -641,5 +1111,51 @@
         applyRowFilter();
         applyIconSize(ICON_SIZE_LARGE);
         updateBattleStartEndLabels(ICON_SIZE_LARGE);
+
+        if (partyStateByOfficialName.size === 0) {
+            const defaultMap = buildDefaultPartyStateMap();
+            defaultMap.forEach((value, key) => {
+                partyStateByOfficialName.set(key, value);
+            });
+            applyPartyStateToView();
+        }
+
+        if (partyCustomizeOpenButton) {
+            partyCustomizeOpenButton.addEventListener('click', () => {
+                openPartyCustomizeModal();
+            });
+        }
+
+        if (partyCustomizeModal) {
+            partyCustomizeModal.addEventListener('click', (event) => {
+                const target = event.target;
+                if (!(target instanceof HTMLElement)) {
+                    return;
+                }
+                if (target.dataset.partyModalClose === 'true') {
+                    closePartyCustomizeModal();
+                }
+            });
+        }
+
+        if (partyCustomizeDiscardButton) {
+            partyCustomizeDiscardButton.addEventListener('click', () => {
+                closePartyCustomizeModal();
+            });
+        }
+
+        if (partyCustomizeSaveButton) {
+            partyCustomizeSaveButton.addEventListener('click', async () => {
+                await savePartyCustomize();
+            });
+        }
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && partyCustomizeModal && !partyCustomizeModal.hidden) {
+                closePartyCustomizeModal();
+            }
+        });
+
+        hydratePartyStateIfLoggedIn();
     });
 </script>
