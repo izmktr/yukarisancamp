@@ -223,7 +223,14 @@ type UserProfileSettingsPayload = {
   discordServer: string | null;
   displayName: string;
   createdAt: number;
+};
+
+type UserProfileResponsePayload = UserProfileSettingsPayload & {
   ownedCharacters: UserOwnedCharacter[];
+};
+
+type UserOwnedCharacterRecord = UserOwnedCharacter & {
+  googleUserId: string;
 };
 
 type SupabaseConfig = {
@@ -233,6 +240,7 @@ type SupabaseConfig = {
 
 const SUPABASE_CLAN_BATTLE_TABLE = 'setting_clanbattle';
 const SUPABASE_USER_PROFILE_TABLE = 'setting_userprofile';
+const SUPABASE_USER_OWNED_CHARACTER_TABLE = 'setting_user_owned_character';
 
 function getSupabaseConfig(): SupabaseConfig | null {
   const url = process.env.SUPABASE_URL;
@@ -320,11 +328,6 @@ function normalizeUserProfileSettingsPayload(rawValue: unknown, defaults: { goog
       ? null
       : null;
 
-  const ownedCharacters = normalizeUserOwnedCharacters(source.ownedCharacters);
-  if (!ownedCharacters) {
-    return null;
-  }
-
   const createdAtRaw = source.createdAt;
   const createdAtNumber = Number(createdAtRaw);
 
@@ -333,7 +336,23 @@ function normalizeUserProfileSettingsPayload(rawValue: unknown, defaults: { goog
     discordId,
     discordServer,
     displayName: displayNameRaw,
-    createdAt: Number.isFinite(createdAtNumber) ? createdAtNumber : Date.now(),
+    createdAt: Number.isFinite(createdAtNumber) ? createdAtNumber : Date.now()
+  };
+}
+
+function toUserOwnedCharacterRecords(googleUserId: string, characters: UserOwnedCharacter[]): UserOwnedCharacterRecord[] {
+  return characters.map((character) => ({
+    googleUserId,
+    officialName: character.officialName,
+    nickname: character.nickname,
+    owned: character.owned,
+    connectRank: character.connectRank
+  }));
+}
+
+function buildUserProfileResponsePayload(profile: UserProfileSettingsPayload, ownedCharacters: UserOwnedCharacter[]): UserProfileResponsePayload {
+  return {
+    ...profile,
     ownedCharacters
   };
 }
@@ -413,6 +432,77 @@ async function supabaseUpsertUserProfile(config: SupabaseConfig, payload: UserPr
   if (!response.ok) {
     const responseText = await response.text();
     throw new Error(`Supabase upsert user profile failed: ${response.status} ${responseText}`);
+  }
+}
+
+async function supabaseSelectUserOwnedCharactersByGoogleUserId(config: SupabaseConfig, googleUserId: string): Promise<UserOwnedCharacter[]> {
+  const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_USER_OWNED_CHARACTER_TABLE);
+  const query = new URLSearchParams({
+    select: '*',
+    googleUserId: `eq.${googleUserId}`
+  });
+
+  const response = await fetch(`${endpointUrl}?${query.toString()}`, {
+    method: 'GET',
+    headers: {
+      apikey: config.secretKey,
+      Authorization: `Bearer ${config.secretKey}`
+    }
+  });
+
+  if (!response.ok) {
+    const responseText = await response.text();
+    throw new Error(`Supabase select user owned characters failed: ${response.status} ${responseText}`);
+  }
+
+  const rows = await response.json() as unknown;
+  const normalized = normalizeUserOwnedCharacters(rows);
+  if (!normalized) {
+    throw new Error('Supabase returned invalid ownedCharacters payload');
+  }
+
+  return normalized;
+}
+
+async function supabaseReplaceUserOwnedCharacters(config: SupabaseConfig, googleUserId: string, ownedCharacters: UserOwnedCharacter[]): Promise<void> {
+  const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_USER_OWNED_CHARACTER_TABLE);
+  const deleteQuery = new URLSearchParams({
+    googleUserId: `eq.${googleUserId}`
+  });
+
+  const deleteResponse = await fetch(`${endpointUrl}?${deleteQuery.toString()}`, {
+    method: 'DELETE',
+    headers: {
+      apikey: config.secretKey,
+      Authorization: `Bearer ${config.secretKey}`,
+      Prefer: 'return=minimal'
+    }
+  });
+
+  if (!deleteResponse.ok) {
+    const responseText = await deleteResponse.text();
+    throw new Error(`Supabase delete user owned characters failed: ${deleteResponse.status} ${responseText}`);
+  }
+
+  if (ownedCharacters.length === 0) {
+    return;
+  }
+
+  const rows = toUserOwnedCharacterRecords(googleUserId, ownedCharacters);
+  const insertResponse = await fetch(endpointUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: config.secretKey,
+      Authorization: `Bearer ${config.secretKey}`,
+      Prefer: 'return=minimal'
+    },
+    body: JSON.stringify(rows)
+  });
+
+  if (!insertResponse.ok) {
+    const responseText = await insertResponse.text();
+    throw new Error(`Supabase insert user owned characters failed: ${insertResponse.status} ${responseText}`);
   }
 }
 
@@ -1141,8 +1231,9 @@ app.get('/api/settings/profile/current', async (req, res) => {
       googleUserId: verified.uid,
       displayName: verified.displayName
     });
+    const ownedCharacters = await supabaseSelectUserOwnedCharactersByGoogleUserId(config, verified.uid);
 
-    return res.json({ profile });
+    return res.json({ profile: buildUserProfileResponsePayload(profile, ownedCharacters) });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     if (errorMessage.includes('Authorization header') || errorMessage.includes('Invalid') || errorMessage.includes('token')) {
@@ -1172,6 +1263,17 @@ app.post('/api/settings/profile/save', express.json(), async (req, res) => {
     });
 
     const body = req.body && typeof req.body === 'object' ? req.body as Record<string, unknown> : {};
+    const hasOwnedCharactersPatch = Object.prototype.hasOwnProperty.call(body, 'ownedCharacters');
+    let normalizedOwnedCharactersPatch: UserOwnedCharacter[] = [];
+
+    if (hasOwnedCharactersPatch) {
+      const normalizedOwnedCharacters = normalizeUserOwnedCharacters(body.ownedCharacters);
+      if (!normalizedOwnedCharacters) {
+        return res.status(400).json({ error: 'Invalid payload' });
+      }
+      normalizedOwnedCharactersPatch = normalizedOwnedCharacters;
+    }
+
     const patch: Record<string, unknown> = {
       ...currentProfile
     };
@@ -1185,9 +1287,6 @@ app.post('/api/settings/profile/save', express.json(), async (req, res) => {
     if (Object.prototype.hasOwnProperty.call(body, 'discordServer')) {
       patch.discordServer = body.discordServer;
     }
-    if (Object.prototype.hasOwnProperty.call(body, 'ownedCharacters')) {
-      patch.ownedCharacters = body.ownedCharacters;
-    }
 
     const normalized = normalizeUserProfileSettingsPayload(patch, {
       googleUserId: verified.uid,
@@ -1199,7 +1298,19 @@ app.post('/api/settings/profile/save', express.json(), async (req, res) => {
     }
 
     await supabaseUpsertUserProfile(config, normalized);
-    return res.json({ success: true, profile: normalized });
+
+    if (hasOwnedCharactersPatch) {
+      await supabaseReplaceUserOwnedCharacters(config, verified.uid, normalizedOwnedCharactersPatch);
+    }
+
+    const ownedCharacters = hasOwnedCharactersPatch
+      ? normalizedOwnedCharactersPatch
+      : await supabaseSelectUserOwnedCharactersByGoogleUserId(config, verified.uid);
+
+    return res.json({
+      success: true,
+      profile: buildUserProfileResponsePayload(normalized, ownedCharacters)
+    });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     if (errorMessage.includes('Authorization header') || errorMessage.includes('Invalid') || errorMessage.includes('token')) {

@@ -16,8 +16,9 @@ SUPABASE_JWKS_URL=
 ```
 
 補足:
-- テーブル名は `setting_clanbattle` と `setting_userprofile` の固定です。
+- テーブル名は `setting_clanbattle`、`setting_userprofile`、`setting_user_owned_character` の固定です。
 - APIはサーバ側で `SUPABASE_SECRET_KEY` を使って Supabase REST API に `upsert` します。
+- テーブル作成SQLは `document/supabase_createtable.sql` に集約しています。
 
 ## 2. 値の取得場所
 
@@ -46,18 +47,7 @@ Supabaseダッシュボードから取得します。
   - `startDate` date
   - `endDate` date
 
-以下は作成例です。
-
-```sql
-create table if not exists public.setting_clanbattle (
-  yearmonth text primary key,
-  bossname text[] not null,
-  "bossHp" integer[] not null,
-  "startDate" date not null,
-  "endDate" date not null,
-  updated_at timestamptz not null default now()
-);
-```
+作成SQLは `document/supabase_createtable.sql` の `setting_clanbattle` を使用してください。
 
 注意:
 - 現在の保存APIは camelCase カラム名（`bossHp`, `startDate`, `endDate`）で保存します。
@@ -82,41 +72,30 @@ create table if not exists public.setting_clanbattle (
   - `discordServer` text null
   - `displayName` text
   - `createdAt` bigint
-  - `ownedCharacters` jsonb
 
-`ownedCharacters` の要素は以下の構造を想定します。
+所持キャラは `setting_user_owned_character` に分離して保存します（`schema/userOwnedCharacter.schema.json` 準拠）。
 
-```json
-{
-  "officialName": "string",
-  "nickname": "string",
-  "owned": true,
-  "connectRank": 0
-}
-```
+- テーブル名: `setting_user_owned_character`（固定）
+- 想定カラム:
+  - `googleUserId` text
+  - `officialName` text
+  - `nickname` text
+  - `owned` boolean
+  - `connectRank` integer
+- 主キー:
+  - `("googleUserId", "officialName")`
 
-作成例:
-
-```sql
-create table if not exists public.setting_userprofile (
-  "googleUserId" text primary key,
-  "discordId" text null,
-  "discordServer" text null,
-  "displayName" text not null,
-  "createdAt" bigint not null,
-  "ownedCharacters" jsonb not null default '[]'::jsonb,
-  updated_at timestamptz not null default now()
-);
-```
+作成SQLは `document/supabase_createtable.sql` の `setting_userprofile` / `setting_user_owned_character` を使用してください。
 
 ## 6. 動作確認手順
 
 1. `web-app-ts/.env.local` を設定
-2. Supabase に `setting_clanbattle` と `setting_userprofile` テーブルを作成
+2. Supabase SQL Editor で `document/supabase_createtable.sql` を実行し、3テーブルを作成
 3. web-app-ts を起動
 4. `/settings` を開いてログイン
 5. 表示名変更を保存し、`setting_userprofile` の対象 `googleUserId` 行が insert/update されることを確認
-6. `/clanbattle-settings` を開いて保存し、`setting_clanbattle` の `yearmonth` 行が insert/update されることを確認
+6. 所持キャラ更新を保存し、`setting_user_owned_character` の対象 `googleUserId` 行が delete/insert されることを確認
+7. `/clanbattle-settings` を開いて保存し、`setting_clanbattle` の `yearmonth` 行が insert/update されることを確認
 
 ## 7. よくある問題
 

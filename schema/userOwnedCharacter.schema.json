@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "UserOwnedCharacter",
+  "description": "A user owned character row stored in Firebase/Supabase.",
+  "type": "object",
+  "properties": {
+    "googleUserId": {
+      "description": "The unique ID of the user (from Google).",
+      "type": "string"
+    },
+    "officialName": {
+      "description": "公式名",
+      "type": "string"
+    },
+    "nickname": {
+      "description": "愛称",
+      "type": "string"
+    },
+    "owned": {
+      "description": "所持しているかどうか",
+      "type": "boolean"
+    },
+    "connectRank": {
+      "description": "コネクトランク",
+      "type": "integer"
+    }
+  },
+  "required": ["googleUserId", "officialName", "nickname", "owned", "connectRank"]
+}

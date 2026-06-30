@@ -23,32 +23,6 @@
     "createdAt": {
       "description": "The timestamp when the profile was created.",
       "type": "number"
-    },
-    "ownedCharacters": {
-      "description": "所持キャラ一覧。",
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "officialName": {
-            "description": "公式名",
-            "type": "string"
-          },
-          "nickname": {
-            "description": "愛称",
-            "type": "string"
-          },
-          "owned": {
-            "description": "所持しているかどうか",
-            "type": "boolean"
-          },
-          "connectRank": {
-            "description": "コネクトランク",
-            "type": "integer"
-          }
-        },
-        "required": ["officialName", "nickname", "owned", "connectRank"]
-      }
     }
   },
   "required": ["googleUserId", "displayName", "createdAt"]
