@@ -10,6 +10,18 @@ create table if not exists public.setting_clanbattle (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.setting_clanbattle_events (
+  id bigint generated always as identity primary key,
+  yearmonth text not null,
+  event_type text not null,
+  source text not null,
+  triggered_by text null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists setting_clanbattle_events_created_at_idx
+  on public.setting_clanbattle_events (created_at desc, id desc);
+
 create table if not exists public.setting_userprofile (
   "googleUserId" text primary key,
   "discordId" text null,

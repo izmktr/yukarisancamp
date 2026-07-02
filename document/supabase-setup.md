@@ -16,7 +16,7 @@ SUPABASE_JWKS_URL=
 ```
 
 補足:
-- テーブル名は `setting_clanbattle`、`setting_userprofile`、`setting_user_owned_character` の固定です。
+- テーブル名は `setting_clanbattle`、`setting_clanbattle_events`、`setting_userprofile`、`setting_user_owned_character` の固定です。
 - APIはサーバ側で `SUPABASE_SECRET_KEY` を使って Supabase REST API に `upsert` します。
 - テーブル作成SQLは `document/supabase_createtable.sql` に集約しています。
 
@@ -52,6 +52,24 @@ Supabaseダッシュボードから取得します。
 注意:
 - 現在の保存APIは camelCase カラム名（`bossHp`, `startDate`, `endDate`）で保存します。
 - PostgreSQL で camelCase を使う場合はダブルクォートが必要です。
+
+## 3.1 クラバト更新通知テーブル要件
+
+Discord Bot 側でブラウザ更新を検知するため、保存APIは `setting_clanbattle` 更新後に `setting_clanbattle_events` へ通知行を追加します。
+
+- テーブル名: `setting_clanbattle_events`（固定）
+- 用途: ブラウザや管理画面からのクラバト設定更新通知
+- 想定カラム:
+  - `id` bigint identity primary key
+  - `yearmonth` text
+  - `event_type` text
+  - `source` text
+  - `triggered_by` text null
+  - `created_at` timestamptz
+
+運用:
+- web-app-ts はクラバト設定保存成功後に `event_type='upsert'`, `source='web-app-ts'` で1行追加します。
+- Python Bot はこのテーブルの最新行を監視し、新しいイベントが増えたら `setting_clanbattle` の最新1件を再取得します。
 
 ## 4. セキュリティ注意
 
@@ -90,12 +108,13 @@ Supabaseダッシュボードから取得します。
 ## 6. 動作確認手順
 
 1. `web-app-ts/.env.local` を設定
-2. Supabase SQL Editor で `document/supabase_createtable.sql` を実行し、3テーブルを作成
+2. Supabase SQL Editor で `document/supabase_createtable.sql` を実行し、4テーブルを作成
 3. web-app-ts を起動
 4. `/settings` を開いてログイン
 5. 表示名変更を保存し、`setting_userprofile` の対象 `googleUserId` 行が insert/update されることを確認
 6. 所持キャラ更新を保存し、`setting_user_owned_character` の対象 `googleUserId` 行が delete/insert されることを確認
 7. `/clanbattle-settings` を開いて保存し、`setting_clanbattle` の `yearmonth` 行が insert/update されることを確認
+8. 同じ保存操作で `setting_clanbattle_events` に新しい行が1件追加されることを確認
 
 ## 7. よくある問題
 

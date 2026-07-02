@@ -6,6 +6,7 @@ import discord
 from discord.ext import tasks
 
 from bot.clanbattle_setting import ClanBattleSetting
+from bot.supabase import SupabaseClient
 
 from . import clan as clan_module
 from .clan import Clan
@@ -14,7 +15,12 @@ from .shared import *
 
 
 class LegacyDiscordBotApp:
-    def __init__(self, token: str, clanbattle_setting: ClanBattleSetting | None = None) -> None:
+    def __init__(
+        self,
+        token: str,
+        clanbattle_setting: ClanBattleSetting | None = None,
+        supabase_client: SupabaseClient | None = None,
+    ) -> None:
         intents = discord.Intents.default()
         intents.typing = False
         intents.members = True
@@ -22,8 +28,20 @@ class LegacyDiscordBotApp:
         self.client = discord.Client(intents=intents)
         self.token = token
         self.clanbattle_setting = clanbattle_setting
+        self.supabase_client = supabase_client
+        self.clanbattle_watch_task: asyncio.Task[None] | None = None
         clan_module.client = self.client
         self._register_events()
+
+    async def on_clanbattle_setting_changed(self, clanbattle_setting: ClanBattleSetting, event) -> None:
+        previous_yearmonth = None if self.clanbattle_setting is None else self.clanbattle_setting.yearmonth
+        self.clanbattle_setting = clanbattle_setting
+        print(
+            'setting_clanbattle changed '
+            f"{previous_yearmonth} -> {clanbattle_setting.yearmonth} "
+            f"{clanbattle_setting.startDate} - {clanbattle_setting.endDate} "
+            f"event_id={event.id} source={event.source}"
+        )
 
     def get_clan(self, guild, message) -> Clan:
         global clanhash
@@ -77,6 +95,17 @@ class LegacyDiscordBotApp:
                     'setting_clanbattle loaded '
                     f"{self.clanbattle_setting.yearmonth} "
                     f"{self.clanbattle_setting.startDate} - {self.clanbattle_setting.endDate}"
+                )
+            if (
+                self.supabase_client is not None
+                and self.clanbattle_setting is not None
+                and self.clanbattle_watch_task is None
+            ):
+                self.clanbattle_watch_task = asyncio.create_task(
+                    self.supabase_client.watch_clanbattle_setting_events(
+                        self.clanbattle_setting,
+                        self.on_clanbattle_setting_changed,
+                    )
                 )
             Outlog(ERRFILE, 'login.')
             for guildid, clan in clanhash.items():
