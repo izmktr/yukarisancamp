@@ -239,8 +239,16 @@ type SupabaseConfig = {
 };
 
 const SUPABASE_CLAN_BATTLE_TABLE = 'setting_clanbattle';
+const SUPABASE_CLAN_BATTLE_EVENT_TABLE = 'setting_clanbattle_events';
 const SUPABASE_USER_PROFILE_TABLE = 'setting_userprofile';
 const SUPABASE_USER_OWNED_CHARACTER_TABLE = 'setting_user_owned_character';
+
+type ClanBattleSettingEventPayload = {
+  yearmonth: string;
+  event_type: 'upsert';
+  source: 'web-app-ts';
+  triggered_by: string | null;
+};
 
 function getSupabaseConfig(): SupabaseConfig | null {
   const url = process.env.SUPABASE_URL;
@@ -702,6 +710,26 @@ async function supabaseUpsertClanBattleState(config: SupabaseConfig, payload: Cl
   }
 }
 
+async function supabaseInsertClanBattleEvent(config: SupabaseConfig, payload: ClanBattleSettingEventPayload): Promise<void> {
+  const endpointUrl = `${config.url.replace(/\/$/, '')}/rest/v1/${encodeURIComponent(SUPABASE_CLAN_BATTLE_EVENT_TABLE)}`;
+
+  const response = await fetch(endpointUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: config.secretKey,
+      Authorization: `Bearer ${config.secretKey}`,
+      Prefer: 'return=minimal'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const responseText = await response.text();
+    throw new Error(`Supabase insert clan battle event failed: ${response.status} ${responseText}`);
+  }
+}
+
 async function ensureClanBattleStateFromSupabase(config: SupabaseConfig, yearmonth: string): Promise<ClanBattleSettingsSavePayload> {
   const currentState = await supabaseSelectClanBattleByYearmonth(config, yearmonth);
   if (currentState) {
@@ -755,8 +783,17 @@ app.post('/api/clanbattle-settings/save', ensureAdmin, express.json(), async (re
     return res.status(503).json({ error: 'Supabase is not configured' });
   }
 
+  const userSession = req.session.user as { googleUserId?: string } | undefined;
+  const triggeredBy = typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : null;
+
   try {
     await supabaseUpsertClanBattleState(config, payload);
+    await supabaseInsertClanBattleEvent(config, {
+      yearmonth: payload.yearmonth,
+      event_type: 'upsert',
+      source: 'web-app-ts',
+      triggered_by: triggeredBy
+    });
     return res.json({ success: true });
   } catch (error) {
     console.error('Failed to save clanbattle settings to Supabase:', error);
