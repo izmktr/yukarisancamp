@@ -1,24 +1,14 @@
-import discord
-import os
+from bot import BotConfig, SupabaseClient
+from legacy_bot import LegacyDiscordBotApp
 
-intents = discord.Intents.default()
-intents.message_content = True
 
-client = discord.Client(intents=intents)
+def main() -> None:
+    config = BotConfig.from_env()
+    supabase_client = SupabaseClient(config.supabase_url, config.supabase_secret_key)
+    clanbattle_setting = supabase_client.fetch_clanbattle_setting()
+    app = LegacyDiscordBotApp(config.token, clanbattle_setting)
+    app.run()
 
-@client.event
-async def on_ready():
-    print(f'We have logged in as {client.user}')
 
-@client.event
-async def on_message(message):
-    if message.author == client.user:
-        return
-
-    if message.content.startswith('$hello'):
-        await message.channel.send('Hello!')
-
-token = os.getenv('DISCORD_TOKEN')
-if not token:
-    raise RuntimeError('DISCORD_TOKEN が環境変数に設定されていません')
-client.run(token)
+if __name__ == "__main__":
+    main()
