@@ -1,17 +1,28 @@
 from __future__ import annotations
 
+# pyright: reportUnusedFunction=false
+
+import asyncio
+import datetime
+import glob
+import os
 from pathlib import Path
+from typing import Any, Callable, cast
 
 import discord
-from discord.ext import tasks
 
 from bot.clanbattle_setting import ClanBattleSetting
-from bot.supabase import SupabaseClient
+from bot.supabase import ClanBattleSettingEvent, SupabaseClient
 
 from . import clan as clan_module
+from . import shared
 from .clan import Clan
 from .global_strage import GlobalStrage
-from .shared import *
+
+shared_any = cast(Any, shared)
+ERRFILE: str = cast(str, shared_any.ERRFILE)
+outlog: Callable[[str, Any], None] = cast(Callable[[str, Any], None], shared_any.Outlog)
+clanhash: dict[int, Clan] = cast(dict[int, Clan], shared_any.clanhash)
 
 
 class LegacyDiscordBotApp:
@@ -33,50 +44,56 @@ class LegacyDiscordBotApp:
         clan_module.client = self.client
         self._register_events()
 
-    async def on_clanbattle_setting_changed(self, clanbattle_setting: ClanBattleSetting, event) -> None:
+    async def on_clanbattle_setting_changed(
+        self,
+        clanbattle_setting: ClanBattleSetting,
+        event: ClanBattleSettingEvent,
+    ) -> None:
         previous_yearmonth = None if self.clanbattle_setting is None else self.clanbattle_setting.yearmonth
         self.clanbattle_setting = clanbattle_setting
         print(
             'setting_clanbattle changed '
             f"{previous_yearmonth} -> {clanbattle_setting.yearmonth} "
             f"{clanbattle_setting.startDate} - {clanbattle_setting.endDate} "
-            f"event_id={event.id} source={event.source}"
+            f"event_id={event.id} "
+            f"source={event.source}"
         )
 
-    def get_clan(self, guild, message) -> Clan:
-        global clanhash
+    def get_clan(self, guild: discord.Guild, message: discord.Message) -> Clan:
         clan = clanhash.get(guild.id)
         if clan is None:
             clan = Clan(message.channel.id)
             clanhash[guild.id] = clan
-        if clan.guild is None:
-            clan.guild = guild
+        any_clan = cast(Any, clan)
+        if any_clan.guild is None:
+            any_clan.guild = guild
         return clan
 
-    async def output(self, clan: Clan, message: str):
-        clan.SetOutputChannel()
-        if clan.outputchannel is not None:
-            if clan.outputlock == 1:
+    async def output(self, clan: Clan, message: str) -> None:
+        any_clan = cast(Any, clan)
+        any_clan.SetOutputChannel()
+        if any_clan.outputchannel is not None:
+            if any_clan.outputlock == 1:
                 return
             try:
-                while clan.outputlock != 0:
+                while any_clan.outputlock != 0:
                     await asyncio.sleep(1)
 
-                if clan.lastmessage is not None:
-                    clan.outputlock = 1
+                if any_clan.lastmessage is not None:
+                    any_clan.outputlock = 1
                     try:
-                        await clan.lastmessage.delete()
+                        await any_clan.lastmessage.delete()
                     except (discord.errors.NotFound, discord.errors.Forbidden):
                         pass
-                    clan.lastmessage = None
+                    any_clan.lastmessage = None
 
                 try:
-                    clan.outputlock = 2
-                    clan.lastmessage = await clan.outputchannel.send(message)
+                    any_clan.outputlock = 2
+                    any_clan.lastmessage = await any_clan.outputchannel.send(message)
                 except discord.errors.Forbidden:
-                    clan.outputchannel = None
+                    any_clan.outputchannel = None
             finally:
-                clan.outputlock = 0
+                any_clan.outputlock = 0
 
     def load_saved_clans(self) -> None:
         files = glob.glob(str(Path(__file__).resolve().parent.parent / 'clandata' / '*.json'))
@@ -88,7 +105,7 @@ class LegacyDiscordBotApp:
 
     def _register_events(self) -> None:
         @self.client.event
-        async def on_ready():
+        async def on_ready() -> None:
             print('ログインしました ' + datetime.datetime.now().strftime('%Y/%m/%d %H:%M:%S'))
             if self.clanbattle_setting is not None:
                 print(
@@ -107,72 +124,85 @@ class LegacyDiscordBotApp:
                         self.on_clanbattle_setting_changed,
                     )
                 )
-            Outlog(ERRFILE, 'login.')
+            outlog(ERRFILE, 'login.')
             for guildid, clan in clanhash.items():
-                if clan.guild is None:
+                any_clan = cast(Any, clan)
+                if any_clan.guild is None:
                     matchguild = [g for g in self.client.guilds if g.id == guildid]
                     if len(matchguild) == 1:
-                        clan.SetGuild(matchguild[0])
+                        any_clan.SetGuild(matchguild[0])
                     else:
                         print(f'[{guildid}] not found')
 
         @self.client.event
-        async def on_message(message):
+        async def on_message(message: discord.Message) -> None:
             if message.author.bot:
+                return
+            if message.guild is None:
                 return
             if message.channel.type == discord.ChannelType.text:
                 clan = self.get_clan(message.guild, message)
-                result = await clan.on_message(message)
+                any_clan = cast(Any, clan)
+                result = await any_clan.on_message(message)
                 if result:
-                    clan.Save(message.guild.id)
-                    await self.output(clan, clan.Status())
+                    any_clan.Save(message.guild.id)
+                    await self.output(clan, any_clan.Status())
 
         @self.client.event
-        async def on_raw_message_delete(payload):
+        async def on_raw_message_delete(payload: discord.RawMessageDeleteEvent) -> None:
+            if payload.guild_id is None:
+                return
             clan = clanhash.get(payload.guild_id)
-            if clan is not None and clan.IsInput(payload.channel_id):
-                result = await clan.on_raw_message_delete(payload)
+            if clan is not None and cast(Any, clan).IsInput(payload.channel_id):
+                any_clan = cast(Any, clan)
+                result = await any_clan.on_raw_message_delete(payload)
                 if result:
-                    clan.Save(payload.guild_id)
-                    await self.output(clan, clan.Status())
+                    any_clan.Save(payload.guild_id)
+                    await self.output(clan, any_clan.Status())
 
         @self.client.event
-        async def on_raw_reaction_add(payload):
-            clan = clanhash.get(payload.guild_id)
-            if clan is not None:
-                result = await clan.on_raw_reaction_add(payload)
-                if result:
-                    clan.Save(payload.guild_id)
-                    await self.output(clan, clan.Status())
-
-        @self.client.event
-        async def on_raw_reaction_remove(payload):
+        async def on_raw_reaction_add(payload: discord.RawReactionActionEvent) -> None:
+            if payload.guild_id is None:
+                return
             clan = clanhash.get(payload.guild_id)
             if clan is not None:
-                result = await clan.on_raw_reaction_remove(payload)
+                any_clan = cast(Any, clan)
+                result = await any_clan.on_raw_reaction_add(payload)
                 if result:
-                    clan.Save(payload.guild_id)
-                    await self.output(clan, clan.Status())
+                    any_clan.Save(payload.guild_id)
+                    await self.output(clan, any_clan.Status())
 
         @self.client.event
-        async def on_member_remove(member):
+        async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent) -> None:
+            if payload.guild_id is None:
+                return
+            clan = clanhash.get(payload.guild_id)
+            if clan is not None:
+                any_clan = cast(Any, clan)
+                result = await any_clan.on_raw_reaction_remove(payload)
+                if result:
+                    any_clan.Save(payload.guild_id)
+                    await self.output(clan, any_clan.Status())
+
+        @self.client.event
+        async def on_member_remove(member: discord.Member) -> None:
             if member.bot:
                 return
             clan = clanhash.get(member.guild.id)
             if clan is None:
                 return
-            if member.id in clan.members:
-                del clan.members[member.id]
-                clan.Save(member.guild.id)
-                await self.output(clan, clan.Status())
+            any_clan = cast(Any, clan)
+            if member.id in any_clan.members:
+                del any_clan.members[member.id]
+                any_clan.Save(member.guild.id)
+                await self.output(clan, any_clan.Status())
 
         @self.client.event
-        async def on_guild_join(guild):
-            Outlog(ERRFILE, 'on_guild_join. %s' % guild.name)
+        async def on_guild_join(guild: discord.Guild) -> None:
+            outlog(ERRFILE, 'on_guild_join. %s' % guild.name)
 
         @self.client.event
-        async def on_guild_remove(guild):
-            global clanhash
+        async def on_guild_remove(guild: discord.Guild) -> None:
             if guild.id in clanhash:
                 del clanhash[guild.id]
                 try:

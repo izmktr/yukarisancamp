@@ -12,12 +12,14 @@
       "description": "The name of the clan.",
       "type": "string"
     },
-    "members": {
-      "description": "A list of clan members.",
+    "bossindex": {
+      "description": "The index of the clan boss.",
       "type": "array",
       "items": {
-        "$ref": "clanMember.schema.json"
-      }
+        "type": "integer"
+      },
+      "minItems": 5,
+      "maxItems": 5
     },
     "createdAt": {
       "description": "The timestamp when the clan was created.",
@@ -25,5 +27,5 @@
       "format": "date-time"
     }
   },
-  "required": ["id", "name", "members", "createdAt"]
+  "required": ["id", "name", "createdAt"]
 }
