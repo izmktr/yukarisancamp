@@ -28,8 +28,53 @@ class Clan(MessageRouter):
 
         return True
 
+    
+
     async def Attack(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
-        return await self._ack(message, "Attack", member, opt)
+        cmember = self.GetMember(message.author)
+
+        try:
+            num = int(opt)
+            bidx = num - 1 if num < 10 else num // 10 - 1
+            sortie = -1 if num < 10 else num % 10 - 1
+
+            if bidx < 0 or BOSSNUMBER <= bidx or MAX_SORITE <= sortie:
+                raise ValueError
+        except ValueError:
+            self.TemporaryMessage(message.channel, '「凸5」のように発言してください')
+            return False
+
+        error = await self.AttackCheck(message, member, bidx)
+        if error:
+            return False
+
+        if sortie == -1:
+            if member.FirstSoriteNum() == 0:
+                self.TemporaryMessage(message.channel, '新規凸がありません')
+                return False
+            sortie = member.SortieCount()
+            overtime = 0
+        else:
+            overtime = member.attacktime[sortie]
+            if overtime is None or overtime == 0:
+                self.TemporaryMessage(message.channel, '持ち越しではありません')
+                return False
+
+        boss = self.bosscount[bidx] * BOSSNUMBER + bidx
+
+        member.Attack(boss, sortie)
+        if member.attackmessage is not None:
+            self.messagereaction.pop(member.attackmessage.id, None)
+        member.attackmessage = message
+
+        self.messagereaction[message.id] = self.CreateAttackReaction(member, message, boss, sortie, overtime)
+
+        if member.taskkill != 0:
+            await message.add_reaction(self.taskkillmark)
+
+        await self.AddReaction(message, 0 < overtime)
+
+        return True
 
     async def ContinuesAttack(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
         return await self._ack(message, "ContinuesAttack", member, opt)
