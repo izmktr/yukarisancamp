@@ -16,7 +16,7 @@ SUPABASE_JWKS_URL=
 ```
 
 補足:
-- テーブル名は `setting_clanbattle`、`setting_clanbattle_events`、`setting_userprofile`、`setting_user_owned_character` の固定です。
+- テーブル名は `setting_clanbattle`、`setting_clanbattle_events`、`setting_userprofile`、`setting_user_owned_character`、`attack_history` の固定です。
 - APIはサーバ側で `SUPABASE_SECRET_KEY` を使って Supabase REST API に `upsert` します。
 - テーブル作成SQLは `document/supabase_createtable.sql` に集約しています。
 
@@ -108,13 +108,35 @@ Discord Bot 側でブラウザ更新を検知するため、保存APIは `settin
 ## 6. 動作確認手順
 
 1. `web-app-ts/.env.local` を設定
-2. Supabase SQL Editor で `document/supabase_createtable.sql` を実行し、4テーブルを作成
+2. Supabase SQL Editor で `document/supabase_createtable.sql` を実行し、5テーブルを作成
 3. web-app-ts を起動
 4. `/settings` を開いてログイン
 5. 表示名変更を保存し、`setting_userprofile` の対象 `googleUserId` 行が insert/update されることを確認
 6. 所持キャラ更新を保存し、`setting_user_owned_character` の対象 `googleUserId` 行が delete/insert されることを確認
 7. `/clanbattle-settings` を開いて保存し、`setting_clanbattle` の `yearmonth` 行が insert/update されることを確認
 8. 同じ保存操作で `setting_clanbattle_events` に新しい行が1件追加されることを確認
+
+## 6.1 attack_history テーブル要件（Discord Bot）
+
+Discord Bot 側で `AttackHistory` を保存する場合の要件です。
+
+- テーブル名: `attack_history`（固定）
+- 主キー: `(clanid, serial)`
+- 想定カラム:
+  - `clanid` bigint
+  - `serial` integer
+  - `member` bigint
+  - `day` integer
+  - `sortie` integer
+  - `messageid` text
+  - `boss` integer
+  - `overtime` integer
+  - `defeat` boolean
+  - `sortiecount` double precision
+  - `updatetime` timestamptz
+
+運用:
+- Python 側は `on_conflict=clanid,serial` で `upsert` します。
 
 ## 7. よくある問題
 

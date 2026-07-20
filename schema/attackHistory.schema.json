@@ -4,6 +4,14 @@
   "description": "A history record of attack data.",
   "type": "object",
   "properties": {
+    "clanid": {
+      "description": "The clan ID associated with the attack.",
+      "type": "integer"
+    },
+    "serial": {
+      "description": "The serial number of the attack record.",
+      "type": "integer"
+    },
     "member": {
       "description": "The member ID who performed the attack.",
       "type": "integer"

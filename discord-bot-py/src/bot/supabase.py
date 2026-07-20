@@ -79,6 +79,31 @@ class SupabaseClient:
         rows = cast(list[dict[str, Any]], payload)
         return rows
 
+    def _upsert_rows(self, table: str, rows: list[dict[str, Any]], on_conflict: str) -> None:
+        request = Request(
+            url=f"{self.url.rstrip('/')}/rest/v1/{table}?{urlencode({'on_conflict': on_conflict})}",
+            headers={
+                "apikey": self.secret_key,
+                "Authorization": f"Bearer {self.secret_key}",
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "Prefer": "resolution=merge-duplicates,return=minimal",
+            },
+            data=json.dumps(rows).encode("utf-8"),
+            method="POST",
+        )
+
+        with urlopen(request):
+            return
+
+    def upsert_attack_history(self, row: dict[str, Any]) -> None:
+        self._upsert_rows("attack_history", [row], "clanid,serial")
+
+    def upsert_attack_histories(self, rows: list[dict[str, Any]]) -> None:
+        if not rows:
+            return
+        self._upsert_rows("attack_history", rows, "clanid,serial")
+
     def fetch_clanbattle_setting(self) -> ClanBattleSetting:
         rows = self._fetch_rows(
             "setting_clanbattle",

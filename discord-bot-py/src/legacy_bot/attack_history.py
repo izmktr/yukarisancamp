@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .shared import *
+from .clan_member import ClanMember
 
 class AttackHistory():
     keyarray = [
@@ -15,10 +16,10 @@ class AttackHistory():
         'updatetime'
     ]
 
-    def __init__(self, member : "ClanMember", messageid, sortie, boss, overtime, defeat, sortiecount):
-        self.member = member.id if member is not None else 0 #プレイヤー
+    def __init__(self, member : ClanMember, messageid : int, sortie : int, boss : int, overtime : int, defeat : bool, sortiecount : float):
+        self.member = member.id             #プレイヤー
         self.day = cbday                    #何日目か
-        self.sortie = sortie                #何凸目か
+        self.sortie : int = sortie          #何凸目か
         self.messageid = messageid          #凸に使ったメッセージID
         self.boss = boss                    #凸したボス
         self.overtime = overtime            #持ち越し秒数
@@ -30,18 +31,5 @@ class AttackHistory():
     def TimeStamping(self):
         self.updatetime = datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")
 
-    @staticmethod
-    def Desrialize(dic):
-        history = AttackHistory(None, 0, 0, -1, 0, False, 0)
-        for key in AttackHistory.keyarray:
-            if key in dic:
-                history.__dict__[key] = dic[key]
-        return history
-
-    def Serialize(self):
-        dic = {}
-        for key in AttackHistory.keyarray:
-            dic[key] = self.__dict__[key]
-        return dic
 
 

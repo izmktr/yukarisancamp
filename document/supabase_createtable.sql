@@ -40,3 +40,18 @@ create table if not exists public.setting_user_owned_character (
   updated_at timestamptz not null default now(),
   primary key ("googleUserId", "officialName")
 );
+
+create table if not exists public.attack_history (
+  clanid bigint not null,
+  serial integer not null,
+  member bigint not null,
+  day integer not null,
+  sortie integer not null,
+  messageid text not null,
+  boss integer not null,
+  overtime integer not null,
+  defeat boolean not null,
+  sortiecount double precision not null,
+  updatetime timestamptz not null,
+  primary key (clanid, serial)
+);
