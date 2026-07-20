@@ -97,12 +97,12 @@ class SupabaseClient:
             return
 
     def upsert_attack_history(self, row: dict[str, Any]) -> None:
-        self._upsert_rows("attack_history", [row], "clanid,serial")
+        self._upsert_rows("attack_history", [row], "serial")
 
     def upsert_attack_histories(self, rows: list[dict[str, Any]]) -> None:
         if not rows:
             return
-        self._upsert_rows("attack_history", rows, "clanid,serial")
+        self._upsert_rows("attack_history", rows, "serial")
 
     def fetch_clanbattle_setting(self) -> ClanBattleSetting:
         rows = self._fetch_rows(

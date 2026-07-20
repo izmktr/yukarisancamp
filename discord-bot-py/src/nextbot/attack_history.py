@@ -42,7 +42,11 @@ class AttackHistory():
         return self.Serialize()
 
     def to_supabase_row(self) -> dict[str, Any]:
-        return self.Serialize()
+        row = self.Serialize()
+        # serial=0 は未採番扱いとし、DB の identity で一意採番させる
+        if int(row.get("serial", 0)) <= 0:
+            row.pop("serial", None)
+        return row
 
     def save_to_supabase(self, supabase_client: Any) -> None:
         if not hasattr(supabase_client, "upsert_attack_history"):

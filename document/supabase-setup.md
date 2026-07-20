@@ -121,10 +121,11 @@ Discord Bot 側でブラウザ更新を検知するため、保存APIは `settin
 Discord Bot 側で `AttackHistory` を保存する場合の要件です。
 
 - テーブル名: `attack_history`（固定）
-- 主キー: `(clanid, serial)`
+- 主キー: `serial`（identity / auto increment）
+- インデックス: `clanid`
 - 想定カラム:
   - `clanid` bigint
-  - `serial` integer
+  - `serial` bigint
   - `member` bigint
   - `day` integer
   - `sortie` integer
@@ -136,7 +137,8 @@ Discord Bot 側で `AttackHistory` を保存する場合の要件です。
   - `updatetime` timestamptz
 
 運用:
-- Python 側は `on_conflict=clanid,serial` で `upsert` します。
+- Python 側は `on_conflict=serial` で `upsert` します。
+- `serial=0` の場合は `serial` カラムを送信せず、DB 側の identity 採番で他と被らない番号を自動付与します。
 
 ## 7. よくある問題
 
