@@ -705,18 +705,18 @@ function renderClanBattleState(state) {
 }
 
 async function ensureClanBattleStateForCurrentMonth() {
-    const yearmonth = getBaseYearMonth();
-    const response = await fetch(`/api/clanbattle-settings/current?yearmonth=${encodeURIComponent(yearmonth)}`);
+    const response = await fetch('/api/clanbattle-settings/current');
     if (!response.ok) {
         throw new Error('Supabase からクラバト設定を取得できませんでした。');
     }
 
     const payload = await response.json();
     const state = payload && payload.state ? payload.state : null;
+    const yearmonth = state && typeof state.yearmonth === 'string' ? state.yearmonth : getBaseYearMonth();
     const normalizedState = normalizeClanBattleState(yearmonth, state);
     const withDefaultsCurrent = applyClanBattleDateDefaults(normalizedState);
 
-    currentClanBattleDocId = withDefaultsCurrent.yearmonth;
+    currentClanBattleDocId = '0';
     return withDefaultsCurrent;
 }
 

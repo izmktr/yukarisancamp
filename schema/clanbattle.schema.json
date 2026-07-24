@@ -4,6 +4,11 @@
   "description": "A clan battle setting schema.",
   "type": "object",
   "properties": {
+    "id": {
+      "description": "Singleton row identifier. Must always be 0.",
+      "type": "integer",
+      "const": 0
+    },
     "yearmonth": {
       "description": "The year and month in YYYYMM format.",
       "type": "string",
@@ -38,5 +43,5 @@
       "format": "date"
     }
   },
-  "required": ["yearmonth", "bossname", "bossHp", "startDate", "endDate"]
+  "required": ["id", "yearmonth", "bossname", "bossHp", "startDate", "endDate"]
 }

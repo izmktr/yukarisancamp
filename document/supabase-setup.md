@@ -38,9 +38,10 @@ Supabaseダッシュボードから取得します。
 保存API（`POST /api/clanbattle-settings/save`）が期待するテーブル要件は以下です。
 
 - テーブル名: `setting_clanbattle`（固定）
-- 主キーまたは一意制約: `yearmonth`
-  - `upsert` の重複解決に必要
+- 主キー: `id`（integer）
+  - 常に `id = 0` の1件のみを保持（CHECK制約で固定）
 - 想定カラム:
+- `id` integer（固定値 `0`）
   - `yearmonth` text（例: `202606`）
   - `bossname` text[]
   - `bossHp` integer[]（未入力要素は null 許容）
@@ -95,12 +96,12 @@ Supabaseダッシュボードから取得します。
 4. `/settings` を開いてログイン
 5. 表示名変更を保存し、`setting_userprofile` の対象 `googleUserId` 行が insert/update されることを確認
 6. 所持キャラ更新を保存し、`setting_user_owned_character` の対象 `googleUserId` 行が delete/insert されることを確認
-7. `/clanbattle-settings` を開いて保存し、`setting_clanbattle` の `yearmonth` 行が insert/update されることを確認
+7. `/clanbattle-settings` を開いて保存し、`setting_clanbattle` の `id=0` 行が insert/update されることを確認
 
 ## 7. よくある問題
 
 ### 502 Failed to save clanbattle settings to Supabase
-- 原因例: テーブル未作成、`yearmonth` の一意制約不足、カラム名不一致
+- 原因例: テーブル未作成、`id` 主キー/`id=0` CHECK制約の不一致、カラム名不一致
 - 対処: テーブル定義とカラム名を本ドキュメントに合わせる
 
 ### 503 Supabase is not configured

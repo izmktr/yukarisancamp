@@ -241,6 +241,7 @@ type SupabaseConfig = {
 const SUPABASE_CLAN_BATTLE_TABLE = 'setting_clanbattle';
 const SUPABASE_USER_PROFILE_TABLE = 'setting_userprofile';
 const SUPABASE_USER_OWNED_CHARACTER_TABLE = 'setting_user_owned_character';
+const SUPABASE_CLAN_BATTLE_SINGLETON_ID = 0;
 
 function getSupabaseConfig(): SupabaseConfig | null {
   const url = process.env.SUPABASE_URL;
@@ -538,19 +539,6 @@ function getBaseYearMonth(referenceDate = new Date()): string {
   return `${baseYear}${baseMonth}`;
 }
 
-function getPreviousYearMonth(yearmonth: string): string {
-  if (!/^\d{6}$/.test(yearmonth)) {
-    return '';
-  }
-
-  const year = Number(yearmonth.slice(0, 4));
-  const month = Number(yearmonth.slice(4, 6));
-  const date = new Date(year, month - 2, 1);
-  const prevYear = date.getFullYear();
-  const prevMonth = String(date.getMonth() + 1).padStart(2, '0');
-  return `${prevYear}${prevMonth}`;
-}
-
 function formatDateAsIsoLocal(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -653,11 +641,11 @@ function normalizeClanBattleSettingsSavePayload(rawValue: unknown): ClanBattleSe
   };
 }
 
-async function supabaseSelectClanBattleByYearmonth(config: SupabaseConfig, yearmonth: string): Promise<ClanBattleSettingsSavePayload | null> {
+async function supabaseSelectClanBattleState(config: SupabaseConfig): Promise<ClanBattleSettingsSavePayload | null> {
   const endpointUrl = `${config.url.replace(/\/$/, '')}/rest/v1/${encodeURIComponent(SUPABASE_CLAN_BATTLE_TABLE)}`;
   const query = new URLSearchParams({
     select: '*',
-    yearmonth: `eq.${yearmonth}`,
+    id: `eq.${SUPABASE_CLAN_BATTLE_SINGLETON_ID}`,
     limit: '1'
   });
 
@@ -693,7 +681,10 @@ async function supabaseUpsertClanBattleState(config: SupabaseConfig, payload: Cl
       Authorization: `Bearer ${config.secretKey}`,
       Prefer: 'resolution=merge-duplicates,return=minimal'
     },
-    body: JSON.stringify(payload)
+    body: JSON.stringify({
+      id: SUPABASE_CLAN_BATTLE_SINGLETON_ID,
+      ...payload
+    })
   });
 
   if (!response.ok) {
@@ -702,8 +693,8 @@ async function supabaseUpsertClanBattleState(config: SupabaseConfig, payload: Cl
   }
 }
 
-async function ensureClanBattleStateFromSupabase(config: SupabaseConfig, yearmonth: string): Promise<ClanBattleSettingsSavePayload> {
-  const currentState = await supabaseSelectClanBattleByYearmonth(config, yearmonth);
+async function ensureClanBattleStateFromSupabase(config: SupabaseConfig): Promise<ClanBattleSettingsSavePayload> {
+  const currentState = await supabaseSelectClanBattleState(config);
   if (currentState) {
     const normalizedCurrent = applyClanBattleDateDefaults(currentState);
     if (normalizedCurrent.startDate !== currentState.startDate || normalizedCurrent.endDate !== currentState.endDate) {
@@ -712,15 +703,7 @@ async function ensureClanBattleStateFromSupabase(config: SupabaseConfig, yearmon
     return normalizedCurrent;
   }
 
-  const prevYearmonth = getPreviousYearMonth(yearmonth);
-  const prevState = prevYearmonth ? await supabaseSelectClanBattleByYearmonth(config, prevYearmonth) : null;
-  const initialState = prevState
-    ? {
-        ...prevState,
-        yearmonth
-      }
-    : getEmptyClanBattleState(yearmonth);
-
+  const initialState = getEmptyClanBattleState(getBaseYearMonth());
   const initialStateWithDefaults = applyClanBattleDateDefaults(initialState);
   await supabaseUpsertClanBattleState(config, initialStateWithDefaults);
   return initialStateWithDefaults;
@@ -732,11 +715,8 @@ app.get('/api/clanbattle-settings/current', async (req, res) => {
     return res.status(503).json({ error: 'Supabase is not configured' });
   }
 
-  const requestedYearmonth = typeof req.query.yearmonth === 'string' ? req.query.yearmonth.trim() : '';
-  const yearmonth = /^\d{6}$/.test(requestedYearmonth) ? requestedYearmonth : getBaseYearMonth();
-
   try {
-    const state = await ensureClanBattleStateFromSupabase(config, yearmonth);
+    const state = await ensureClanBattleStateFromSupabase(config);
     return res.json({ state });
   } catch (error) {
     console.error('Failed to load current clanbattle settings from Supabase:', error);
