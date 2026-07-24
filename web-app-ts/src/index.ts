@@ -1245,7 +1245,7 @@ app.get('/api/settings/profile/current', async (req, res) => {
     }
 
     console.error('Failed to load settings profile from Supabase:', error);
-    return res.status(502).json({ error: 'Failed to load settings profile from Supabase' });
+    return res.status(502).json({ error: errorMessage || 'Failed to load settings profile from Supabase' });
   }
 });
 
@@ -1322,7 +1322,7 @@ app.post('/api/settings/profile/save', express.json(), async (req, res) => {
     }
 
     console.error('Failed to save settings profile to Supabase:', error);
-    return res.status(502).json({ error: 'Failed to save settings profile to Supabase' });
+    return res.status(502).json({ error: errorMessage || 'Failed to save settings profile to Supabase' });
   }
 });
 
