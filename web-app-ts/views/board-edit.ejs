@@ -148,7 +148,7 @@
                             <% const rowActiveIcons = Array.isArray(row.activeIcons) ? row.activeIcons : []; %>
                             <% const hasServerActive = rowActiveIcons.length > 0 || row.autoActive; %>
                             <% const isPartyCharRow = partySlots.some(function(s) { return s && s.name === row.ubText; }); %>
-                            <tr class="<%= hasServerActive ? 'ub-row-has-active' : '' %> <%= row.comment ? 'has-comment-row' : '' %>" data-is-battle-start="<%= row.ubText === 'バトル開始' ? 'true' : 'false' %>" data-is-battle-end="<%= row.ubText === 'バトル終了' ? 'true' : 'false' %>" data-is-added-row="<%= row.isAddedRow ? 'true' : 'false' %>" data-active-icons="<%= JSON.stringify(rowActiveIcons) %>" data-auto-active="<%= row.autoActive ? 'true' : 'false' %>" data-comment="<%= encodeURIComponent(row.comment || '') %>" data-ub-text="<%= encodeURIComponent(row.ubText || '') %>" data-ub-is-party-char="<%= isPartyCharRow ? 'true' : 'false' %>" data-timing="<%= row.timing ? 'true' : 'false' %>">
+                            <tr class="<%= hasServerActive ? 'ub-row-has-active' : '' %> <%= row.comment ? 'has-comment-row' : '' %>" data-is-battle-start="<%= row.ubText === 'バトル開始' ? 'true' : 'false' %>" data-is-battle-end="<%= row.ubText === 'バトル終了' ? 'true' : 'false' %>" data-is-added-row="<%= row.isAddedRow ? 'true' : 'false' %>" data-active-icons="<%= JSON.stringify(rowActiveIcons) %>" data-auto-active="<%= row.autoActive ? 'true' : 'false' %>" data-comment="<%= encodeURIComponent(row.comment || '') %>" data-ub-text="<%= encodeURIComponent(row.ubText || '') %>" data-ub-is-party-char="<%= isPartyCharRow ? 'true' : 'false' %>" data-party-character-official-name="<%= isPartyCharRow ? row.ubText : '' %>" data-timing="<%= row.timing ? 'true' : 'false' %>">
                                 <td class="ub-time-cell">
                                     <% if (row.isAddedRow) { %>
                                         <input type="text" class="ub-time-input" aria-label="残り時間" value="<%= row.time || '' %>" />
@@ -159,9 +159,9 @@
                                 <td class="ub-event-cell">
                                     <div class="ub-event-cell-inner">
                                         <% if (row.ubImagePath) { %>
-                                            <img src="<%= row.ubImagePath %>" alt="<%= row.ubText %>" title="<%= row.ubText %>" class="ub-event-image" />
+                                            <img src="<%= row.ubImagePath %>" alt="<%= row.ubText %>" title="<%= row.ubText %>" class="ub-event-image" data-ub-event-image="true" />
                                         <% } else if (row.ubText) { %>
-                                            <div class="ub-event-image-missing ub-event-image-missing-blue"><%= row.ubText %></div>
+                                            <div class="ub-event-image-missing ub-event-image-missing-blue" data-ub-event-text="true"><%= row.ubText %></div>
                                         <% } %>
                                         <% if (isPartyCharRow) { %>
                                             <span class="ub-state-badge" aria-hidden="true"></span>
@@ -177,7 +177,7 @@
                                     <% const isUbChar = isPartyCharRow && partySlot && partySlot.name === row.ubText; %>
                                     <td class="ub-party-cell">
                                         <% if (partySlot && partySlot.imagePath) { %>
-                                            <div class="ub-icon-box ub-party-toggleable-char <%= (row.timing && isUbChar) ? 'ub-timing-target' : '' %>" data-icon-type="image" data-party-slot-name="<%= partySlot.name %>">
+                                            <div class="ub-icon-box ub-party-toggleable-char <%= (row.timing && isUbChar) ? 'ub-timing-target' : '' %>" data-icon-type="image" data-party-slot-name="<%= partySlot.name %>" data-party-slot-official-name="<%= partySlot.name %>">
                                                 <img src="<%= partySlot.imagePath %>" alt="<%= partySlot.name %>" title="<%= partySlot.name %>" class="ub-party-image <%= isPartyActive ? '' : 'ub-party-image-mono' %>" />
                                                 <span class="ub-set-badge">SET!</span>
                                                 <% if (isUbChar) { %>
@@ -185,7 +185,7 @@
                                                 <% } %>
                                             </div>
                                         <% } else if (partySlot) { %>
-                                            <div class="ub-icon-box ub-party-toggleable-char <%= (row.timing && isUbChar) ? 'ub-timing-target' : '' %>" data-icon-type="placeholder" data-party-slot-name="<%= partySlot.name %>">
+                                            <div class="ub-icon-box ub-party-toggleable-char <%= (row.timing && isUbChar) ? 'ub-timing-target' : '' %>" data-icon-type="placeholder" data-party-slot-name="<%= partySlot.name %>" data-party-slot-official-name="<%= partySlot.name %>">
                                                 <div class="ub-party-image-missing <%= isPartyActive ? 'ub-party-image-missing-blue' : 'ub-party-image-missing-gray' %>"><%= partySlot.name %></div>
                                                 <span class="ub-set-badge">SET!</span>
                                                 <% if (isUbChar) { %>
@@ -296,6 +296,134 @@
             5: 'hard',
         };
         let currentDisplayMode = DISPLAY_MODE_ALL;
+        const IS_LOGGED_IN = <%- JSON.stringify(!!isLoggedIn) %>;
+
+        function getCurrentFirebaseUser() {
+            if (!window.firebase || typeof window.firebase.auth !== 'function') {
+                return null;
+            }
+            try {
+                return window.firebase.auth().currentUser || null;
+            } catch {
+                return null;
+            }
+        }
+
+        function sleep(ms) {
+            return new Promise((resolve) => {
+                window.setTimeout(resolve, ms);
+            });
+        }
+
+        async function waitForFirebaseUser(timeoutMs = 3000) {
+            const startedAt = Date.now();
+            while (Date.now() - startedAt <= timeoutMs) {
+                const user = getCurrentFirebaseUser();
+                if (user && typeof user.getIdToken === 'function') {
+                    return user;
+                }
+                await sleep(100);
+            }
+            return null;
+        }
+
+        async function fetchCurrentProfileWithToken() {
+            const user = await waitForFirebaseUser();
+            if (!user) {
+                return null;
+            }
+
+            const idToken = await user.getIdToken();
+            const response = await fetch('/api/settings/profile/current', {
+                method: 'GET',
+                headers: {
+                    Authorization: `Bearer ${idToken}`
+                }
+            });
+
+            if (!response.ok) {
+                return null;
+            }
+
+            const payload = await response.json();
+            return payload && payload.profile ? payload.profile : null;
+        }
+
+        function applyCustomNamesToEditor(profile) {
+            const ownedCharacters = profile && Array.isArray(profile.ownedCharacters) ? profile.ownedCharacters : [];
+            const nicknameByOfficialName = new Map();
+
+            ownedCharacters.forEach((entry) => {
+                if (!entry || typeof entry !== 'object') {
+                    return;
+                }
+                const officialName = typeof entry.officialName === 'string' ? entry.officialName.trim() : '';
+                if (!officialName) {
+                    return;
+                }
+                const nickname = typeof entry.nickname === 'string' ? entry.nickname.trim() : '';
+                nicknameByOfficialName.set(officialName, nickname || officialName);
+            });
+
+            nicknameByOfficialName.forEach((nickname, officialName) => {
+                document.querySelectorAll(`.ub-icon-box[data-party-slot-official-name="${CSS.escape(officialName)}"]`).forEach((iconBox) => {
+                    if (!(iconBox instanceof HTMLElement)) {
+                        return;
+                    }
+
+                    iconBox.dataset.partySlotName = nickname;
+
+                    const partyImage = iconBox.querySelector('img.ub-party-image');
+                    if (partyImage instanceof HTMLImageElement) {
+                        partyImage.alt = nickname;
+                        partyImage.title = nickname;
+                    }
+
+                    const missingText = iconBox.querySelector('.ub-party-image-missing');
+                    if (missingText) {
+                        missingText.textContent = nickname;
+                    }
+                });
+
+                document.querySelectorAll(`tr[data-party-character-official-name="${CSS.escape(officialName)}"]`).forEach((row) => {
+                    if (!(row instanceof HTMLElement)) {
+                        return;
+                    }
+
+                    row.dataset.ubText = encodeURIComponent(nickname);
+
+                    const eventImage = row.querySelector('[data-ub-event-image="true"]');
+                    if (eventImage instanceof HTMLImageElement) {
+                        eventImage.alt = nickname;
+                        eventImage.title = nickname;
+                    }
+
+                    const eventText = row.querySelector('[data-ub-event-text="true"]');
+                    if (eventText) {
+                        eventText.textContent = nickname;
+                    }
+                });
+            });
+
+            updateSetBubbles();
+            applyRowFilter();
+        }
+
+        async function hydrateCustomNamesIfNeeded() {
+            if (!IS_LOGGED_IN) {
+                return;
+            }
+
+            try {
+                const profile = await fetchCurrentProfileWithToken();
+                if (!profile) {
+                    return;
+                }
+                applyCustomNamesToEditor(profile);
+            } catch (error) {
+                console.warn('編集画面のカスタム名読み込みに失敗しました。', error);
+            }
+        }
 
         function setActiveToggle(groupName, value) {
             const group = document.querySelector(`.post-toggle-group[data-group="${groupName}"]`);
@@ -1300,6 +1428,7 @@
         }
         updateSetBubbles();
         applyRowFilter();
+        hydrateCustomNamesIfNeeded();
     });
 </script>
 <% } %>
