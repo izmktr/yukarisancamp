@@ -121,6 +121,7 @@
                 </div>
                 <% if (canEdit) { %>
                 <div class="ub-toolbar-actions">
+                    <button type="button" id="board-export-open-button" class="btn">エクスポート</button>
                     <a href="/board/<%= id %>/edit" class="btn btn-primary">編集</a>
                     <form method="post" action="/board/<%= id %>/delete" onsubmit="return confirm('この記事を削除します。よろしいですか？');">
                         <button type="submit" class="btn btn-danger">削除</button>
@@ -218,6 +219,20 @@
     </div>
 </div>
 
+<div id="board-export-modal" class="board-export-modal" data-boss-name="<%= bossValue %>" data-damage="<%= damageValue %>" hidden>
+    <div class="board-export-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="board-export-modal-title">
+        <div class="board-export-modal-close-row">
+            <button type="button" id="board-export-close-button" class="btn">閉じる</button>
+        </div>
+        <h3 id="board-export-modal-title" class="board-export-modal-title">エクスポート</h3>
+        <textarea id="board-export-textarea" class="board-export-textarea" rows="12" aria-label="エクスポートテキスト"></textarea>
+        <div class="board-export-modal-actions">
+            <button type="button" id="board-export-copy-button" class="btn">クリップボードにコピー</button>
+            <button type="button" id="board-export-download-button" class="btn btn-primary">ダウンロード</button>
+        </div>
+    </div>
+</div>
+
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         const PARTY_COLUMN_COUNT = 5;
@@ -230,8 +245,95 @@
         let currentDisplayMode = DISPLAY_MODE_ALL;
         const timeAdjustInput = document.getElementById('ub-time-adjust-input');
         const timeAdjustButton = document.getElementById('ub-time-adjust-button');
+        const exportModal = document.getElementById('board-export-modal');
+        const exportOpenButton = document.getElementById('board-export-open-button');
+        const exportCloseButton = document.getElementById('board-export-close-button');
+        const exportTextarea = document.getElementById('board-export-textarea');
+        const exportCopyButton = document.getElementById('board-export-copy-button');
+        const exportDownloadButton = document.getElementById('board-export-download-button');
         let currentBattleTimeSeconds = 0;
         let currentInputSeconds = 0;
+
+        function sanitizeFileNamePart(value) {
+            return String(value || '')
+                .trim()
+                .replace(/[\\/:*?"<>|]/g, '_');
+        }
+
+        function getDamageWithoutLast4(value) {
+            const digits = String(value || '').replace(/\D/g, '');
+            if (!digits) {
+                return '0';
+            }
+            const numeric = Number(digits);
+            if (!Number.isFinite(numeric)) {
+                return '0';
+            }
+            return String(Math.floor(numeric / 10000));
+        }
+
+        function getExportFileName() {
+            if (!(exportModal instanceof HTMLElement)) {
+                return 'export.txt';
+            }
+
+            const bossNameRaw = exportModal.dataset.bossName || 'boss';
+            const damageRaw = exportModal.dataset.damage || '';
+            const bossName = sanitizeFileNamePart(bossNameRaw) || 'boss';
+            const damage = sanitizeFileNamePart(getDamageWithoutLast4(damageRaw)) || '0';
+            return `${bossName}${damage}.txt`;
+        }
+
+        function openExportModal() {
+            if (!(exportModal instanceof HTMLElement)) {
+                return;
+            }
+            exportModal.hidden = false;
+            document.body.classList.add('board-export-modal-open');
+            if (exportTextarea instanceof HTMLTextAreaElement) {
+                exportTextarea.focus();
+            }
+        }
+
+        function closeExportModal() {
+            if (!(exportModal instanceof HTMLElement)) {
+                return;
+            }
+            exportModal.hidden = true;
+            document.body.classList.remove('board-export-modal-open');
+        }
+
+        async function copyExportText() {
+            if (!(exportTextarea instanceof HTMLTextAreaElement)) {
+                return;
+            }
+
+            const text = exportTextarea.value;
+            try {
+                await navigator.clipboard.writeText(text);
+                alert('クリップボードにコピーしました。');
+            } catch (error) {
+                console.error('コピーに失敗しました:', error);
+                alert('コピーに失敗しました。');
+            }
+        }
+
+        function downloadExportText() {
+            if (!(exportTextarea instanceof HTMLTextAreaElement)) {
+                return;
+            }
+
+            const text = exportTextarea.value;
+            const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = getExportFileName();
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+        }
 
         function parseTimeToSeconds(timeText) {
             const raw = (timeText || '').trim();
@@ -632,6 +734,44 @@
                 timeAdjustInput.value = String(nextInputSeconds);
                 timeAdjustInput.dataset.lastValidTime = timeAdjustInput.value;
                 applyRowFilter();
+            });
+        }
+
+        if (exportOpenButton) {
+            exportOpenButton.addEventListener('click', () => {
+                openExportModal();
+            });
+        }
+
+        if (exportCloseButton) {
+            exportCloseButton.addEventListener('click', () => {
+                closeExportModal();
+            });
+        }
+
+        if (exportModal) {
+            exportModal.addEventListener('click', (event) => {
+                if (event.target === exportModal) {
+                    closeExportModal();
+                }
+            });
+        }
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && exportModal instanceof HTMLElement && !exportModal.hidden) {
+                closeExportModal();
+            }
+        });
+
+        if (exportCopyButton) {
+            exportCopyButton.addEventListener('click', () => {
+                copyExportText();
+            });
+        }
+
+        if (exportDownloadButton) {
+            exportDownloadButton.addEventListener('click', () => {
+                downloadExportText();
             });
         }
 

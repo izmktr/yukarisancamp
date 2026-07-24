@@ -845,6 +845,67 @@ body {
     margin: 0;
 }
 
+.board-export-modal-open {
+    overflow: hidden;
+}
+
+.board-export-modal {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: rgba(18, 28, 52, 0.58);
+    z-index: 1200;
+}
+
+.board-export-modal[hidden] {
+    display: none;
+}
+
+.board-export-modal-dialog {
+    width: min(680px, 100%);
+    max-height: calc(100vh - 2rem);
+    overflow: auto;
+    background: #ffffff;
+    border: 1px solid #d8e0f2;
+    border-radius: 12px;
+    box-shadow: 0 14px 40px rgba(20, 32, 66, 0.28);
+    padding: 1rem;
+}
+
+.board-export-modal-close-row {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.board-export-modal-title {
+    margin: 0.25rem 0 0.5rem;
+    font-size: 1.05rem;
+    color: #2f3b62;
+}
+
+.board-export-textarea {
+    width: 100%;
+    resize: vertical;
+    min-height: 16rem;
+    border: 1px solid #cdd7ee;
+    border-radius: 10px;
+    padding: 0.65rem;
+    font-size: 0.94rem;
+    line-height: 1.45;
+    overflow-y: auto;
+}
+
+.board-export-modal-actions {
+    margin-top: 0.75rem;
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
 .ub-size-toggle {
     display: inline-flex;
     align-items: center;
@@ -1959,6 +2020,14 @@ tr[data-timing="true"] .ub-timing-hoshi {
     }
 
     .board-help-toggle-btn {
+        width: 100%;
+    }
+
+    .board-export-modal-dialog {
+        padding: 0.8rem;
+    }
+
+    .board-export-modal-actions .btn {
         width: 100%;
     }
 
