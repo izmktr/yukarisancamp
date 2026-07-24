@@ -139,15 +139,15 @@
                         </div>
                     </div>
                 </div>
-                <% if (canEdit) { %>
                 <div class="ub-toolbar-actions">
                     <button type="button" id="board-export-open-button" class="btn">エクスポート</button>
+                    <% if (canEdit) { %>
                     <a href="/board/<%= id %>/edit" class="btn btn-primary">編集</a>
                     <form method="post" action="/board/<%= id %>/delete" onsubmit="return confirm('この記事を削除します。よろしいですか？');">
                         <button type="submit" class="btn btn-danger">削除</button>
                     </form>
+                    <% } %>
                 </div>
-                <% } %>
             </div>
             <div class="ub-table-wrapper">
                 <table class="ub-table">
@@ -241,10 +241,10 @@
 
 <div id="board-export-modal" class="board-export-modal" data-boss-name="<%= bossValue %>" data-damage="<%= damageValue %>" hidden>
     <div class="board-export-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="board-export-modal-title">
-        <div class="board-export-modal-close-row">
+        <div class="board-export-modal-header-row">
+            <h3 id="board-export-modal-title" class="board-export-modal-title">エクスポート</h3>
             <button type="button" id="board-export-close-button" class="btn">閉じる</button>
         </div>
-        <h3 id="board-export-modal-title" class="board-export-modal-title">エクスポート</h3>
         <textarea id="board-export-textarea" class="board-export-textarea" rows="12" aria-label="エクスポートテキスト"></textarea>
         <div class="board-export-modal-actions">
             <button type="button" id="board-export-copy-button" class="btn">クリップボードにコピー</button>
@@ -754,10 +754,169 @@
             return `${bossName}${damage}.txt`;
         }
 
+        function formatDamageForExport(value) {
+            const digits = String(value || '').replace(/\D/g, '');
+            const numeric = digits ? Number(digits) : 0;
+            if (!Number.isFinite(numeric) || numeric <= 0) {
+                return '0億0000万';
+            }
+
+            const afterTrim = Math.floor(numeric / 10000);
+            const oku = Math.floor(afterTrim / 10000);
+            const man = afterTrim % 10000;
+            return `${oku}億${String(man).padStart(4, '0')}万`;
+        }
+
+        function getExportPartyLine() {
+            const names = Array.from(document.querySelectorAll('.board-party-grid .board-party-name[data-party-name-text="true"]'))
+                .map((element) => (element.textContent || '').trim())
+                .filter((name) => name.length > 0);
+            return names.join(' ');
+        }
+
+        function getRenderedTimeText(row) {
+            const mainTime = row.querySelector('.ub-time-cell .ub-time-main');
+            if (mainTime) {
+                return (mainTime.textContent || '').trim();
+            }
+            const timeCell = row.querySelector('.ub-time-cell');
+            return (timeCell ? timeCell.textContent : '').trim();
+        }
+
+        function getRowCommentText(row) {
+            const commentRow = row.nextElementSibling;
+            if (!(commentRow instanceof HTMLTableRowElement) || !commentRow.classList.contains('ub-comment-row') || commentRow.hidden) {
+                return '';
+            }
+
+            const commentDisplay = commentRow.querySelector('.ub-comment-display');
+            return (commentDisplay ? commentDisplay.textContent : '').trim();
+        }
+
+        function isSetIcon(iconBox) {
+            if (!(iconBox instanceof HTMLElement)) {
+                return false;
+            }
+            return iconBox.classList.contains('has-set') || iconBox.classList.contains('set-inactive');
+        }
+
+        function getAutoStateForExport(row) {
+            const autoBox = row.querySelector('.ub-auto-cell .ub-icon-box');
+            if (!(autoBox instanceof HTMLElement)) {
+                return { isActive: false, isOn: false };
+            }
+
+            const autoButton = autoBox.querySelector('.ub-auto-btn');
+            const isActive = autoBox.dataset.isActive === 'true';
+            const isOn = autoButton ? autoButton.classList.contains('ub-auto-btn-set') : false;
+            return { isActive, isOn };
+        }
+
+        function getSetStatusForExport(row) {
+            const partyIcons = Array.from(row.querySelectorAll('.ub-party-cell .ub-icon-box'));
+            const setParts = partyIcons.map((iconBox) => (isSetIcon(iconBox) ? 'o' : 'x')).join('');
+            const autoState = getAutoStateForExport(row);
+            return `[${setParts}]${autoState.isOn ? 'on' : 'off'}`;
+        }
+
+        function getOnOffTextForExport(row) {
+            const partyIcons = Array.from(row.querySelectorAll('.ub-party-cell .ub-icon-box'));
+            const onNames = [];
+            const offNames = [];
+
+            partyIcons.forEach((iconBox) => {
+                if (!(iconBox instanceof HTMLElement)) {
+                    return;
+                }
+                if (!isIconActive(iconBox)) {
+                    return;
+                }
+
+                const name = String(iconBox.dataset.partySlotName || '').trim();
+                if (!name) {
+                    return;
+                }
+
+                if (iconBox.classList.contains('has-set')) {
+                    onNames.push(name);
+                } else {
+                    offNames.push(name);
+                }
+            });
+
+            const onText = onNames.length > 0 ? `${onNames.join(',')}on` : '';
+            const offText = offNames.length > 0 ? `${offNames.join(',')}off` : '';
+            return { onText, offText };
+        }
+
+        function buildTimelineTextLines() {
+            const tbody = document.querySelector('.ub-table tbody');
+            if (!tbody) {
+                return [];
+            }
+
+            const lines = [];
+            const visibleRows = Array.from(tbody.querySelectorAll('tr:not(.ub-comment-row)')).filter((row) => !row.hidden);
+
+            visibleRows.forEach((row) => {
+                const timeText = getRenderedTimeText(row);
+                const ubText = getDecodedUbText(row);
+                const commentText = getRowCommentText(row);
+                const isOperationRow = isYellowMainRow(row);
+
+                if (isOperationRow) {
+                    const { onText, offText } = getOnOffTextForExport(row);
+                    const autoState = getAutoStateForExport(row);
+                    const autoToggleText = autoState.isActive ? (autoState.isOn ? 'オートon' : 'オートoff') : '';
+                    const setStatus = getSetStatusForExport(row);
+                    const operationParts = [timeText, ubText, onText, offText, autoToggleText, setStatus].filter((part) => part && part.trim().length > 0);
+                    lines.push(operationParts.join(' '));
+                } else {
+                    const normalParts = [timeText, ubText].filter((part) => part && part.trim().length > 0);
+                    lines.push(normalParts.join(' '));
+                }
+
+                if (commentText) {
+                    lines.push(commentText);
+                }
+            });
+
+            return lines;
+        }
+
+        function buildExportText() {
+            if (!(exportModal instanceof HTMLElement)) {
+                return '';
+            }
+
+            const bossName = String(exportModal.dataset.bossName || '').trim();
+            const damageText = formatDamageForExport(exportModal.dataset.damage || '');
+            const partyText = getExportPartyLine();
+            const timelineLines = buildTimelineTextLines();
+
+            const blocks = [
+                `${bossName}${damageText}`,
+                partyText,
+                '',
+                'TL',
+                ...timelineLines
+            ];
+
+            return blocks.join('\n').trimEnd();
+        }
+
+        function refreshExportText() {
+            if (!(exportTextarea instanceof HTMLTextAreaElement)) {
+                return;
+            }
+            exportTextarea.value = buildExportText();
+        }
+
         function openExportModal() {
             if (!(exportModal instanceof HTMLElement)) {
                 return;
             }
+            refreshExportText();
             exportModal.hidden = false;
             document.body.classList.add('board-export-modal-open');
             if (exportTextarea instanceof HTMLTextAreaElement) {
@@ -1127,6 +1286,10 @@
                     commentRow.hidden = row.hidden;
                 }
             });
+
+            if (exportModal instanceof HTMLElement && !exportModal.hidden) {
+                refreshExportText();
+            }
         }
 
         function applyIconSize(sizeMode) {
