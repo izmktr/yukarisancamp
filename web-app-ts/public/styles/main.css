@@ -1066,6 +1066,25 @@ body {
     color: #2f3b62;
 }
 
+.board-export-options {
+    display: grid;
+    gap: 0.35rem;
+    margin-bottom: 0.55rem;
+}
+
+.board-export-option-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: #2f3b62;
+    font-size: 0.9rem;
+}
+
+.board-export-option-item input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+}
+
 .board-export-textarea {
     width: 100%;
     resize: vertical;
