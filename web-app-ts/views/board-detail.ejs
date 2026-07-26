@@ -927,7 +927,7 @@
             return `[${setParts}]${autoState.isOn ? 'on' : 'off'}`;
         }
 
-        function getOnOffTextForExport(row, uppercaseSwitchState) {
+        function getOnOffTextForExport(row) {
             const partyIcons = Array.from(row.querySelectorAll('.ub-party-cell .ub-icon-box'));
             const onNames = [];
             const offNames = [];
@@ -945,12 +945,10 @@
                     return;
                 }
 
-                const displayName = uppercaseSwitchState ? name.toUpperCase() : name;
-
                 if (iconBox.classList.contains('has-set')) {
-                    onNames.push(displayName);
+                    onNames.push(name);
                 } else {
-                    offNames.push(displayName);
+                    offNames.push(name);
                 }
             });
 
@@ -977,7 +975,7 @@
 
                 if (isOperationRow) {
                     const { onText, offText } = showOnOffCharacters
-                        ? getOnOffTextForExport(row, uppercaseSwitchState)
+                        ? getOnOffTextForExport(row)
                         : { onText: '', offText: '' };
                     const autoState = getAutoStateForExport(row);
                     const autoToggleText = showOnOffCharacters && autoState.isActive
