@@ -254,6 +254,218 @@ function resolveBoardDetailUbRows(article) {
     }
     return rows;
 }
+function normalizeBossNameForCompare(value) {
+    return typeof value === 'string'
+        ? value.replace(/[\s\u3000]/g, '').trim().toLowerCase()
+        : '';
+}
+function buildPartySignature(party) {
+    return resolveBoardDetailPartyMembers(party)
+        .map((member) => normalizeCharacterLookupKey(member.name))
+        .join('|');
+}
+function resolveArticleDisplayTitle(article) {
+    if (typeof article?.postTitle === 'string' && article.postTitle.trim().length > 0) {
+        return article.postTitle.trim();
+    }
+    if (typeof article?.mode === 'string' && article.mode.trim().length > 0) {
+        return article.mode.trim();
+    }
+    return '無題';
+}
+function resolveArticleDamageText(article) {
+    const damage = article?.damage;
+    if (typeof damage === 'number' && Number.isFinite(damage)) {
+        return damage.toLocaleString('ja-JP');
+    }
+    if (typeof damage === 'string') {
+        return damage;
+    }
+    return '';
+}
+function evaluateBoardDiffMeta(sourceArticle, targetArticle, rows) {
+    const sourceBoss = normalizeBossNameForCompare(sourceArticle?.bossname);
+    const targetBoss = normalizeBossNameForCompare(targetArticle?.bossname);
+    const sourceParty = buildPartySignature(sourceArticle?.party);
+    const targetParty = buildPartySignature(targetArticle?.party);
+    return {
+        hasDiff: rows.some((row) => !row.source || !row.target),
+        isSameBoss: sourceBoss.length > 0 && sourceBoss === targetBoss,
+        isSameParty: sourceParty.length > 0 && sourceParty === targetParty
+    };
+}
+function resolveBoardDiffTimelineEntries(ubRows) {
+    return ubRows
+        .map((row) => {
+        const time = typeof row.time === 'string' ? row.time.trim() : '';
+        const character = typeof row.ubText === 'string' ? row.ubText.trim() : '';
+        if (!time && !character) {
+            return null;
+        }
+        const key = `${time}@@${normalizeCharacterLookupKey(character)}`;
+        return {
+            time,
+            character,
+            imagePath: row.ubImagePath,
+            key
+        };
+    })
+        .filter((entry) => !!entry);
+}
+function toBoardDiffCell(entry) {
+    return {
+        time: entry.time,
+        character: entry.character,
+        imagePath: entry.imagePath
+    };
+}
+function parseTimelineTimeToSeconds(time) {
+    const match = time.trim().match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) {
+        return null;
+    }
+    return (Number(match[1]) * 60) + Number(match[2]);
+}
+function appendMergedUnmatchedRows(rows, sourceEntries, sourceStart, sourceEnd, targetEntries, targetStart, targetEnd) {
+    let sourceIndex = sourceStart;
+    let targetIndex = targetStart;
+    while (sourceIndex < sourceEnd || targetIndex < targetEnd) {
+        if (sourceIndex >= sourceEnd) {
+            const targetEntry = targetEntries[targetIndex];
+            rows.push({
+                time: targetEntry.time,
+                source: null,
+                target: toBoardDiffCell(targetEntry)
+            });
+            targetIndex += 1;
+            continue;
+        }
+        if (targetIndex >= targetEnd) {
+            const sourceEntry = sourceEntries[sourceIndex];
+            rows.push({
+                time: sourceEntry.time,
+                source: toBoardDiffCell(sourceEntry),
+                target: null
+            });
+            sourceIndex += 1;
+            continue;
+        }
+        const sourceEntry = sourceEntries[sourceIndex];
+        const targetEntry = targetEntries[targetIndex];
+        const sourceSeconds = parseTimelineTimeToSeconds(sourceEntry.time);
+        const targetSeconds = parseTimelineTimeToSeconds(targetEntry.time);
+        if (sourceSeconds !== null && targetSeconds !== null) {
+            // TLは残り時間の降順（大きい秒数が先頭）を維持する
+            if (sourceSeconds >= targetSeconds) {
+                rows.push({
+                    time: sourceEntry.time,
+                    source: toBoardDiffCell(sourceEntry),
+                    target: null
+                });
+                sourceIndex += 1;
+            }
+            else {
+                rows.push({
+                    time: targetEntry.time,
+                    source: null,
+                    target: toBoardDiffCell(targetEntry)
+                });
+                targetIndex += 1;
+            }
+            continue;
+        }
+        rows.push({
+            time: sourceEntry.time,
+            source: toBoardDiffCell(sourceEntry),
+            target: null
+        });
+        sourceIndex += 1;
+    }
+}
+function buildBoardDiffMatchPairs(sourceEntries, targetEntries) {
+    const sourceLength = sourceEntries.length;
+    const targetLength = targetEntries.length;
+    const dp = Array.from({ length: sourceLength + 1 }, () => Array(targetLength + 1).fill(0));
+    for (let sourceIndex = sourceLength - 1; sourceIndex >= 0; sourceIndex -= 1) {
+        for (let targetIndex = targetLength - 1; targetIndex >= 0; targetIndex -= 1) {
+            if (sourceEntries[sourceIndex].key === targetEntries[targetIndex].key) {
+                dp[sourceIndex][targetIndex] = dp[sourceIndex + 1][targetIndex + 1] + 1;
+            }
+            else {
+                dp[sourceIndex][targetIndex] = Math.max(dp[sourceIndex + 1][targetIndex], dp[sourceIndex][targetIndex + 1]);
+            }
+        }
+    }
+    const pairs = [];
+    let sourceIndex = 0;
+    let targetIndex = 0;
+    while (sourceIndex < sourceLength && targetIndex < targetLength) {
+        if (sourceEntries[sourceIndex].key === targetEntries[targetIndex].key) {
+            pairs.push({ sourceIndex, targetIndex });
+            sourceIndex += 1;
+            targetIndex += 1;
+            continue;
+        }
+        if (dp[sourceIndex + 1][targetIndex] >= dp[sourceIndex][targetIndex + 1]) {
+            sourceIndex += 1;
+        }
+        else {
+            targetIndex += 1;
+        }
+    }
+    return pairs;
+}
+function buildBoardDiffRows(sourceUbRows, targetUbRows) {
+    const sourceEntries = resolveBoardDiffTimelineEntries(sourceUbRows);
+    const targetEntries = resolveBoardDiffTimelineEntries(targetUbRows);
+    const matchPairs = buildBoardDiffMatchPairs(sourceEntries, targetEntries);
+    const rows = [];
+    let sourceIndex = 0;
+    let targetIndex = 0;
+    matchPairs.forEach((pair) => {
+        appendMergedUnmatchedRows(rows, sourceEntries, sourceIndex, pair.sourceIndex, targetEntries, targetIndex, pair.targetIndex);
+        const sourceEntry = sourceEntries[pair.sourceIndex];
+        const targetEntry = targetEntries[pair.targetIndex];
+        rows.push({
+            time: sourceEntry.time || targetEntry.time,
+            source: toBoardDiffCell(sourceEntry),
+            target: toBoardDiffCell(targetEntry)
+        });
+        sourceIndex = pair.sourceIndex + 1;
+        targetIndex = pair.targetIndex + 1;
+    });
+    appendMergedUnmatchedRows(rows, sourceEntries, sourceIndex, sourceEntries.length, targetEntries, targetIndex, targetEntries.length);
+    return rows;
+}
+async function resolveBoardDiffCandidates(currentArticle, currentLegacyId, currentGoogleUserId) {
+    if (!currentGoogleUserId) {
+        return [];
+    }
+    const targetBoss = normalizeBossNameForCompare(currentArticle?.bossname);
+    const targetParty = buildPartySignature(currentArticle?.party);
+    const rows = await (0, boardSupabase_1.listCurrentMonthBoardPosts)();
+    return rows.flatMap((row) => {
+        const legacyId = String(row.legacy_id || row.id || '');
+        if (!legacyId || legacyId === currentLegacyId) {
+            return [];
+        }
+        const article = (0, boardSupabase_1.boardRowToArticle)(row);
+        if (resolveArticleAuthorId(article) !== currentGoogleUserId) {
+            return [];
+        }
+        if (normalizeBossNameForCompare(article?.bossname) !== targetBoss) {
+            return [];
+        }
+        if (buildPartySignature(article?.party) !== targetParty) {
+            return [];
+        }
+        return [{
+                id: legacyId,
+                title: resolveArticleDisplayTitle(article),
+                damageText: resolveArticleDamageText(article)
+            }];
+    });
+}
 function parseTimelog(text) {
     const lines = text.split(/\r?\n/);
     const result = {
@@ -267,8 +479,20 @@ function parseTimelog(text) {
         if (line.startsWith('クランモード')) {
             result.mode = line;
             const modeBody = line.replace(/^クランモード\s*/, '').trim();
-            const bossMatch = modeBody.match(/^(?:\d+段階目\s+)?(.+)$/);
-            result.bossname = bossMatch ? bossMatch[1].trim() : modeBody;
+            const modeParts = modeBody.split(/[\s\u3000]+/).filter(Boolean);
+            if (modeParts.length >= 3) {
+                result.bossname = modeParts.slice(2).join(' ').trim();
+            }
+            else {
+                const stageIndex = modeParts.findIndex((part) => part.endsWith('段階目'));
+                if (stageIndex >= 0 && stageIndex < modeParts.length - 1) {
+                    result.bossname = modeParts.slice(stageIndex + 1).join(' ').trim();
+                }
+                else {
+                    const bossMatch = modeBody.match(/^(?:[^\s\u3000]+段階目[\s\u3000]+)?(.+)$/);
+                    result.bossname = bossMatch ? bossMatch[1].trim() : modeBody;
+                }
+            }
         }
         else if (line.match(/\d+ダメージ/))
             result.damage = line;
@@ -372,6 +596,150 @@ router.get('/post', (req, res) => {
         currentPage: 'board',
         ...auth
     });
+});
+// 記事差分ページ
+router.get('/:id/diff', async (req, res) => {
+    try {
+        const auth = getAuthViewData(req);
+        const sourceRow = await (0, boardSupabase_1.getCurrentMonthBoardPostByLegacyId)(req.params.id);
+        if (!sourceRow) {
+            return res.status(404).send('記事がありません');
+        }
+        const sourceArticle = (0, boardSupabase_1.boardRowToArticle)(sourceRow);
+        const sourcePartyMembers = resolveBoardDetailPartyMembers(sourceArticle.party);
+        const userSession = req.session.user;
+        const currentGoogleUserId = typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '';
+        const myComparableArticles = await resolveBoardDiffCandidates(sourceArticle, String(sourceRow.legacy_id || sourceRow.id), currentGoogleUserId);
+        return res.render('board-diff', {
+            title: 'ゆかりさん△',
+            currentPage: 'board',
+            ...auth,
+            id: sourceRow.legacy_id || sourceRow.id,
+            sourceArticle,
+            sourcePartyMembers,
+            myComparableArticles,
+            compareTimelogText: '',
+            compareTimelogError: '',
+            comparison: null
+        });
+    }
+    catch (error) {
+        console.error('Failed to load board diff page from Supabase:', error);
+        return res.status(503).send('掲示板の読み込みに失敗しました');
+    }
+});
+router.post('/:id/diff/timelog', async (req, res) => {
+    try {
+        const auth = getAuthViewData(req);
+        const sourceRow = await (0, boardSupabase_1.getCurrentMonthBoardPostByLegacyId)(req.params.id);
+        if (!sourceRow) {
+            return res.status(404).send('記事がありません');
+        }
+        const sourceArticle = (0, boardSupabase_1.boardRowToArticle)(sourceRow);
+        const sourcePartyMembers = resolveBoardDetailPartyMembers(sourceArticle.party);
+        const sourceUbRows = resolveBoardDetailUbRows(sourceArticle);
+        const userSession = req.session.user;
+        const currentGoogleUserId = typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '';
+        const myComparableArticles = await resolveBoardDiffCandidates(sourceArticle, String(sourceRow.legacy_id || sourceRow.id), currentGoogleUserId);
+        const compareTimelogText = typeof req.body.compareTimelog === 'string' ? req.body.compareTimelog : '';
+        let compareTimelogError = '';
+        let comparison = null;
+        if (!compareTimelogText.trim()) {
+            compareTimelogError = '比較するタイムラインを入力してください';
+        }
+        else {
+            const parsed = parseTimelog(compareTimelogText);
+            const targetUbRows = resolveBoardDetailUbRows(parsed);
+            if (targetUbRows.length === 0) {
+                compareTimelogError = '比較できるタイムライン行が見つかりませんでした';
+            }
+            else {
+                const rows = buildBoardDiffRows(sourceUbRows, targetUbRows);
+                const meta = evaluateBoardDiffMeta(sourceArticle, parsed, rows);
+                comparison = {
+                    kind: 'timelog',
+                    targetTitle: '入力タイムライン',
+                    targetDamageText: parsed.damage || '',
+                    targetPartyMembers: resolveBoardDetailPartyMembers(parsed.party),
+                    rows,
+                    hasDiff: meta.hasDiff,
+                    isSameBoss: meta.isSameBoss,
+                    isSameParty: meta.isSameParty
+                };
+            }
+        }
+        return res.render('board-diff', {
+            title: 'ゆかりさん△',
+            currentPage: 'board',
+            ...auth,
+            id: sourceRow.legacy_id || sourceRow.id,
+            sourceArticle,
+            sourcePartyMembers,
+            myComparableArticles,
+            compareTimelogText,
+            compareTimelogError,
+            comparison
+        });
+    }
+    catch (error) {
+        console.error('Failed to compare board timelog:', error);
+        return res.status(503).send('比較処理に失敗しました');
+    }
+});
+router.post('/:id/diff/article/:targetId', async (req, res) => {
+    try {
+        const auth = getAuthViewData(req);
+        const sourceRow = await (0, boardSupabase_1.getCurrentMonthBoardPostByLegacyId)(req.params.id);
+        if (!sourceRow) {
+            return res.status(404).send('記事がありません');
+        }
+        const sourceArticle = (0, boardSupabase_1.boardRowToArticle)(sourceRow);
+        const sourcePartyMembers = resolveBoardDetailPartyMembers(sourceArticle.party);
+        const sourceUbRows = resolveBoardDetailUbRows(sourceArticle);
+        const userSession = req.session.user;
+        const currentGoogleUserId = typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '';
+        const myComparableArticles = await resolveBoardDiffCandidates(sourceArticle, String(sourceRow.legacy_id || sourceRow.id), currentGoogleUserId);
+        const targetId = String(req.params.targetId || '');
+        const selectableTargetIds = new Set(myComparableArticles.map((item) => item.id));
+        if (!selectableTargetIds.has(targetId)) {
+            return res.status(403).send('この比較先は選択できません');
+        }
+        const targetRow = await (0, boardSupabase_1.getCurrentMonthBoardPostByLegacyId)(targetId);
+        if (!targetRow) {
+            return res.status(404).send('比較先の記事がありません');
+        }
+        const targetArticle = (0, boardSupabase_1.boardRowToArticle)(targetRow);
+        const targetPartyMembers = resolveBoardDetailPartyMembers(targetArticle.party);
+        const targetUbRows = resolveBoardDetailUbRows(targetArticle);
+        const rows = buildBoardDiffRows(sourceUbRows, targetUbRows);
+        const meta = evaluateBoardDiffMeta(sourceArticle, targetArticle, rows);
+        const comparison = {
+            kind: 'article',
+            targetTitle: resolveArticleDisplayTitle(targetArticle),
+            targetDamageText: resolveArticleDamageText(targetArticle),
+            targetPartyMembers,
+            rows,
+            hasDiff: meta.hasDiff,
+            isSameBoss: meta.isSameBoss,
+            isSameParty: meta.isSameParty
+        };
+        return res.render('board-diff', {
+            title: 'ゆかりさん△',
+            currentPage: 'board',
+            ...auth,
+            id: sourceRow.legacy_id || sourceRow.id,
+            sourceArticle,
+            sourcePartyMembers,
+            myComparableArticles,
+            compareTimelogText: '',
+            compareTimelogError: '',
+            comparison
+        });
+    }
+    catch (error) {
+        console.error('Failed to compare board article:', error);
+        return res.status(503).send('比較処理に失敗しました');
+    }
 });
 // 個別記事
 router.get('/:id', async (req, res) => {

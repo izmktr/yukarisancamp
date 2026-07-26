@@ -1,0 +1,309 @@
+<div class="page-content">
+    <% 
+        const sourceTitle = (sourceArticle && sourceArticle.postTitle) ? sourceArticle.postTitle : '記事差分';
+        const sourceBoss = (sourceArticle && sourceArticle.bossname) ? sourceArticle.bossname : '';
+        const sourceDamage = (sourceArticle && sourceArticle.damage) ? sourceArticle.damage : '';
+        const sourceBattleTime = (sourceArticle && sourceArticle.battleTime) ? sourceArticle.battleTime : '';
+    %>
+    <p>
+        <a href="/board/<%= id %>" class="btn">記事詳細へ戻る</a>
+    </p>
+
+    <div class="board-page-title-row">
+        <h2>記事差分</h2>
+    </div>
+
+    <section class="post-info-editor" aria-label="差分元情報">
+        <h3>差分元情報</h3>
+        <div class="post-info-row post-info-row-static post-info-row-inline">
+            <div class="post-info-inline-group">
+                <div class="post-info-pill" role="group" aria-label="タイトル">
+                    <span class="post-info-pill-key">タイトル</span>
+                    <span class="post-info-pill-value"><%= sourceTitle %></span>
+                </div>
+                <div class="post-info-pill" role="group" aria-label="ボス">
+                    <span class="post-info-pill-key">ボス</span>
+                    <span class="post-info-pill-value"><%= sourceBoss %></span>
+                </div>
+                <div class="post-info-pill" role="group" aria-label="ダメージ">
+                    <span class="post-info-pill-key">ダメージ</span>
+                    <span class="post-info-pill-value"><%= sourceDamage %></span>
+                </div>
+                <div class="post-info-pill" role="group" aria-label="バトル時間">
+                    <span class="post-info-pill-key">バトル時間</span>
+                    <span class="post-info-pill-value"><%= sourceBattleTime %></span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="board-party-heading">
+        <h3>差分元パーティ編成</h3>
+    </div>
+    <% if (sourcePartyMembers && sourcePartyMembers.length > 0) { %>
+        <% const sourcePartyDisplayMembers = sourcePartyMembers.slice().reverse(); %>
+        <div class="board-party-grid">
+            <% sourcePartyDisplayMembers.forEach(function(member) { %>
+                <div class="board-party-card" data-party-official-name="<%= member.name %>">
+                    <% if (member.imagePath) { %>
+                        <img src="<%= member.imagePath %>" alt="<%= member.name %>" class="board-party-image" />
+                    <% } else { %>
+                        <div class="board-party-image board-party-image-missing">NO IMAGE</div>
+                    <% } %>
+                    <div class="board-party-name" data-party-official-name="<%= member.name %>"><%= member.name %></div>
+                </div>
+            <% }); %>
+        </div>
+    <% } else { %>
+        <p>未登録</p>
+    <% } %>
+
+    <section class="board-diff-section">
+        <h3>タイムラインと比較</h3>
+        <form method="post" action="/board/<%= id %>/diff/timelog" class="board-diff-timelog-form">
+            <textarea
+                name="compareTimelog"
+                class="board-diff-textarea"
+                rows="10"
+                placeholder="プリコネのバトルTL→クリップボードにコピーのデータを貼り付けてください"
+            ><%= compareTimelogText || '' %></textarea>
+            <div class="board-diff-actions">
+                <button type="submit" class="btn btn-primary">比較</button>
+            </div>
+        </form>
+        <% if (compareTimelogError) { %>
+            <p class="board-diff-error"><%= compareTimelogError %></p>
+        <% } %>
+    </section>
+
+    <section class="board-diff-section">
+        <h3>自分の記事と比較</h3>
+        <% if (!isLoggedIn) { %>
+            <p>Googleでログイン後に利用可能になります</p>
+        <% } else if (myComparableArticles && myComparableArticles.length > 0) { %>
+            <div class="board-diff-candidate-wrap">
+                <table class="board-diff-candidate-table">
+                    <thead>
+                        <tr>
+                            <th>タイトル</th>
+                            <th>ダメージ</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% myComparableArticles.forEach(function(item) { %>
+                            <tr>
+                                <td><%= item.title %></td>
+                                <td><%= item.damageText || '-' %></td>
+                                <td>
+                                    <form method="post" action="/board/<%= id %>/diff/article/<%= item.id %>">
+                                        <button type="submit" class="btn btn-primary">比較</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <p>同じボス、同じパーティ編成の記事はありません</p>
+        <% } %>
+    </section>
+
+    <% if (comparison) { %>
+        <section class="board-diff-section">
+            <h3>比較結果</h3>
+            <div class="post-info-row post-info-row-static post-info-row-inline">
+                <div class="post-info-inline-group">
+                    <div class="post-info-pill" role="group" aria-label="比較先">
+                        <span class="post-info-pill-key">比較先</span>
+                        <span class="post-info-pill-value"><%= comparison.targetTitle %></span>
+                    </div>
+                    <div class="post-info-pill" role="group" aria-label="比較先ダメージ">
+                        <span class="post-info-pill-key">ダメージ</span>
+                        <span class="post-info-pill-value"><%= comparison.targetDamageText || '-' %></span>
+                    </div>
+                </div>
+            </div>
+
+            <% if (comparison.targetPartyMembers && comparison.targetPartyMembers.length > 0) { %>
+                <% const targetPartyDisplayMembers = comparison.targetPartyMembers.slice().reverse(); %>
+                <div class="board-diff-target-party">
+                    <h4>比較先パーティ編成</h4>
+                    <div class="board-party-grid">
+                        <% targetPartyDisplayMembers.forEach(function(member) { %>
+                            <div class="board-party-card" data-party-official-name="<%= member.name %>">
+                                <% if (member.imagePath) { %>
+                                    <img src="<%= member.imagePath %>" alt="<%= member.name %>" class="board-party-image" />
+                                <% } else { %>
+                                    <div class="board-party-image board-party-image-missing">NO IMAGE</div>
+                                <% } %>
+                                <div class="board-party-name" data-party-official-name="<%= member.name %>"><%= member.name %></div>
+                            </div>
+                        <% }); %>
+                    </div>
+                </div>
+            <% } %>
+
+            <div class="board-diff-result-messages">
+                <% if (!comparison.hasDiff) { %>
+                    <p class="board-diff-result-message">差分がありません</p>
+                <% } %>
+                <% if (!comparison.isSameBoss) { %>
+                    <p class="board-diff-result-message board-diff-result-message-warn">違うボスで比較しています</p>
+                <% } else if (!comparison.isSameParty) { %>
+                    <p class="board-diff-result-message board-diff-result-message-warn">違うパーティで比較しています</p>
+                <% } %>
+            </div>
+
+            <div class="board-diff-table-wrap">
+                <table class="board-diff-table">
+                    <thead>
+                        <tr>
+                            <th>時間</th>
+                            <th>比較元</th>
+                            <th>比較先</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% comparison.rows.forEach(function(row) { %>
+                            <% const isDifferentRow = !row.source || !row.target; %>
+                            <tr class="<%= isDifferentRow ? 'board-diff-row-unmatched' : '' %>">
+                                <td><%= row.time || '-' %></td>
+                                <td>
+                                    <% if (row.source) { %>
+                                        <div class="board-diff-cell-content">
+                                            <% if (row.source.imagePath) { %>
+                                                <img src="<%= row.source.imagePath %>" alt="<%= row.source.character %>" title="<%= row.source.character %>" class="board-diff-icon" />
+                                            <% } else { %>
+                                                <div class="board-diff-icon board-diff-icon-missing" data-party-official-name="<%= row.source.character %>"><%= row.source.character %></div>
+                                            <% } %>
+                                            <span data-party-official-name="<%= row.source.character %>"><%= row.source.character %></span>
+                                        </div>
+                                    <% } else { %>
+                                        <span class="board-diff-empty">-</span>
+                                    <% } %>
+                                </td>
+                                <td>
+                                    <% if (row.target) { %>
+                                        <div class="board-diff-cell-content">
+                                            <% if (row.target.imagePath) { %>
+                                                <img src="<%= row.target.imagePath %>" alt="<%= row.target.character %>" title="<%= row.target.character %>" class="board-diff-icon" />
+                                            <% } else { %>
+                                                <div class="board-diff-icon board-diff-icon-missing" data-party-official-name="<%= row.target.character %>"><%= row.target.character %></div>
+                                            <% } %>
+                                            <span data-party-official-name="<%= row.target.character %>"><%= row.target.character %></span>
+                                        </div>
+                                    <% } else { %>
+                                        <span class="board-diff-empty">-</span>
+                                    <% } %>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    <% } %>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const IS_LOGGED_IN = <%- JSON.stringify(!!isLoggedIn) %>;
+
+        function getCurrentFirebaseUser() {
+            if (!window.firebase || typeof window.firebase.auth !== 'function') {
+                return null;
+            }
+            try {
+                return window.firebase.auth().currentUser || null;
+            } catch {
+                return null;
+            }
+        }
+
+        function sleep(ms) {
+            return new Promise((resolve) => {
+                window.setTimeout(resolve, ms);
+            });
+        }
+
+        async function waitForFirebaseUser(timeoutMs = 3000) {
+            const startedAt = Date.now();
+            while (Date.now() - startedAt <= timeoutMs) {
+                const user = getCurrentFirebaseUser();
+                if (user && typeof user.getIdToken === 'function') {
+                    return user;
+                }
+                await sleep(100);
+            }
+            return null;
+        }
+
+        async function fetchCurrentProfileWithToken() {
+            const user = await waitForFirebaseUser();
+            if (!user) {
+                return null;
+            }
+
+            const idToken = await user.getIdToken();
+            const response = await fetch('/api/settings/profile/current', {
+                method: 'GET',
+                headers: {
+                    Authorization: `Bearer ${idToken}`
+                }
+            });
+
+            if (!response.ok) {
+                return null;
+            }
+
+            const payload = await response.json();
+            return payload && payload.profile ? payload.profile : null;
+        }
+
+        function applyCustomNamesToDiffPage(profile) {
+            const ownedCharacters = profile && Array.isArray(profile.ownedCharacters) ? profile.ownedCharacters : [];
+            const nicknameByOfficialName = new Map();
+
+            ownedCharacters.forEach((entry) => {
+                if (!entry || typeof entry !== 'object') {
+                    return;
+                }
+                const officialName = typeof entry.officialName === 'string' ? entry.officialName.trim() : '';
+                if (!officialName) {
+                    return;
+                }
+                const nickname = typeof entry.nickname === 'string' ? entry.nickname.trim() : '';
+                nicknameByOfficialName.set(officialName, nickname || officialName);
+            });
+
+            nicknameByOfficialName.forEach((nickname, officialName) => {
+                const selector = `[data-party-official-name="${CSS.escape(officialName)}"]`;
+                document.querySelectorAll(selector).forEach((element) => {
+                    if (element.classList && element.classList.contains('board-party-card')) {
+                        return;
+                    }
+                    if (element instanceof HTMLImageElement) {
+                        // 画像URLは正式名称で取得済みなので変更しない
+                        return;
+                    }
+                    element.textContent = nickname;
+                });
+            });
+        }
+
+        async function initializeDiffCustomNames() {
+            if (!IS_LOGGED_IN) {
+                return;
+            }
+            const profile = await fetchCurrentProfileWithToken();
+            if (!profile) {
+                return;
+            }
+            applyCustomNamesToDiffPage(profile);
+        }
+
+        void initializeDiffCustomNames();
+    });
+</script>

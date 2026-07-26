@@ -18,10 +18,16 @@
             const visibilityValue = visibilityLabelByValue[visibilityRaw] || visibilityRaw;
             const bossValue = article.bossname || '';
             const damageValue = article.damage || '';
+            const battleStartRow = Array.isArray(ubRows)
+                ? ubRows.find((row) => row && row.ubText === 'バトル開始' && typeof row.time === 'string')
+                : null;
+            const battleStartMatch = String(battleStartRow?.time || '').trim().match(/^(\d{1,2}):(\d{2})$/);
             const battleTimeMatch = String(article.battleTime || '').trim().match(/^(\d{1,2}):(\d{2})$/);
-            const battleTimeSeconds = battleTimeMatch
-                ? (Number(battleTimeMatch[1]) * 60) + Number(battleTimeMatch[2])
-                : 0;
+            const battleTimeSeconds = battleStartMatch
+                ? (Number(battleStartMatch[1]) * 60) + Number(battleStartMatch[2])
+                : (battleTimeMatch
+                    ? (Number(battleTimeMatch[1]) * 60) + Number(battleTimeMatch[2])
+                    : 0);
         %>
         <p>
             <a href="/board" class="btn">一覧へ戻る</a>
@@ -141,6 +147,7 @@
                 </div>
                 <div class="ub-toolbar-actions">
                     <button type="button" id="board-export-open-button" class="btn">エクスポート</button>
+                    <button type="button" class="btn" onclick="location.href='/board/<%= id %>/diff'">差分</button>
                     <% if (canEdit) { %>
                     <a href="/board/<%= id %>/edit" class="btn btn-primary">編集</a>
                     <form method="post" action="/board/<%= id %>/delete" onsubmit="return confirm('この記事を削除します。よろしいですか？');">

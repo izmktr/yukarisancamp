@@ -568,6 +568,158 @@ body {
     font-weight: 600;
 }
 
+.board-diff-section {
+    margin-top: 1rem;
+    padding: 0.9rem;
+    border: 1px solid #dfe5f4;
+    border-radius: 12px;
+    background: #f8faff;
+}
+
+.board-diff-section h3 {
+    margin: 0 0 0.75rem 0;
+    color: #33406c;
+    font-size: 1.02rem;
+}
+
+.board-diff-timelog-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.board-diff-textarea {
+    width: 100%;
+    border: 1px solid #c8d0e1;
+    border-radius: 9px;
+    background: #ffffff;
+    color: #2f3650;
+    font-size: 0.9rem;
+    padding: 0.5rem 0.65rem;
+    resize: vertical;
+}
+
+.board-diff-textarea:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.14);
+}
+
+.board-diff-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.board-diff-error {
+    margin-top: 0.55rem;
+    margin-bottom: 0;
+    color: #b42323;
+    font-weight: 600;
+}
+
+.board-diff-candidate-wrap,
+.board-diff-table-wrap {
+    overflow-x: auto;
+}
+
+.board-diff-candidate-table,
+.board-diff-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #ffffff;
+    border: 1px solid #e3e8f4;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.board-diff-candidate-table th,
+.board-diff-candidate-table td,
+.board-diff-table th,
+.board-diff-table td {
+    padding: 0.65rem 0.75rem;
+    border-bottom: 1px solid #edf1f8;
+    text-align: left;
+    vertical-align: middle;
+}
+
+.board-diff-candidate-table th,
+.board-diff-table th {
+    background: #f7f9ff;
+    color: #3a4568;
+    font-size: 0.92rem;
+    font-weight: 700;
+}
+
+.board-diff-candidate-table tbody tr:last-child td,
+.board-diff-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.board-diff-table tbody tr.board-diff-row-unmatched td {
+    background: #fff6de;
+}
+
+.board-diff-cell-content {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.board-diff-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    object-fit: cover;
+    border: 1px solid #d9e0f0;
+    background: #f2f5ff;
+}
+
+.board-diff-icon-missing {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #7c86a5;
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-align: center;
+    line-height: 1.05;
+    padding: 0.2rem;
+    border-style: dashed;
+}
+
+.board-diff-empty {
+    color: #7d86a4;
+}
+
+.board-diff-target-party {
+    margin: 0.7rem 0 0.95rem 0;
+}
+
+.board-diff-target-party h4 {
+    margin: 0 0 0.55rem 0;
+    color: #3a4568;
+    font-size: 0.95rem;
+}
+
+.board-diff-result-messages {
+    margin-bottom: 0.65rem;
+}
+
+.board-diff-result-message {
+    margin: 0;
+    color: #2f4ca3;
+    font-size: 0.92rem;
+    font-weight: 700;
+}
+
+.board-diff-result-message + .board-diff-result-message {
+    margin-top: 0.3rem;
+}
+
+.board-diff-result-message-warn {
+    color: #a45a00;
+}
+
 @media (max-width: 768px) {
     .board-page-title-row {
         align-items: center;
@@ -585,6 +737,11 @@ body {
     }
 
     .board-list-party-icon {
+        width: 34px;
+        height: 34px;
+    }
+
+    .board-diff-icon {
         width: 34px;
         height: 34px;
     }
