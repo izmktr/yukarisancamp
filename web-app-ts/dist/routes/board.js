@@ -7,8 +7,8 @@ exports.refreshBoardCharaImageCache = refreshBoardCharaImageCache;
 const express_1 = require("express");
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
+const boardSupabase_1 = require("../services/boardSupabase");
 const router = (0, express_1.Router)();
-const DATA_DIR = path_1.default.join(__dirname, '../../data/board');
 const CHARA_INDEX_PATH = path_1.default.join(__dirname, '../../chara/charaindex.json');
 function isTimelinePartyMember(value) {
     if (!value || typeof value !== 'object') {
@@ -49,7 +49,7 @@ function resolveArticleAuthorId(article) {
     if (!article || typeof article !== 'object') {
         return '';
     }
-    const candidateValues = [article.authorid, article.authorId, article.googleUserId];
+    const candidateValues = [article.author_id, article.authorid, article.authorId, article.googleUserId];
     const resolved = candidateValues.find((value) => typeof value === 'string' && value.trim().length > 0);
     return typeof resolved === 'string' ? resolved.trim() : '';
 }
@@ -57,7 +57,7 @@ function resolveArticleAuthorName(article) {
     if (!article || typeof article !== 'object') {
         return '';
     }
-    const candidateValues = [article.authorname, article.authorName, article.displayName, article.userName];
+    const candidateValues = [article.author_name, article.authorname, article.authorName, article.displayName, article.userName];
     const resolved = candidateValues.find((value) => typeof value === 'string' && value.trim().length > 0);
     return typeof resolved === 'string' ? resolved.trim() : '';
 }
@@ -298,46 +298,52 @@ function getAuthViewData(req) {
     };
 }
 // 記事一覧
-router.get('/', (req, res) => {
-    const auth = getAuthViewData(req);
-    const userSession = req.session.user;
-    const currentGoogleUserId = typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '';
-    const files = fs_1.default.readdirSync(DATA_DIR).filter(f => f.endsWith('.json'));
-    const articles = files.flatMap((file) => {
-        const data = JSON.parse(fs_1.default.readFileSync(path_1.default.join(DATA_DIR, file), 'utf-8'));
-        const visibilityRaw = String(data.visibility || data.visibilality || '').toLowerCase().trim();
-        const authorId = resolveArticleAuthorId(data);
-        const isVisibleToCurrentUser = visibilityRaw === 'all'
-            || (visibilityRaw === 'self' && authorId.length > 0 && authorId === currentGoogleUserId);
-        if (!isVisibleToCurrentUser) {
-            return [];
-        }
+router.get('/', async (req, res) => {
+    try {
+        const auth = getAuthViewData(req);
+        const userSession = req.session.user;
+        const currentGoogleUserId = typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '';
+        const rows = await (0, boardSupabase_1.listCurrentMonthBoardPosts)();
         const visibilityLabelByValue = {
             all: '全体',
             clan: 'クラン',
             self: '自分'
         };
-        const partyMembers = resolveBoardDetailPartyMembers(data.party).slice().reverse();
-        return [{
-                id: file.replace('.json', ''),
-                title: typeof data.postTitle === 'string' && data.postTitle.trim().length > 0
-                    ? data.postTitle.trim()
-                    : (typeof data.mode === 'string' && data.mode.trim().length > 0 ? data.mode.trim() : '無題'),
-                authorName: resolveArticleAuthorName(data) || '未設定',
-                damage: data.damage,
-                visibilityLabel: visibilityLabelByValue[visibilityRaw] || visibilityRaw || '-',
-                partyMembers: partyMembers.slice(0, 5).map((member) => ({
-                    name: member.name,
-                    imagePath: member.imagePath
-                }))
-            }];
-    });
-    res.render('board', {
-        title: 'ゆかりさん△',
-        currentPage: 'board',
-        ...auth,
-        articles
-    });
+        const articles = rows.flatMap((row) => {
+            const article = (0, boardSupabase_1.boardRowToArticle)(row);
+            const visibilityRaw = String(article.visibility || '').toLowerCase().trim();
+            const authorId = resolveArticleAuthorId(article);
+            const isVisibleToCurrentUser = visibilityRaw === 'all'
+                || (visibilityRaw === 'self' && authorId.length > 0 && authorId === currentGoogleUserId);
+            if (!isVisibleToCurrentUser) {
+                return [];
+            }
+            const partyMembers = resolveBoardDetailPartyMembers(article.party).slice().reverse();
+            return [{
+                    id: String(article.uniqueId || article.legacyId || row.legacy_id || row.id),
+                    title: typeof article.postTitle === 'string' && article.postTitle.trim().length > 0
+                        ? article.postTitle.trim()
+                        : (typeof article.mode === 'string' && article.mode.trim().length > 0 ? article.mode.trim() : '無題'),
+                    authorName: resolveArticleAuthorName(article) || '未設定',
+                    damage: article.damage,
+                    visibilityLabel: visibilityLabelByValue[visibilityRaw] || visibilityRaw || '-',
+                    partyMembers: partyMembers.slice(0, 5).map((member) => ({
+                        name: member.name,
+                        imagePath: member.imagePath
+                    }))
+                }];
+        });
+        res.render('board', {
+            title: 'ゆかりさん△',
+            currentPage: 'board',
+            ...auth,
+            articles
+        });
+    }
+    catch (error) {
+        console.error('Failed to load board list from Supabase:', error);
+        res.status(503).send('掲示板の読み込みに失敗しました');
+    }
 });
 // 新規投稿画面（競合回避のため /:id より前に記述）
 router.get('/post', (req, res) => {
@@ -349,28 +355,35 @@ router.get('/post', (req, res) => {
     });
 });
 // 個別記事
-router.get('/:id', (req, res) => {
-    const auth = getAuthViewData(req);
-    const file = path_1.default.join(DATA_DIR, req.params.id + '.json');
-    if (!fs_1.default.existsSync(file))
-        return res.status(404).send('記事がありません');
-    const data = JSON.parse(fs_1.default.readFileSync(file, 'utf-8'));
-    const partyMembers = resolveBoardDetailPartyMembers(data.party);
-    const ubRows = resolveBoardDetailUbRows(data);
-    const currentUserSession = req.session.user;
-    const canEdit = canEditArticle(data, currentUserSession);
-    const showOwnerOnlyMessage = !!currentUserSession && !canEdit;
-    res.render('board-detail', {
-        title: 'ゆかりさん△',
-        currentPage: 'board',
-        ...auth,
-        article: data,
-        partyMembers,
-        ubRows,
-        id: req.params.id,
-        canEdit,
-        showOwnerOnlyMessage
-    });
+router.get('/:id', async (req, res) => {
+    try {
+        const auth = getAuthViewData(req);
+        const row = await (0, boardSupabase_1.getCurrentMonthBoardPostByLegacyId)(req.params.id);
+        if (!row) {
+            return res.status(404).send('記事がありません');
+        }
+        const data = (0, boardSupabase_1.boardRowToArticle)(row);
+        const partyMembers = resolveBoardDetailPartyMembers(data.party);
+        const ubRows = resolveBoardDetailUbRows(data);
+        const currentUserSession = req.session.user;
+        const canEdit = canEditArticle(data, currentUserSession);
+        const showOwnerOnlyMessage = !!currentUserSession && !canEdit;
+        res.render('board-detail', {
+            title: 'ゆかりさん△',
+            currentPage: 'board',
+            ...auth,
+            article: data,
+            partyMembers,
+            ubRows,
+            id: row.legacy_id || row.id,
+            canEdit,
+            showOwnerOnlyMessage
+        });
+    }
+    catch (error) {
+        console.error('Failed to load board detail from Supabase:', error);
+        res.status(503).send('掲示板の読み込みに失敗しました');
+    }
 });
 // 投稿処理（timelogテキスト→編集画面）
 router.post('/edit', (req, res) => {
@@ -417,66 +430,82 @@ router.post('/edit', (req, res) => {
     });
 });
 // 編集画面（既存記事）
-router.get('/:id/edit', (req, res) => {
-    const auth = getAuthViewData(req);
-    const file = path_1.default.join(DATA_DIR, req.params.id + '.json');
-    if (!fs_1.default.existsSync(file))
-        return res.status(404).send('記事がありません');
-    const data = JSON.parse(fs_1.default.readFileSync(file, 'utf-8'));
-    if (!ensureArticleEditableByUser(data, req, res)) {
-        return;
+router.get('/:id/edit', async (req, res) => {
+    try {
+        const auth = getAuthViewData(req);
+        const row = await (0, boardSupabase_1.getCurrentMonthBoardPostByLegacyId)(req.params.id);
+        if (!row) {
+            return res.status(404).send('記事がありません');
+        }
+        const data = (0, boardSupabase_1.boardRowToArticle)(row);
+        if (!ensureArticleEditableByUser(data, req, res)) {
+            return;
+        }
+        const partyMembers = resolveBoardDetailPartyMembers(data.party);
+        const ubRows = resolveBoardDetailUbRows(data);
+        res.render('board-edit', {
+            title: 'ゆかりさん△',
+            currentPage: 'board',
+            ...auth,
+            article: data,
+            partyMembers,
+            ubRows,
+            id: row.legacy_id || row.id,
+            isNew: false
+        });
     }
-    const partyMembers = resolveBoardDetailPartyMembers(data.party);
-    const ubRows = resolveBoardDetailUbRows(data);
-    res.render('board-edit', {
-        title: 'ゆかりさん△',
-        currentPage: 'board',
-        ...auth,
-        article: data,
-        partyMembers,
-        ubRows,
-        id: req.params.id,
-        isNew: false
-    });
+    catch (error) {
+        console.error('Failed to load board edit page from Supabase:', error);
+        res.status(503).send('掲示板の読み込みに失敗しました');
+    }
 });
 // 記事削除
-router.post('/:id/delete', (req, res) => {
-    const file = path_1.default.join(DATA_DIR, req.params.id + '.json');
-    if (!fs_1.default.existsSync(file)) {
-        return res.status(404).send('記事がありません');
+router.post('/:id/delete', async (req, res) => {
+    try {
+        const row = await (0, boardSupabase_1.getCurrentMonthBoardPostByLegacyId)(req.params.id);
+        if (!row) {
+            return res.status(404).send('記事がありません');
+        }
+        const data = (0, boardSupabase_1.boardRowToArticle)(row);
+        if (!ensureArticleEditableByUser(data, req, res)) {
+            return;
+        }
+        await (0, boardSupabase_1.deleteBoardPostByLegacyId)(req.params.id);
+        return res.redirect('/board');
     }
-    const data = JSON.parse(fs_1.default.readFileSync(file, 'utf-8'));
-    if (!ensureArticleEditableByUser(data, req, res)) {
-        return;
+    catch (error) {
+        console.error('Failed to delete board post from Supabase:', error);
+        res.status(503).send('掲示板の削除に失敗しました');
     }
-    fs_1.default.unlinkSync(file);
-    return res.redirect('/board');
 });
 // 編集保存（新規・既存）
-router.post('/save', (req, res) => {
-    const nowId = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
-    const timelineInfoRaw = req.body.timelineInfo;
-    const userSession = req.session.user;
-    if (!userSession) {
-        return res.status(403).send('Googleでログイン後に編集可能になります');
-    }
-    const sessionGoogleUserId = typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '';
-    const sessionAuthorName = typeof userSession?.displayName === 'string' ? userSession.displayName : '';
-    if (typeof timelineInfoRaw === 'string' && timelineInfoRaw.trim().length > 0) {
-        try {
+router.post('/save', async (req, res) => {
+    try {
+        const nowId = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
+        const timelineInfoRaw = req.body.timelineInfo;
+        const userSession = req.session.user;
+        if (!userSession) {
+            return res.status(403).send('Googleでログイン後に編集可能になります');
+        }
+        const sessionGoogleUserId = typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '';
+        const sessionAuthorName = typeof userSession?.displayName === 'string' ? userSession.displayName : '';
+        const yearmonth = await (0, boardSupabase_1.getCurrentClanBattleYearMonth)();
+        let legacyId = String(req.body.id || nowId);
+        let article;
+        if (typeof timelineInfoRaw === 'string' && timelineInfoRaw.trim().length > 0) {
             const parsedTimelineInfo = JSON.parse(timelineInfoRaw);
             if (!isTimelineInfo(parsedTimelineInfo)) {
                 return res.status(400).send('timelineInfo の形式が不正です');
             }
-            const id = parsedTimelineInfo.uniqueId || req.body.id || nowId;
-            const file = path_1.default.join(DATA_DIR, id + '.json');
-            if (fs_1.default.existsSync(file)) {
-                const existingArticle = JSON.parse(fs_1.default.readFileSync(file, 'utf-8'));
+            legacyId = parsedTimelineInfo.uniqueId || legacyId;
+            const existingRow = await (0, boardSupabase_1.getCurrentMonthBoardPostByLegacyId)(legacyId);
+            if (existingRow) {
+                const existingArticle = (0, boardSupabase_1.boardRowToArticle)(existingRow);
                 if (!canEditArticle(existingArticle, userSession)) {
                     return res.status(403).send('投稿者のみ編集可能です');
                 }
             }
-            const timelineInfo = {
+            article = {
                 ...parsedTimelineInfo,
                 authorid: typeof parsedTimelineInfo.authorid === 'string' && parsedTimelineInfo.authorid.trim().length > 0
                     ? parsedTimelineInfo.authorid
@@ -485,53 +514,62 @@ router.post('/save', (req, res) => {
                 authorName: typeof parsedTimelineInfo.authorName === 'string' && parsedTimelineInfo.authorName.trim().length > 0
                     ? parsedTimelineInfo.authorName
                     : sessionAuthorName,
-                uniqueId: id
+                uniqueId: legacyId,
+                yearmonth
             };
-            fs_1.default.writeFileSync(file, JSON.stringify(timelineInfo, null, 2), 'utf-8');
-            return res.redirect('/board/' + id);
         }
-        catch {
-            return res.status(400).send('timelineInfo の読み込みに失敗しました');
+        else {
+            article = {
+                bossname: req.body.bossname || '',
+                mode: req.body.mode || '',
+                damage: req.body.damage || '',
+                battleTime: req.body.battleTime || '',
+                battleDate: req.body.battleDate || '',
+                authorid: sessionGoogleUserId,
+                authorname: sessionAuthorName,
+                authorName: sessionAuthorName,
+                party: [],
+                ubTimes: []
+            };
+            if (typeof req.body.party === 'string') {
+                article.party = req.body.party.split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0);
+            }
+            if (typeof req.body.ubTimes === 'string') {
+                article.ubTimes = req.body.ubTimes.split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0);
+            }
+            if ((!article.mode && !article.damage) && typeof req.body.timelog === 'string') {
+                const parsed = parseTimelog(req.body.timelog);
+                article.bossname = parsed.bossname;
+                article.mode = parsed.mode;
+                article.damage = parsed.damage;
+                article.battleTime = parsed.battleTime;
+                article.battleDate = parsed.battleDate;
+                article.party = parsed.party;
+                article.ubTimes = parsed.ubTimes;
+            }
+            const existingRow = await (0, boardSupabase_1.getCurrentMonthBoardPostByLegacyId)(legacyId);
+            if (existingRow) {
+                const existingArticle = (0, boardSupabase_1.boardRowToArticle)(existingRow);
+                if (!canEditArticle(existingArticle, userSession)) {
+                    return res.status(403).send('投稿者のみ編集可能です');
+                }
+            }
         }
+        const savedRow = await (0, boardSupabase_1.upsertBoardPost)({
+            legacyId,
+            yearmonth,
+            article,
+            battleTimeSeconds: (0, boardSupabase_1.normalizeBattleTimeSeconds)(article.battleTime),
+            battleDateIso: (0, boardSupabase_1.normalizeBattleDateIso)(article.battleDate),
+            authorId: sessionGoogleUserId,
+            authorName: sessionAuthorName
+        });
+        return res.redirect('/board/' + (savedRow.legacy_id || legacyId));
     }
-    const article = {
-        bossname: req.body.bossname || '',
-        mode: req.body.mode || '',
-        damage: req.body.damage || '',
-        battleTime: req.body.battleTime || '',
-        battleDate: req.body.battleDate || '',
-        authorid: sessionGoogleUserId,
-        authorname: sessionAuthorName,
-        authorName: sessionAuthorName,
-        party: [],
-        ubTimes: []
-    };
-    if (typeof req.body.party === 'string') {
-        article.party = req.body.party.split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0);
+    catch (error) {
+        console.error('Failed to save board post to Supabase:', error);
+        return res.status(503).send('掲示板の保存に失敗しました');
     }
-    if (typeof req.body.ubTimes === 'string') {
-        article.ubTimes = req.body.ubTimes.split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0);
-    }
-    if ((!article.mode && !article.damage) && typeof req.body.timelog === 'string') {
-        const parsed = parseTimelog(req.body.timelog);
-        article.bossname = parsed.bossname;
-        article.mode = parsed.mode;
-        article.damage = parsed.damage;
-        article.battleTime = parsed.battleTime;
-        article.battleDate = parsed.battleDate;
-        article.party = parsed.party;
-        article.ubTimes = parsed.ubTimes;
-    }
-    const id = req.body.id || nowId;
-    const file = path_1.default.join(DATA_DIR, id + '.json');
-    if (fs_1.default.existsSync(file)) {
-        const existingArticle = JSON.parse(fs_1.default.readFileSync(file, 'utf-8'));
-        if (!canEditArticle(existingArticle, userSession)) {
-            return res.status(403).send('投稿者のみ編集可能です');
-        }
-    }
-    fs_1.default.writeFileSync(file, JSON.stringify(article, null, 2), 'utf-8');
-    res.redirect('/board/' + id);
 });
 exports.default = router;
 //# sourceMappingURL=board.js.map
