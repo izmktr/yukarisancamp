@@ -431,10 +431,25 @@ router.get('/', async (req, res) => {
       clan: 'クラン',
       self: '自分'
     };
+    const difficultyLabelByValue: Record<string, string> = {
+      '1': 'フルオート',
+      '2': 'セミオート',
+      '3': '簡単',
+      '4': '普通',
+      '5': '高難度'
+    };
+    const modeLabelByValue: Record<string, string> = {
+      full: 'フル',
+      agro: '持ち越し',
+      rank2: '2段階目',
+      rank3: '3段階目'
+    };
 
     const articles = rows.flatMap((row) => {
       const article = boardRowToArticle(row);
       const visibilityRaw = String(article.visibility || '').toLowerCase().trim();
+      const difficultyRaw = String(article.difficulty ?? '').trim();
+      const modeRaw = String(article.mode || '').toLowerCase().trim();
       const authorId = resolveArticleAuthorId(article);
       const isVisibleToCurrentUser = visibilityRaw === 'all'
         || (visibilityRaw === 'self' && authorId.length > 0 && authorId === currentGoogleUserId);
@@ -449,7 +464,11 @@ router.get('/', async (req, res) => {
           ? article.postTitle.trim()
           : (typeof article.mode === 'string' && article.mode.trim().length > 0 ? article.mode.trim() : '無題'),
         authorName: resolveArticleAuthorName(article) || '未設定',
-        damage: article.damage,
+        difficultyValue: difficultyRaw,
+        difficultyLabel: difficultyLabelByValue[difficultyRaw] || '-',
+        modeValue: modeRaw,
+        modeLabel: modeLabelByValue[modeRaw] || (typeof article.mode === 'string' ? article.mode : '-'),
+        visibilityValue: visibilityRaw,
         visibilityLabel: visibilityLabelByValue[visibilityRaw] || visibilityRaw || '-',
         partyMembers: partyMembers.slice(0, 5).map((member) => ({
           name: member.name,

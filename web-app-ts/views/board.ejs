@@ -25,19 +25,44 @@
                         <tr>
                             <th>タイトル</th>
                             <th>投稿者</th>
-                            <th>ダメージ</th>
                             <th>編成</th>
-                            <th>公開範囲</th>
+                            <th>
+                                <div class="board-filter-header">
+                                    <span>難易度</span>
+                                    <button type="button" class="board-filter-icon-btn" data-filter-kind="difficulty" aria-label="難易度で絞り込み" aria-expanded="false">▽</button>
+                                    <div class="board-filter-menu" data-filter-kind="difficulty" hidden></div>
+                                </div>
+                            </th>
+                            <th>
+                                <div class="board-filter-header">
+                                    <span>モード</span>
+                                    <button type="button" class="board-filter-icon-btn" data-filter-kind="mode" aria-label="モードで絞り込み" aria-expanded="false">▽</button>
+                                    <div class="board-filter-menu" data-filter-kind="mode" hidden></div>
+                                </div>
+                            </th>
+                            <th>
+                                <div class="board-filter-header">
+                                    <span>公開範囲</span>
+                                    <button type="button" class="board-filter-icon-btn" data-filter-kind="visibility" aria-label="公開範囲で絞り込み" aria-expanded="false">▽</button>
+                                    <div class="board-filter-menu" data-filter-kind="visibility" hidden></div>
+                                </div>
+                            </th>
                         </tr>
                     </thead>
                     <tbody>
                         <% articles.forEach(function(article) { %>
-                            <tr>
+                            <tr
+                                data-filter-difficulty="<%= article.difficultyValue || '' %>"
+                                data-filter-difficulty-label="<%= article.difficultyLabel || '' %>"
+                                data-filter-mode="<%= article.modeValue || '' %>"
+                                data-filter-mode-label="<%= article.modeLabel || '' %>"
+                                data-filter-visibility="<%= article.visibilityValue || '' %>"
+                                data-filter-visibility-label="<%= article.visibilityLabel || '' %>"
+                            >
                                 <td class="board-list-title-cell">
                                     <a href="/board/<%= article.id %>"><%= article.title %></a>
                                 </td>
                                 <td><%= article.authorName %></td>
-                                <td class="board-list-damage-cell"><%= article.damage || '-' %></td>
                                 <td>
                                     <div class="board-list-party-icons" aria-label="編成">
                                         <% for (let i = 0; i < 5; i += 1) { %>
@@ -52,11 +77,16 @@
                                         <% } %>
                                     </div>
                                 </td>
+                                <td><%= article.difficultyLabel || '-' %></td>
+                                <td><%= article.modeLabel || '-' %></td>
                                 <td><%= article.visibilityLabel || '-' %></td>
                             </tr>
                         <% }); %>
                     </tbody>
                 </table>
+            </div>
+            <div class="board-list-filter-toolbar" aria-label="絞り込み">
+                <span id="board-filter-status" class="board-list-filter-status">絞り込み: なし</span>
             </div>
         <% } else { %>
             <div class="no-articles">記事がありません。</div>
@@ -148,6 +178,236 @@
             });
         }
 
+        function initializeBoardListFilters() {
+            const tableRows = Array.from(document.querySelectorAll('.board-list-table tbody tr'));
+            if (tableRows.length === 0) {
+                return;
+            }
+
+            const filterButtons = Array.from(document.querySelectorAll('.board-filter-icon-btn'));
+            const filterMenus = Array.from(document.querySelectorAll('.board-filter-menu'));
+            const statusElement = document.getElementById('board-filter-status');
+            const activeFilters = {
+                difficulty: '',
+                mode: '',
+                visibility: ''
+            };
+
+            function findFilterLabel(kind, value) {
+                if (!value) {
+                    return '';
+                }
+
+                const matchedMenu = filterMenus.find((menuElement) => {
+                    if (!(menuElement instanceof HTMLDivElement)) {
+                        return false;
+                    }
+                    return menuElement.dataset.filterKind === kind;
+                });
+
+                if (!(matchedMenu instanceof HTMLDivElement)) {
+                    return value;
+                }
+
+                const optionButton = Array.from(matchedMenu.querySelectorAll('.board-filter-menu-item')).find((item) => {
+                    return item instanceof HTMLButtonElement && item.dataset.filterValue === value;
+                });
+                return optionButton instanceof HTMLButtonElement
+                    ? (optionButton.textContent || value).trim()
+                    : value;
+            }
+
+            function populateFilterOptions() {
+                const optionsByKind = {
+                    difficulty: new Map(),
+                    mode: new Map(),
+                    visibility: new Map()
+                };
+
+                tableRows.forEach((row) => {
+                    if (!(row instanceof HTMLTableRowElement)) {
+                        return;
+                    }
+
+                    const keys = ['difficulty', 'mode', 'visibility'];
+                    keys.forEach((kind) => {
+                        const value = row.dataset[`filter${kind.charAt(0).toUpperCase()}${kind.slice(1)}`] || '';
+                        const label = row.dataset[`filter${kind.charAt(0).toUpperCase()}${kind.slice(1)}Label`] || value;
+                        if (!value) {
+                            return;
+                        }
+                        if (!optionsByKind[kind].has(value)) {
+                            optionsByKind[kind].set(value, label);
+                        }
+                    });
+                });
+
+                filterMenus.forEach((menuElement) => {
+                    if (!(menuElement instanceof HTMLDivElement)) {
+                        return;
+                    }
+
+                    const kind = menuElement.dataset.filterKind || '';
+                    const optionPairs = optionsByKind[kind] ? Array.from(optionsByKind[kind].entries()) : [];
+
+                    const noneButton = document.createElement('button');
+                    noneButton.type = 'button';
+                    noneButton.className = 'board-filter-menu-item';
+                    noneButton.dataset.filterKind = kind;
+                    noneButton.dataset.filterValue = '';
+                    noneButton.textContent = '絞り込みなし';
+                    menuElement.appendChild(noneButton);
+
+                    optionPairs.forEach(([value, label]) => {
+                        const itemButton = document.createElement('button');
+                        itemButton.type = 'button';
+                        itemButton.className = 'board-filter-menu-item';
+                        itemButton.dataset.filterKind = kind;
+                        itemButton.dataset.filterValue = value;
+                        itemButton.textContent = label;
+                        menuElement.appendChild(itemButton);
+                    });
+                });
+            }
+
+            function updateFilterToolbar() {
+                const labels = [];
+                if (activeFilters.difficulty) labels.push(`難易度=${findFilterLabel('difficulty', activeFilters.difficulty)}`);
+                if (activeFilters.mode) labels.push(`モード=${findFilterLabel('mode', activeFilters.mode)}`);
+                if (activeFilters.visibility) labels.push(`公開範囲=${findFilterLabel('visibility', activeFilters.visibility)}`);
+
+                if (statusElement) {
+                    statusElement.textContent = labels.length > 0 ? `絞り込み: ${labels.join(' / ')}` : '絞り込み: なし';
+                }
+            }
+
+            function updateFilterButtonStates() {
+                filterButtons.forEach((buttonElement) => {
+                    if (!(buttonElement instanceof HTMLButtonElement)) {
+                        return;
+                    }
+
+                    const kind = buttonElement.dataset.filterKind || '';
+                    const isActive = !!kind && !!activeFilters[kind];
+                    buttonElement.classList.toggle('is-active', isActive);
+                });
+
+                filterMenus.forEach((menuElement) => {
+                    if (!(menuElement instanceof HTMLDivElement)) {
+                        return;
+                    }
+
+                    const kind = menuElement.dataset.filterKind || '';
+                    const currentValue = kind ? activeFilters[kind] : '';
+                    const items = Array.from(menuElement.querySelectorAll('.board-filter-menu-item'));
+                    items.forEach((itemElement) => {
+                        if (!(itemElement instanceof HTMLButtonElement)) {
+                            return;
+                        }
+                        const value = itemElement.dataset.filterValue || '';
+                        const isActive = value === currentValue;
+                        itemElement.classList.toggle('is-active', isActive);
+                    });
+                });
+            }
+
+            function closeAllFilterMenus() {
+                filterMenus.forEach((menuElement) => {
+                    if (menuElement instanceof HTMLDivElement) {
+                        menuElement.hidden = true;
+                    }
+                });
+
+                filterButtons.forEach((buttonElement) => {
+                    if (buttonElement instanceof HTMLButtonElement) {
+                        buttonElement.setAttribute('aria-expanded', 'false');
+                    }
+                });
+            }
+
+            function applyFilters() {
+                tableRows.forEach((row) => {
+                    if (!(row instanceof HTMLTableRowElement)) {
+                        return;
+                    }
+
+                    const rowDifficulty = row.dataset.filterDifficulty || '';
+                    const rowMode = row.dataset.filterMode || '';
+                    const rowVisibility = row.dataset.filterVisibility || '';
+
+                    const difficultyMatched = !activeFilters.difficulty || rowDifficulty === activeFilters.difficulty;
+                    const modeMatched = !activeFilters.mode || rowMode === activeFilters.mode;
+                    const visibilityMatched = !activeFilters.visibility || rowVisibility === activeFilters.visibility;
+                    row.hidden = !(difficultyMatched && modeMatched && visibilityMatched);
+                });
+            }
+
+            filterButtons.forEach((buttonElement) => {
+                if (!(buttonElement instanceof HTMLButtonElement)) {
+                    return;
+                }
+
+                buttonElement.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    const kind = buttonElement.dataset.filterKind || '';
+                    if (!kind) {
+                        return;
+                    }
+
+                    const targetMenu = filterMenus.find((menuElement) => {
+                        return menuElement instanceof HTMLDivElement
+                            && menuElement.dataset.filterKind === kind;
+                    });
+
+                    if (!(targetMenu instanceof HTMLDivElement)) {
+                        return;
+                    }
+
+                    const willOpen = targetMenu.hidden;
+                    closeAllFilterMenus();
+                    if (willOpen) {
+                        targetMenu.hidden = false;
+                        buttonElement.setAttribute('aria-expanded', 'true');
+                    }
+                });
+            });
+
+            filterMenus.forEach((menuElement) => {
+                if (!(menuElement instanceof HTMLDivElement)) {
+                    return;
+                }
+
+                menuElement.addEventListener('click', (event) => {
+                    event.stopPropagation();
+
+                    const target = event.target;
+                    if (!(target instanceof HTMLButtonElement) || !target.classList.contains('board-filter-menu-item')) {
+                        return;
+                    }
+
+                    const kind = target.dataset.filterKind || '';
+                    if (!kind) {
+                        return;
+                    }
+
+                    activeFilters[kind] = target.dataset.filterValue || '';
+                    applyFilters();
+                    updateFilterToolbar();
+                    updateFilterButtonStates();
+                    closeAllFilterMenus();
+                });
+            });
+
+            document.addEventListener('click', () => {
+                closeAllFilterMenus();
+            });
+
+            populateFilterOptions();
+            applyFilters();
+            updateFilterToolbar();
+            updateFilterButtonStates();
+        }
+
         async function hydrateCustomNamesIfNeeded() {
             if (!IS_LOGGED_IN) {
                 return;
@@ -165,5 +425,6 @@
         }
 
         hydrateCustomNamesIfNeeded();
+        initializeBoardListFilters();
     });
 </script>
