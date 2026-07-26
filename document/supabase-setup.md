@@ -1,6 +1,8 @@
 # Supabase接続設定手順（web-app-ts）
 
 このドキュメントは、web-app-ts の「クラバト設定」と「設定画面プロフィール」の読み込み・保存を Supabase に向けるために必要なサーバ設定をまとめたものです。
+掲示板の保存先も同じ SQL ファイルにまとめ、board_posts を追加する前提にしています。
+掲示板は `setting_clanbattle.yearmonth` と一致する月だけを表示し、過去月は表示しない運用にします。
 
 ## 1. 必須環境変数
 
@@ -16,7 +18,8 @@ SUPABASE_JWKS_URL=
 ```
 
 補足:
-- テーブル名は `setting_clanbattle`、`setting_userprofile`、`setting_user_owned_character` の固定です。
+- テーブル名は `board_posts`、`setting_clanbattle`、`setting_userprofile`、`setting_user_owned_character` の固定です。
+- 掲示板用に `board_posts` も `document/supabase_createtable.sql` へ追加しています。
 - APIはサーバ側で `SUPABASE_SECRET_KEY` を使って Supabase REST API に `upsert` します。
 - テーブル作成SQLは `document/supabase_createtable.sql` に集約しています。
 
@@ -54,14 +57,49 @@ Supabaseダッシュボードから取得します。
 - 現在の保存APIは camelCase カラム名（`bossHp`, `startDate`, `endDate`）で保存します。
 - PostgreSQL で camelCase を使う場合はダブルクォートが必要です。
 
-## 4. セキュリティ注意
+## 4. 掲示板保存テーブル要件
+
+掲示板の投稿本文は、まず 1 行の `board_posts` にまとめて保存する前提です。
+表示対象は `public.board_posts_current_month` か、`board_posts.yearmonth = setting_clanbattle.yearmonth` で絞った行のみです。
+
+- テーブル名: `board_posts`
+- 主キー: `id`（uuid）
+  - `gen_random_uuid()` で自動採番
+- 想定カラム:
+  - `yearmonth` text（`setting_clanbattle.yearmonth` と一致する `YYYYMM`）
+  - `legacy_id` text（既存ファイル保存時のIDや移行用キー）
+  - `author_id` text
+  - `author_name` text
+  - `post_title` text
+  - `bossname` text
+  - `mode` text
+  - `damage` bigint
+  - `battle_time_seconds` integer
+  - `battle_date` timestamptz
+  - `difficulty` smallint
+  - `visibility` text（`all` / `clan` / `self`）
+  - `post_comment` text
+  - `party` jsonb
+  - `ub_rows` jsonb
+  - `raw_article` jsonb
+  - `created_at` timestamptz
+  - `updated_at` timestamptz
+
+補足:
+- `setting_clanbattle` は `id = 0` の 1 件だけを持つ前提です。
+- `board_posts_current_month` ビューを使うと、今月分だけを取得できます。
+- `party`, `ub_rows`, `raw_article` は JSONB にしておくと、現行のファイル保存データをそのまま移しやすいです。
+- 一覧表示は `board_posts` だけを見れば足りるようにして、詳細画面では `party` と `ub_rows` を展開する想定です。
+- 既存の `board` ルーティングは、移行後にファイルではなくこのテーブルを参照する形へ置き換えます。
+
+## 5. セキュリティ注意
 
 - `SUPABASE_SECRET_KEY` はサーバ専用です。ブラウザへ渡さないでください。
 - `.env.local` はコミットしないでください。
 - ログにキー全文を出さないでください。
 - 本アプリでは `ensureAdmin` を通過したユーザーのみ保存APIを実行できます。
 
-## 5. 設定画面プロフィールテーブル要件（schema準拠）
+## 6. 設定画面プロフィールテーブル要件（schema準拠）
 
 設定画面API（`GET /api/settings/profile/current`, `POST /api/settings/profile/save`）が期待するテーブル要件です。
 
@@ -88,7 +126,7 @@ Supabaseダッシュボードから取得します。
 
 作成SQLは `document/supabase_createtable.sql` の `setting_userprofile` / `setting_user_owned_character` を使用してください。
 
-## 6. 動作確認手順
+## 7. 動作確認手順
 
 1. `web-app-ts/.env.local` を設定
 2. Supabase SQL Editor で `document/supabase_createtable.sql` を実行し、3テーブルを作成
@@ -98,7 +136,7 @@ Supabaseダッシュボードから取得します。
 6. 所持キャラ更新を保存し、`setting_user_owned_character` の対象 `googleUserId` 行が delete/insert されることを確認
 7. `/clanbattle-settings` を開いて保存し、`setting_clanbattle` の `id=0` 行が insert/update されることを確認
 
-## 7. よくある問題
+## 8. よくある問題
 
 ### 502 Failed to save clanbattle settings to Supabase
 - 原因例: テーブル未作成、`id` 主キー/`id=0` CHECK制約の不一致、カラム名不一致
