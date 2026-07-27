@@ -924,7 +924,9 @@
                 return shouldUppercase ? baseMark.toUpperCase() : baseMark;
             }).join('');
             const autoState = getAutoStateForExport(row);
-            return `[${setParts}]${autoState.isOn ? 'on' : 'off'}`;
+            const autoText = autoState.isOn ? 'on' : 'off';
+            const renderedAutoText = autoState.isActive ? autoText.toUpperCase() : autoText;
+            return `[${setParts}]${renderedAutoText}`;
         }
 
         function getOnOffTextForExport(row, uppercaseSwitchState) {
@@ -981,7 +983,7 @@
                         : { onText: '', offText: '' };
                     const autoState = getAutoStateForExport(row);
                     const autoToggleText = showOnOffCharacters && autoState.isActive
-                        ? (autoState.isOn ? 'auto on' : 'auto off')
+                        ? (autoState.isOn ? 'オートon' : 'オートoff')
                         : '';
                     const setStatus = getSetStatusForExport(row, uppercaseSwitchState);
                     const operationParts = [timeText, ubText, onText, offText, autoToggleText, setStatus].filter((part) => part && part.trim().length > 0);
