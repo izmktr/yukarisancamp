@@ -930,7 +930,7 @@
             }).join('');
             const autoState = getAutoStateForExport(row);
             const autoText = autoState.isOn ? 'on' : 'off';
-            const renderedAutoText = autoState.isActive ? autoText.toUpperCase() : autoText;
+            const renderedAutoText = (uppercaseSwitchState && autoState.isActive) ? autoText.toUpperCase() : autoText;
             return `[${setParts}]${renderedAutoText}`;
         }
 
