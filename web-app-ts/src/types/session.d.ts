@@ -7,6 +7,7 @@ declare module 'express-session' {
       googleUserId: string;
       displayName: string;
       role: 'admin' | 'user';
+      discordServer?: string;
     };
   }
 }

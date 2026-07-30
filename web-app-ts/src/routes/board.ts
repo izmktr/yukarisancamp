@@ -719,11 +719,43 @@ function parseTimelog(text: string): ParsedArticle {
 
 function getAuthViewData(req: any) {
   const userSession = req.session.user as any;
+  const discordServer = typeof userSession?.discordServer === 'string' ? userSession.discordServer.trim() : '';
   return {
     isLoggedIn: !!userSession,
     userName: userSession?.displayName || '',
-    isAdmin: userSession?.role === 'admin'
+    isAdmin: userSession?.role === 'admin',
+    canSelectClanVisibility: discordServer.length > 0
   };
+}
+
+function normalizeArticleVisibility(article: any, canSelectClanVisibility: boolean): void {
+  if (!article || typeof article !== 'object') {
+    return;
+  }
+
+  const rawVisibility = typeof article.visibility === 'string' ? article.visibility.toLowerCase().trim() : '';
+  const normalizedVisibility = rawVisibility === 'all' || rawVisibility === 'clan' || rawVisibility === 'self'
+    ? rawVisibility
+    : 'self';
+  article.visibility = (normalizedVisibility === 'clan' && !canSelectClanVisibility) ? 'self' : normalizedVisibility;
+}
+
+function applyAuthorDiscordServer(article: any, sessionDiscordServer: string): void {
+  if (!article || typeof article !== 'object') {
+    return;
+  }
+
+  const normalizedDiscordServer = sessionDiscordServer.trim();
+  const currentSetting = article.setting && typeof article.setting === 'object' && !Array.isArray(article.setting)
+    ? article.setting as Record<string, unknown>
+    : {};
+
+  article.setting = {
+    ...currentSetting,
+    discord_server: normalizedDiscordServer
+  };
+
+  article.authorclanid = normalizedDiscordServer;
 }
 
 // 記事一覧
@@ -1101,6 +1133,8 @@ router.post('/save', async (req, res) => {
 
     const sessionGoogleUserId = typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '';
     const sessionAuthorName = typeof userSession?.displayName === 'string' ? userSession.displayName : '';
+    const sessionDiscordServer = typeof userSession?.discordServer === 'string' ? userSession.discordServer.trim() : '';
+    const canSelectClanVisibility = sessionDiscordServer.length > 0;
     const yearmonth = await getCurrentClanBattleYearMonth();
 
     let legacyId = String(req.body.id || nowId);
@@ -1133,6 +1167,8 @@ router.post('/save', async (req, res) => {
         uniqueId: legacyId,
         yearmonth
       };
+      normalizeArticleVisibility(article, canSelectClanVisibility);
+      applyAuthorDiscordServer(article, sessionDiscordServer);
     } else {
       article = {
         bossname: req.body.bossname || '',
@@ -1153,6 +1189,8 @@ router.post('/save', async (req, res) => {
       if (typeof req.body.ubTimes === 'string') {
         article.ubTimes = req.body.ubTimes.split(/\r?\n/).map((s: string) => s.trim()).filter((s: string) => s.length > 0);
       }
+      normalizeArticleVisibility(article, canSelectClanVisibility);
+      applyAuthorDiscordServer(article, sessionDiscordServer);
       if ((!article.mode && !article.damage) && typeof req.body.timelog === 'string') {
         const parsed = parseTimelog(req.body.timelog);
         article.bossname = parsed.bossname;

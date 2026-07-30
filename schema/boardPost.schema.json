@@ -1,0 +1,233 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BoardPost",
+  "description": "Current board post schema (raw_article compatible).",
+  "type": "object",
+  "properties": {
+    "uniqueId": {
+      "description": "Unique identifier for a board post.",
+      "type": "string"
+    },
+    "legacyId": {
+      "description": "Legacy identifier for compatibility.",
+      "type": "string"
+    },
+    "yearmonth": {
+      "description": "Battle month in YYYYMM format.",
+      "type": "string",
+      "pattern": "^[0-9]{6}$"
+    },
+    "bossname": {
+      "description": "Boss name.",
+      "type": "string"
+    },
+    "damage": {
+      "description": "Total damage.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "battleTime": {
+      "description": "Battle duration in mm:ss format.",
+      "type": "string",
+      "pattern": "^[0-9]{1,2}:[0-9]{2}$"
+    },
+    "battleDate": {
+      "description": "Battle date-time (display value).",
+      "type": "string"
+    },
+    "postTitle": {
+      "description": "Post title.",
+      "type": "string"
+    },
+    "postComment": {
+      "description": "Post comment.",
+      "type": "string"
+    },
+    "postcomment": {
+      "description": "Legacy post comment key.",
+      "type": "string"
+    },
+    "difficulty": {
+      "description": "Difficulty level.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "visibility": {
+      "description": "Visibility scope.",
+      "type": "string",
+      "enum": ["all", "clan", "self"]
+    },
+    "mode": {
+      "description": "Battle mode.",
+      "type": "string",
+      "enum": ["full", "agro", "rank2", "rank3"]
+    },
+    "authorid": {
+      "description": "Author Google user ID.",
+      "type": "string"
+    },
+    "authorname": {
+      "description": "Author name.",
+      "type": "string"
+    },
+    "authorName": {
+      "description": "Author name (camelCase).",
+      "type": "string"
+    },
+    "authorclanid": {
+      "description": "Author clan/server identifier.",
+      "type": "string"
+    },
+    "setting": {
+      "description": "Author-side settings snapshot used by board posts.",
+      "type": "object",
+      "properties": {
+        "discord_server": {
+          "description": "Discord server identifier from user setting.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "party": {
+      "description": "Party data. Supports both parsed string array and structured member array.",
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "star": {
+                "type": "integer"
+              },
+              "level": {
+                "type": "integer"
+              },
+              "rank": {
+                "type": "integer"
+              }
+            },
+            "required": ["name"],
+            "additionalProperties": true
+          }
+        ]
+      }
+    },
+    "ubTimes": {
+      "description": "Legacy UB time lines parsed from timelog.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "ubTimeline": {
+      "description": "UB timeline events.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "time": {
+            "type": "string",
+            "pattern": "^[0-9]{1,2}:[0-9]{2}$"
+          },
+          "character": {
+            "type": "string"
+          },
+          "activeIcons": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4
+            }
+          },
+          "autoActive": {
+            "type": "boolean"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "isAddedRow": {
+            "type": "boolean"
+          },
+          "timing": {
+            "type": "boolean"
+          }
+        },
+        "required": ["time", "character"],
+        "additionalProperties": true
+      }
+    },
+    "ubRows": {
+      "description": "Board editor row model.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "time": {
+            "type": "string"
+          },
+          "ubText": {
+            "type": "string"
+          },
+          "ubImagePath": {
+            "type": ["string", "null"]
+          },
+          "activeIcons": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4
+            }
+          },
+          "autoActive": {
+            "type": "boolean"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "isAddedRow": {
+            "type": "boolean"
+          },
+          "timing": {
+            "type": "boolean"
+          }
+        },
+        "required": ["time", "ubText"],
+        "additionalProperties": true
+      }
+    },
+    "battle_time_seconds": {
+      "description": "Persisted battle time in seconds.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "createdAt": {
+      "description": "Creation timestamp.",
+      "type": "string"
+    },
+    "updatedAt": {
+      "description": "Update timestamp.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "uniqueId",
+    "yearmonth",
+    "bossname",
+    "mode",
+    "damage",
+    "battleTime",
+    "battleDate",
+    "party"
+  ],
+  "additionalProperties": true
+}

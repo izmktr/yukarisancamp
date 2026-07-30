@@ -13,11 +13,27 @@ import {
 
 const router = Router();
 
-function getSessionUser(req: Request): { googleUserId: string; displayName: string } {
-  const userSession = req.session?.user as { googleUserId?: string; displayName?: string } | undefined;
+function getSessionUser(req: Request): { googleUserId: string; displayName: string; discordServer: string } {
+  const userSession = req.session?.user as { googleUserId?: string; displayName?: string; discordServer?: string } | undefined;
   return {
     googleUserId: typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '',
-    displayName: typeof userSession?.displayName === 'string' ? userSession.displayName : ''
+    displayName: typeof userSession?.displayName === 'string' ? userSession.displayName : '',
+    discordServer: typeof userSession?.discordServer === 'string' ? userSession.discordServer.trim() : ''
+  };
+}
+
+function applyAuthorDiscordServer(article: Record<string, unknown>, sessionDiscordServer: string): Record<string, unknown> {
+  const currentSetting = article.setting && typeof article.setting === 'object' && !Array.isArray(article.setting)
+    ? article.setting as Record<string, unknown>
+    : {};
+
+  return {
+    ...article,
+    authorclanid: sessionDiscordServer,
+    setting: {
+      ...currentSetting,
+      discord_server: sessionDiscordServer
+    }
   };
 }
 
@@ -64,7 +80,7 @@ router.post('/post', async (req: Request, res: Response) => {
     const savedRow = await upsertBoardPost({
       legacyId,
       yearmonth,
-      article: {
+      article: applyAuthorDiscordServer({
         uniqueId: legacyId,
         yearmonth,
         bossname: parsed.bossname,
@@ -81,7 +97,7 @@ router.post('/post', async (req: Request, res: Response) => {
         postComment: '',
         party: parsed.party,
         ubTimes: parsed.ubTimes
-      },
+      }, sessionUser.discordServer),
       battleTimeSeconds: normalizeBattleTimeSeconds(parsed.battleTime),
       battleDateIso: normalizeBattleDateIso(parsed.battleDate),
       authorId: sessionUser.googleUserId,
@@ -114,14 +130,14 @@ router.post('/:id/edit', async (req: Request, res: Response) => {
     const savedRow = await upsertBoardPost({
       legacyId,
       yearmonth,
-      article: {
+      article: applyAuthorDiscordServer({
         ...article,
         uniqueId: legacyId,
         yearmonth,
         authorid: typeof article.authorid === 'string' ? article.authorid : sessionUser.googleUserId,
         authorname: typeof article.authorname === 'string' ? article.authorname : sessionUser.displayName,
         authorName: typeof article.authorName === 'string' ? article.authorName : sessionUser.displayName
-      },
+      }, sessionUser.discordServer),
       battleTimeSeconds: normalizeBattleTimeSeconds(article.battleTime),
       battleDateIso: normalizeBattleDateIso(article.battleDate),
       authorId: typeof article.authorid === 'string' && article.authorid.trim().length > 0 ? article.authorid : sessionUser.googleUserId,

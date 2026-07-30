@@ -957,7 +957,8 @@ function initializeFirebaseAuth() {
                                 'Authorization': `Bearer ${idToken}`
                             },
                             body: JSON.stringify({
-                                displayName: currentUserProfile.displayName
+                                displayName: currentUserProfile.displayName,
+                                discordServer: currentUserProfile.discordServer
                             })
                         });
 

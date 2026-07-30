@@ -96,7 +96,7 @@
                     <input type="hidden" id="post-visibility-value" value="self" />
                     <div class="post-toggle-group" data-group="visibility" role="group" aria-label="公開範囲">
                         <button type="button" class="post-toggle-btn" data-value="all">全体</button>
-                        <button type="button" class="post-toggle-btn" data-value="clan">クラン</button>
+                        <button type="button" class="post-toggle-btn" data-value="clan" <%= canSelectClanVisibility ? '' : 'disabled' %>>クラン</button>
                         <button type="button" class="post-toggle-btn is-active" data-value="self">自分</button>
                     </div>
                 </div>
@@ -297,6 +297,7 @@
         };
         let currentDisplayMode = DISPLAY_MODE_ALL;
         const IS_LOGGED_IN = <%- JSON.stringify(!!isLoggedIn) %>;
+        const CAN_SELECT_CLAN_VISIBILITY = <%- JSON.stringify(!!canSelectClanVisibility) %>;
 
         function getCurrentFirebaseUser() {
             if (!window.firebase || typeof window.firebase.auth !== 'function') {
@@ -417,9 +418,38 @@
                 if (!profile) {
                     return;
                 }
+                applyVisibilitySelectability(profile);
                 applyCustomNamesToEditor(profile);
             } catch (error) {
                 console.warn('編集画面のカスタム名読み込みに失敗しました。', error);
+            }
+        }
+
+        function canUseClanVisibilityFromProfile(profile) {
+            if (!profile || typeof profile !== 'object') {
+                return false;
+            }
+
+            const discordServerRaw = profile.discordServer ?? profile.discord_server;
+            return typeof discordServerRaw === 'string' && discordServerRaw.trim().length > 0;
+        }
+
+        function applyVisibilitySelectability(profile) {
+            const visibilityGroup = document.querySelector('.post-toggle-group[data-group="visibility"]');
+            if (!visibilityGroup) {
+                return;
+            }
+
+            const clanButton = visibilityGroup.querySelector('.post-toggle-btn[data-value="clan"]');
+            if (!(clanButton instanceof HTMLButtonElement)) {
+                return;
+            }
+
+            const canSelectClanVisibility = CAN_SELECT_CLAN_VISIBILITY || canUseClanVisibilityFromProfile(profile);
+            clanButton.disabled = !canSelectClanVisibility;
+
+            if (!canSelectClanVisibility && clanButton.classList.contains('is-active')) {
+                setActiveToggle('visibility', 'self');
             }
         }
 
@@ -1427,6 +1457,7 @@
 
         setupPostInfoToggles();
         initializePostInfoFromArticle();
+        applyVisibilitySelectability(null);
         const saveButton = document.getElementById('board-save-button');
         if (saveButton) {
             saveButton.addEventListener('click', submitSave);

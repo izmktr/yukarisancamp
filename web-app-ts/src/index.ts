@@ -1343,6 +1343,7 @@ app.post('/api/user/session', express.json(), async (req, res) => {
 
     const googleUserId = decodedToken.uid;
     const { displayName } = req.body;
+    const discordServer = typeof req.body?.discordServer === 'string' ? req.body.discordServer.trim() : '';
 
     // role は Firestore から取得（トークンの uid で検索）
     const role = await getUserRoleFromFirestore(googleUserId);
@@ -1351,7 +1352,8 @@ app.post('/api/user/session', express.json(), async (req, res) => {
     req.session.user = {
       googleUserId,
       displayName: displayName || 'ユーザー',
-      role
+      role,
+      discordServer
     };
 
     res.json({ success: true, message: 'User session saved', role });

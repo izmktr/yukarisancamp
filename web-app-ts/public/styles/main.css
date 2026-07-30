@@ -1186,6 +1186,13 @@ body {
     color: #ffffff;
 }
 
+.post-toggle-btn:disabled {
+    background: #f1f4fb;
+    border-color: #d5ddec;
+    color: #9aa7c5;
+    cursor: not-allowed;
+}
+
 .post-difficulty-help-text {
     margin: 0;
     color: #4a5783;
