@@ -1,0 +1,497 @@
+<div class="page-content clan-management-page">
+  <% const data = clanManagementData || { clan: null, members: [], loadError: '' }; %>
+  <% if (data.loadError) { %>
+    <div class="settings-firebase-error"><%= data.loadError %></div>
+  <% } else { %>
+    <% const clanName = data.clan && typeof data.clan.name === 'string' && data.clan.name.trim().length > 0 ? data.clan.name.trim() : '未登録'; %>
+    <% const members = Array.isArray(data.members) ? [...data.members] : []; %>
+    <% const leaderCount = members.filter((member) => member.role === 'leader').length; %>
+    <% const officerCount = members.filter((member) => member.role === 'officer').length; %>
+    <% const memberCount = members.length; %>
+    <% members.sort((left, right) => {
+      const roleWeight = (role) => {
+        if (role === 'leader') return 0;
+        if (role === 'officer') return 1;
+        return 2;
+      };
+
+      const roleDiff = roleWeight(left.role) - roleWeight(right.role);
+      if (roleDiff !== 0) {
+        return roleDiff;
+      }
+
+      const nameDiff = String(left.name || '').localeCompare(String(right.name || ''), 'ja');
+      if (nameDiff !== 0) {
+        return nameDiff;
+      }
+
+      return String(left.memberid || '').localeCompare(String(right.memberid || ''), 'ja');
+    }); %>
+
+    <% const roleLabel = (role) => {
+      if (role === 'leader') return 'マスター';
+      if (role === 'officer') return 'サブリーダー';
+      return '';
+    }; %>
+
+    <section class="clan-management-panel">
+      <div class="clan-management-header">
+        <div>
+          <p class="clan-management-eyebrow">クラン管理</p>
+          <h2 class="clan-management-clan-name"><%= clanName %></h2>
+          <p class="clan-management-description">メンバーの役職確認と削除を行います。</p>
+        </div>
+        <div class="clan-management-summary">
+          <span class="clan-management-summary-chip"><strong><%= memberCount %></strong> members</span>
+          <span class="clan-management-summary-chip is-leader"><strong><%= leaderCount %></strong> master</span>
+          <span class="clan-management-summary-chip is-officer"><strong><%= officerCount %></strong> sub</span>
+        </div>
+      </div>
+
+      <div class="clan-management-actions">
+        <form method="post" action="/clan-management/members/add" id="clan-management-add-form" class="clan-management-add-form">
+          <input type="hidden" name="name" id="clan-management-add-name" />
+          <button type="button" id="clan-management-add-button" class="btn btn-primary clan-management-add-button">メンバー追加</button>
+        </form>
+      </div>
+
+      <div class="clan-management-modal" id="clan-management-modal" aria-hidden="true">
+        <div class="clan-management-modal-backdrop" data-clan-management-modal-close></div>
+        <div class="clan-management-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="clan-management-modal-title">
+          <div class="clan-management-modal-header">
+            <h4 id="clan-management-modal-title">メンバー追加</h4>
+            <button type="button" class="clan-management-modal-close" data-clan-management-modal-close aria-label="閉じる">×</button>
+          </div>
+          <p class="clan-management-modal-description">追加するメンバー名を入力してください。</p>
+          <label class="clan-management-modal-label" for="clan-management-name-input">名前</label>
+          <input type="text" id="clan-management-name-input" class="clan-management-modal-input" autocomplete="off" maxlength="100" />
+          <div class="clan-management-modal-actions">
+            <button type="button" class="btn clan-management-modal-cancel" data-clan-management-modal-close>キャンセル</button>
+            <button type="button" id="clan-management-modal-submit" class="btn btn-primary">追加</button>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="clan-management-member-list-title">クランメンバー一覧</h3>
+
+      <div class="clan-management-table-wrapper">
+        <table class="clan-management-table">
+          <thead>
+            <tr>
+              <th>名前</th>
+              <th>区分</th>
+              <th>役職</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% members.forEach((member) => { %>
+              <% const roleBadgeClass = member.role === 'leader' ? 'is-leader' : member.role === 'officer' ? 'is-officer' : 'is-member'; %>
+              <tr>
+                <td class="clan-management-name-cell"><%= member.name || 'Unknown' %></td>
+                <td>
+                  <span class="clan-management-source-badge"><%= member.membersource || '' %></span>
+                </td>
+                <td>
+                  <span class="clan-management-role-badge <%= roleBadgeClass %>"><%= roleLabel(member.role) || 'メンバー' %></span>
+                </td>
+                <td>
+                  <form method="post" action="/clan-management/members/delete" class="clan-management-delete-form" onsubmit="return confirm('このメンバーを削除します。よろしいですか？');">
+                    <input type="hidden" name="clanid" value="<%= member.clanid %>" />
+                    <input type="hidden" name="membersource" value="<%= member.membersource %>" />
+                    <input type="hidden" name="memberid" value="<%= member.memberid %>" />
+                    <button type="submit" class="btn btn-danger clan-management-delete-button">削除</button>
+                  </form>
+                </td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  <% } %>
+</div>
+
+<style>
+  .clan-management-page {
+    padding-top: 0.5rem;
+  }
+
+  .clan-management-panel {
+    background: linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(241, 245, 249, 0.96));
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.08);
+    padding: 1.5rem;
+  }
+
+  .clan-management-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: flex-start;
+    margin-bottom: 1.25rem;
+    flex-wrap: wrap;
+  }
+
+  .clan-management-eyebrow {
+    margin: 0 0 0.35rem;
+    color: #64748b;
+    font-size: 0.82rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .clan-management-clan-name {
+    margin: 0;
+    font-size: clamp(1.4rem, 2vw, 2rem);
+    line-height: 1.2;
+    color: #0f172a;
+  }
+
+  .clan-management-description {
+    margin: 0.45rem 0 0;
+    color: #64748b;
+  }
+
+  .clan-management-summary {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .clan-management-summary-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.55rem 0.8rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.82);
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    color: #0f172a;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+  }
+
+  .clan-management-summary-chip strong {
+    font-size: 1.05rem;
+  }
+
+  .clan-management-summary-chip.is-leader {
+    background: rgba(245, 158, 11, 0.12);
+    color: #92400e;
+  }
+
+  .clan-management-summary-chip.is-officer {
+    background: rgba(59, 130, 246, 0.12);
+    color: #1d4ed8;
+  }
+
+  .clan-management-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin: 0 0 1rem;
+  }
+
+  .clan-management-add-form {
+    margin: 0;
+  }
+
+  .clan-management-add-button {
+    border-radius: 999px;
+    padding-inline: 1.1rem;
+    box-shadow: 0 10px 24px rgba(37, 99, 235, 0.16);
+  }
+
+  .clan-management-modal {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    z-index: 50;
+  }
+
+  .clan-management-modal.is-open {
+    display: flex;
+  }
+
+  .clan-management-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.56);
+    backdrop-filter: blur(6px);
+  }
+
+  .clan-management-modal-dialog {
+    position: relative;
+    width: min(100%, 28rem);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.98));
+    border: 1px solid rgba(15, 23, 42, 0.1);
+    border-radius: 18px;
+    box-shadow: 0 24px 80px rgba(15, 23, 42, 0.24);
+    padding: 1.25rem;
+    z-index: 1;
+  }
+
+  .clan-management-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .clan-management-modal-header h4 {
+    margin: 0;
+    font-size: 1.05rem;
+    color: #0f172a;
+  }
+
+  .clan-management-modal-close {
+    border: none;
+    background: transparent;
+    font-size: 1.5rem;
+    line-height: 1;
+    color: #64748b;
+    cursor: pointer;
+    padding: 0.25rem 0.4rem;
+  }
+
+  .clan-management-modal-description {
+    margin: 0.75rem 0 1rem;
+    color: #475569;
+  }
+
+  .clan-management-modal-label {
+    display: block;
+    margin-bottom: 0.35rem;
+    font-weight: 700;
+    color: #0f172a;
+  }
+
+  .clan-management-modal-input {
+    width: 100%;
+    border: 1px solid rgba(15, 23, 42, 0.16);
+    border-radius: 12px;
+    background: #fff;
+    padding: 0.8rem 0.9rem;
+    font-size: 1rem;
+    color: #0f172a;
+    outline: none;
+  }
+
+  .clan-management-modal-input:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
+  }
+
+  .clan-management-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 1rem;
+  }
+
+  .clan-management-modal-cancel {
+    border-radius: 999px;
+  }
+
+  .clan-management-member-list-title {
+    margin: 0 0 0.85rem;
+    color: #0f172a;
+    font-size: 1rem;
+  }
+
+  .clan-management-table-wrapper {
+    overflow-x: auto;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.7);
+  }
+
+  .clan-management-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .clan-management-table thead th {
+    background: linear-gradient(180deg, #111827, #1f2937);
+    color: #fff;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  .clan-management-table th,
+  .clan-management-table td {
+    border-right: 1px solid rgba(15, 23, 42, 0.08);
+    padding: 0.9rem 1rem;
+    vertical-align: middle;
+  }
+
+  .clan-management-table th:last-child,
+  .clan-management-table td:last-child {
+    border-right: none;
+  }
+
+  .clan-management-table tbody tr {
+    background: rgba(255, 255, 255, 0.86);
+    transition: background-color 0.15s ease, transform 0.15s ease;
+  }
+
+  .clan-management-table tbody tr:nth-child(even) {
+    background: rgba(248, 250, 252, 0.95);
+  }
+
+  .clan-management-table tbody tr:hover {
+    background: rgba(239, 246, 255, 1);
+  }
+
+  .clan-management-table tbody tr + tr td {
+    border-top: 1px solid rgba(15, 23, 42, 0.06);
+  }
+
+  .clan-management-name-cell {
+    font-weight: 700;
+    color: #0f172a;
+  }
+
+  .clan-management-role-badge,
+  .clan-management-source-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 0.35rem 0.7rem;
+    font-size: 0.9rem;
+    line-height: 1;
+  }
+
+  .clan-management-role-badge {
+    font-weight: 700;
+  }
+
+  .clan-management-role-badge.is-leader {
+    background: rgba(245, 158, 11, 0.14);
+    color: #92400e;
+  }
+
+  .clan-management-role-badge.is-officer {
+    background: rgba(59, 130, 246, 0.14);
+    color: #1d4ed8;
+  }
+
+  .clan-management-role-badge.is-member {
+    background: rgba(148, 163, 184, 0.18);
+    color: #475569;
+  }
+
+  .clan-management-source-badge {
+    background: rgba(15, 23, 42, 0.05);
+    color: #475569;
+    text-transform: lowercase;
+  }
+
+  .clan-management-delete-form {
+    margin: 0;
+    display: inline-flex;
+  }
+
+  .clan-management-delete-button {
+    min-width: 5rem;
+    border-radius: 999px;
+    box-shadow: 0 10px 24px rgba(220, 38, 38, 0.18);
+  }
+
+  @media (max-width: 720px) {
+    .clan-management-panel {
+      padding: 1rem;
+      border-radius: 16px;
+    }
+
+    .clan-management-summary {
+      justify-content: flex-start;
+    }
+
+    .clan-management-actions {
+      justify-content: flex-start;
+    }
+
+    .clan-management-table th,
+    .clan-management-table td {
+      padding: 0.75rem 0.8rem;
+    }
+
+    .clan-management-modal-dialog {
+      padding: 1rem;
+    }
+  }
+</style>
+
+<script>
+  (function () {
+    const addButton = document.getElementById('clan-management-add-button');
+    const addForm = document.getElementById('clan-management-add-form');
+    const addNameInput = document.getElementById('clan-management-add-name');
+    const modal = document.getElementById('clan-management-modal');
+    const modalInput = document.getElementById('clan-management-name-input');
+    const modalSubmit = document.getElementById('clan-management-modal-submit');
+    const modalCloseButtons = Array.from(document.querySelectorAll('[data-clan-management-modal-close]'));
+
+    if (!addButton || !addForm || !addNameInput || !modal || !modalInput || !modalSubmit) {
+      return;
+    }
+
+    const openModal = () => {
+      modal.classList.add('is-open');
+      modal.setAttribute('aria-hidden', 'false');
+      modalInput.value = '';
+      window.setTimeout(() => {
+        modalInput.focus();
+      }, 0);
+    };
+
+    const closeModal = () => {
+      modal.classList.remove('is-open');
+      modal.setAttribute('aria-hidden', 'true');
+    };
+
+    addButton.addEventListener('click', () => {
+      openModal();
+    });
+
+    modalCloseButtons.forEach((button) => {
+      button.addEventListener('click', closeModal);
+    });
+
+    modal.addEventListener('click', (event) => {
+      if (event.target === modal) {
+        closeModal();
+      }
+    });
+
+    modalInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        closeModal();
+      }
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        modalSubmit.click();
+      }
+    });
+
+    modalSubmit.addEventListener('click', () => {
+      const trimmedName = modalInput.value.trim();
+      if (!trimmedName) {
+        window.alert('名前を入力してください');
+        modalInput.focus();
+        return;
+      }
+
+      addNameInput.value = trimmedName;
+      closeModal();
+      addForm.submit();
+    });
+  })();
+</script>

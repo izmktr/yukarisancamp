@@ -7,7 +7,21 @@ function getSessionUser(req) {
     const userSession = req.session?.user;
     return {
         googleUserId: typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '',
-        displayName: typeof userSession?.displayName === 'string' ? userSession.displayName : ''
+        displayName: typeof userSession?.displayName === 'string' ? userSession.displayName : '',
+        discordServer: typeof userSession?.discordServer === 'string' ? userSession.discordServer.trim() : ''
+    };
+}
+function applyAuthorDiscordServer(article, sessionDiscordServer) {
+    const currentSetting = article.setting && typeof article.setting === 'object' && !Array.isArray(article.setting)
+        ? article.setting
+        : {};
+    return {
+        ...article,
+        authorclanid: sessionDiscordServer,
+        setting: {
+            ...currentSetting,
+            discord_server: sessionDiscordServer
+        }
     };
 }
 // 記事一覧取得
@@ -50,7 +64,7 @@ router.post('/post', async (req, res) => {
         const savedRow = await (0, boardSupabase_1.upsertBoardPost)({
             legacyId,
             yearmonth,
-            article: {
+            article: applyAuthorDiscordServer({
                 uniqueId: legacyId,
                 yearmonth,
                 bossname: parsed.bossname,
@@ -67,7 +81,7 @@ router.post('/post', async (req, res) => {
                 postComment: '',
                 party: parsed.party,
                 ubTimes: parsed.ubTimes
-            },
+            }, sessionUser.discordServer),
             battleTimeSeconds: (0, boardSupabase_1.normalizeBattleTimeSeconds)(parsed.battleTime),
             battleDateIso: (0, boardSupabase_1.normalizeBattleDateIso)(parsed.battleDate),
             authorId: sessionUser.googleUserId,
@@ -96,14 +110,14 @@ router.post('/:id/edit', async (req, res) => {
         const savedRow = await (0, boardSupabase_1.upsertBoardPost)({
             legacyId,
             yearmonth,
-            article: {
+            article: applyAuthorDiscordServer({
                 ...article,
                 uniqueId: legacyId,
                 yearmonth,
                 authorid: typeof article.authorid === 'string' ? article.authorid : sessionUser.googleUserId,
                 authorname: typeof article.authorname === 'string' ? article.authorname : sessionUser.displayName,
                 authorName: typeof article.authorName === 'string' ? article.authorName : sessionUser.displayName
-            },
+            }, sessionUser.discordServer),
             battleTimeSeconds: (0, boardSupabase_1.normalizeBattleTimeSeconds)(article.battleTime),
             battleDateIso: (0, boardSupabase_1.normalizeBattleDateIso)(article.battleDate),
             authorId: typeof article.authorid === 'string' && article.authorid.trim().length > 0 ? article.authorid : sessionUser.googleUserId,

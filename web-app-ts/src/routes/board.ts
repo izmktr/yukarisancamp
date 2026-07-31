@@ -720,11 +720,13 @@ function parseTimelog(text: string): ParsedArticle {
 function getAuthViewData(req: any) {
   const userSession = req.session.user as any;
   const discordServer = typeof userSession?.discordServer === 'string' ? userSession.discordServer.trim() : '';
+  const hasDiscordServer = discordServer.length > 0;
   return {
     isLoggedIn: !!userSession,
     userName: userSession?.displayName || '',
     isAdmin: userSession?.role === 'admin',
-    canSelectClanVisibility: discordServer.length > 0
+    hasDiscordServer,
+    canSelectClanVisibility: hasDiscordServer
   };
 }
 

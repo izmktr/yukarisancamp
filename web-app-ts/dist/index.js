@@ -105,11 +105,67 @@ function parseClanDataJson(raw) {
 }
 function getAuthViewData(req) {
     const userSession = req.session.user;
+    const discordServer = typeof userSession?.discordServer === 'string' ? userSession.discordServer.trim() : '';
     return {
         isLoggedIn: !!userSession,
         userName: userSession?.displayName || '',
-        isAdmin: userSession?.role === 'admin'
+        isAdmin: userSession?.role === 'admin',
+        hasDiscordServer: discordServer.length > 0
     };
+}
+function isNonEmptyTrimmedString(value) {
+    return typeof value === 'string' && value.trim().length > 0;
+}
+function getClanMemberRoleLabel(role) {
+    if (role === 'leader') {
+        return 'マスター';
+    }
+    if (role === 'officer') {
+        return 'サブリーダー';
+    }
+    return '';
+}
+function getClanMemberRoleSortWeight(role) {
+    if (role === 'leader') {
+        return 0;
+    }
+    if (role === 'officer') {
+        return 1;
+    }
+    return 2;
+}
+function sortClanMembersForManagement(members) {
+    return [...members].sort((left, right) => {
+        const roleDiff = getClanMemberRoleSortWeight(left.role) - getClanMemberRoleSortWeight(right.role);
+        if (roleDiff !== 0) {
+            return roleDiff;
+        }
+        const nameDiff = left.name.localeCompare(right.name, 'ja');
+        if (nameDiff !== 0) {
+            return nameDiff;
+        }
+        return left.memberid.localeCompare(right.memberid, 'ja');
+    });
+}
+async function canShowClanManagementTab(config, googleUserId) {
+    const profile = await supabaseSelectUserProfileByGoogleUserId(config, googleUserId);
+    if (!profile || !isNonEmptyTrimmedString(profile.discordServer) || !isNonEmptyTrimmedString(profile.discordId)) {
+        return false;
+    }
+    const clanMembers = await supabaseSelectClanMembersByDiscordServer(config, profile.discordServer);
+    return clanMembers.some((member) => member.role !== 'member');
+}
+function getSessionDiscordServer(req) {
+    const userSession = req.session.user;
+    return typeof userSession?.discordServer === 'string' ? userSession.discordServer.trim() : '';
+}
+function ensureDiscordServerLinked(req, res, next) {
+    const discordServer = getSessionDiscordServer(req);
+    if (!discordServer) {
+        res.redirect('/settings');
+        return;
+    }
+    next();
 }
 async function ensureAdmin(req, res, next) {
     const { isAdmin } = getAuthViewData(req);
@@ -157,6 +213,10 @@ const firebaseConfig = {
     measurementId: getFirebaseConfigValue('FIREBASE_MEASUREMENT_ID', 'G-PL9YLWJY76')
 };
 app.locals.firebaseConfig = firebaseConfig;
+app.locals.supabasePublicConfig = {
+    url: process.env.SUPABASE_URL || '',
+    publishableKey: process.env.SUPABASE_PUBLISHABLE_KEY || ''
+};
 // セッションミドルウェア追加
 app.use((0, express_session_1.default)({
     secret: 'yukarisan-secret',
@@ -173,6 +233,28 @@ app.use(express_1.default.static(path_1.default.join(__dirname, '../public')));
 app.use('/chara-images', express_1.default.static(path_1.default.join(__dirname, '../chara')));
 app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
+app.use(async (req, _res, next) => {
+    const res = _res;
+    res.locals.clanManagementTabVisible = false;
+    if (req.method !== 'GET' || req.path.startsWith('/api') || req.path.includes('.')) {
+        next();
+        return;
+    }
+    const config = getSupabaseConfig();
+    const userSession = req.session.user;
+    const googleUserId = typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '';
+    if (!config || !googleUserId) {
+        next();
+        return;
+    }
+    try {
+        res.locals.clanManagementTabVisible = await canShowClanManagementTab(config, googleUserId);
+    }
+    catch (error) {
+        console.error('Failed to determine clan management tab visibility:', error);
+    }
+    next();
+});
 // APIルーティング
 app.use('/api/board', board_1.default);
 console.log('Web app starting...');
@@ -210,9 +292,169 @@ app.get('/clanbattle-settings', (req, res) => {
         ...getAuthViewData(req)
     });
 });
+app.get('/clan', ensureDiscordServerLinked, async (req, res) => {
+    const config = getSupabaseConfig();
+    const discordServer = getSessionDiscordServer(req);
+    const fallbackPayload = {
+        discordServer,
+        clan: null,
+        members: [],
+        refreshToken: 'none:0',
+        loadError: ''
+    };
+    if (!config) {
+        res.render('clan', {
+            title: 'ゆかりさん△',
+            currentPage: 'clan',
+            ...getAuthViewData(req),
+            clanPageData: {
+                ...fallbackPayload,
+                loadError: 'Supabase is not configured'
+            }
+        });
+        return;
+    }
+    try {
+        const clanPageData = await loadClanPagePayload(config, discordServer);
+        res.render('clan', {
+            title: 'ゆかりさん△',
+            currentPage: 'clan',
+            ...getAuthViewData(req),
+            clanPageData
+        });
+    }
+    catch (error) {
+        console.error('Failed to load clan page data:', error);
+        res.render('clan', {
+            title: 'ゆかりさん△',
+            currentPage: 'clan',
+            ...getAuthViewData(req),
+            clanPageData: {
+                ...fallbackPayload,
+                loadError: 'Supabaseからクラン情報を取得できませんでした。'
+            }
+        });
+    }
+});
+app.get('/clan-management', ensureDiscordServerLinked, async (req, res) => {
+    const config = getSupabaseConfig();
+    const userSession = req.session.user;
+    const googleUserId = typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '';
+    if (!config || !googleUserId || !res.locals.clanManagementTabVisible) {
+        res.redirect('/clan');
+        return;
+    }
+    try {
+        const profile = await supabaseSelectUserProfileByGoogleUserId(config, googleUserId);
+        const discordServer = profile && isNonEmptyTrimmedString(profile.discordServer) ? profile.discordServer : getSessionDiscordServer(req);
+        const clanPageData = discordServer ? await loadClanPagePayload(config, discordServer) : null;
+        if (!clanPageData || !clanPageData.clan) {
+            res.redirect('/clan');
+            return;
+        }
+        res.render('clan-management', {
+            title: 'ゆかりさん△',
+            currentPage: 'clan-management',
+            ...getAuthViewData(req),
+            clanManagementData: {
+                ...clanPageData,
+                members: sortClanMembersForManagement(clanPageData.members)
+            }
+        });
+    }
+    catch (error) {
+        console.error('Failed to load clan management page data:', error);
+        res.redirect('/clan');
+    }
+});
+app.post('/clan-management/members/delete', ensureDiscordServerLinked, async (req, res) => {
+    const config = getSupabaseConfig();
+    if (!config) {
+        res.status(503).send('Supabase is not configured');
+        return;
+    }
+    const userSession = req.session.user;
+    const googleUserId = typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '';
+    if (!googleUserId || !await canShowClanManagementTab(config, googleUserId)) {
+        res.status(403).send('クラン管理権限がありません');
+        return;
+    }
+    const profile = await supabaseSelectUserProfileByGoogleUserId(config, googleUserId);
+    const discordServer = profile && isNonEmptyTrimmedString(profile.discordServer) ? profile.discordServer : getSessionDiscordServer(req);
+    const clanId = normalizeDiscordServerToClanId(discordServer);
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const membersource = body.membersource === 'discord' || body.membersource === 'web' ? body.membersource : '';
+    const memberid = typeof body.memberid === 'string' ? body.memberid.trim() : '';
+    const bodyClanId = typeof body.clanid === 'string' ? body.clanid.trim() : '';
+    if (!clanId || bodyClanId !== clanId || !membersource || !/^[0-9]+$/.test(memberid)) {
+        res.status(400).send('不正な削除リクエストです');
+        return;
+    }
+    try {
+        await supabaseDeleteClanMember(config, clanId, membersource, memberid);
+        res.redirect('/clan-management');
+    }
+    catch (error) {
+        console.error('Failed to delete clan member:', error);
+        res.status(502).send('メンバーの削除に失敗しました');
+    }
+});
+app.post('/clan-management/members/add', ensureDiscordServerLinked, async (req, res) => {
+    const config = getSupabaseConfig();
+    if (!config) {
+        res.status(503).send('Supabase is not configured');
+        return;
+    }
+    const userSession = req.session.user;
+    const googleUserId = typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '';
+    if (!googleUserId || !await canShowClanManagementTab(config, googleUserId)) {
+        res.status(403).send('クラン管理権限がありません');
+        return;
+    }
+    const profile = await supabaseSelectUserProfileByGoogleUserId(config, googleUserId);
+    const discordServer = profile && isNonEmptyTrimmedString(profile.discordServer) ? profile.discordServer : getSessionDiscordServer(req);
+    const clanId = normalizeDiscordServerToClanId(discordServer);
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (!clanId || !name) {
+        res.status(400).send('名前を入力してください');
+        return;
+    }
+    try {
+        const nextMemberId = await supabaseSelectNextWebClanMemberId(config, clanId);
+        const now = new Date().toISOString();
+        await supabaseInsertClanMember(config, {
+            source: 'web',
+            clanid: clanId,
+            membersource: 'web',
+            memberid: nextMemberId,
+            name,
+            mention: name,
+            role: 'member',
+            taskkill: 0,
+            plan: [],
+            attacktime: [],
+            sortie: 0,
+            attackboss: 0,
+            overattack: null,
+            damage: null,
+            attackmessage: null,
+            lastactive: now,
+            created_at: now,
+            updated_at: now
+        });
+        res.redirect('/clan-management');
+    }
+    catch (error) {
+        console.error('Failed to add clan member:', error);
+        res.status(502).send('メンバーの追加に失敗しました');
+    }
+});
 const SUPABASE_CLAN_BATTLE_TABLE = 'setting_clanbattle';
 const SUPABASE_USER_PROFILE_TABLE = 'setting_userprofile';
 const SUPABASE_USER_OWNED_CHARACTER_TABLE = 'setting_user_owned_character';
+const SUPABASE_CLANS_TABLE = 'clans';
+const SUPABASE_CLAN_MEMBERS_TABLE = 'clan_members';
 const SUPABASE_CLAN_BATTLE_SINGLETON_ID = 0;
 function getSupabaseConfig() {
     const url = process.env.SUPABASE_URL;
@@ -227,6 +469,348 @@ function getSupabaseConfig() {
 }
 function getSupabaseTableEndpoint(config, table) {
     return `${config.url.replace(/\/$/, '')}/rest/v1/${encodeURIComponent(table)}`;
+}
+function normalizeDiscordServerToClanId(value) {
+    const trimmed = value.trim();
+    return /^\d+$/.test(trimmed) ? trimmed : '';
+}
+function toIsoStringOrEmpty(value) {
+    return typeof value === 'string' ? value : '';
+}
+function normalizeClanInfoRow(raw) {
+    if (!raw || typeof raw !== 'object') {
+        return null;
+    }
+    const source = raw;
+    const clanIdText = typeof source.clanid === 'string'
+        ? source.clanid.trim()
+        : typeof source.clanid === 'number' && Number.isFinite(source.clanid)
+            ? String(Math.trunc(source.clanid))
+            : '';
+    if (!/^\d+$/.test(clanIdText)) {
+        return null;
+    }
+    const bosslaps = Array.isArray(source.bosslaps)
+        ? source.bosslaps.map((item) => Number(item)).filter((item) => Number.isFinite(item)).map((item) => Math.trunc(item))
+        : [];
+    if (bosslaps.length !== 5) {
+        return null;
+    }
+    return {
+        source: typeof source.source === 'string' ? source.source : '',
+        clanid: clanIdText,
+        name: typeof source.name === 'string' ? source.name : '',
+        bosslaps,
+        createdAt: toIsoStringOrEmpty(source.createdAt),
+        updated_at: toIsoStringOrEmpty(source.updated_at)
+    };
+}
+function normalizeClanMemberRow(raw) {
+    if (!raw || typeof raw !== 'object') {
+        return null;
+    }
+    const source = raw;
+    const clanIdText = typeof source.clanid === 'string'
+        ? source.clanid.trim()
+        : typeof source.clanid === 'number' && Number.isFinite(source.clanid)
+            ? String(Math.trunc(source.clanid))
+            : '';
+    const memberIdText = typeof source.memberid === 'string'
+        ? source.memberid.trim()
+        : typeof source.memberid === 'number' && Number.isFinite(source.memberid)
+            ? String(Math.trunc(source.memberid))
+            : '';
+    if (!/^\d+$/.test(clanIdText) || !/^\d+$/.test(memberIdText)) {
+        return null;
+    }
+    const plan = Array.isArray(source.plan)
+        ? source.plan.map((item) => Number(item)).filter((item) => Number.isFinite(item)).map((item) => Math.trunc(item))
+        : [];
+    const attacktime = Array.isArray(source.attacktime)
+        ? source.attacktime.map((item) => {
+            if (item === null || item === undefined || item === '') {
+                return null;
+            }
+            const numeric = Number(item);
+            return Number.isFinite(numeric) ? Math.trunc(numeric) : null;
+        })
+        : [];
+    const overattack = source.overattack === null || source.overattack === undefined
+        ? null
+        : Number.isFinite(Number(source.overattack))
+            ? Math.trunc(Number(source.overattack))
+            : null;
+    const damage = source.damage === null || source.damage === undefined
+        ? null
+        : Number.isFinite(Number(source.damage))
+            ? Math.trunc(Number(source.damage))
+            : null;
+    return {
+        source: typeof source.source === 'string' ? source.source : '',
+        clanid: clanIdText,
+        membersource: typeof source.membersource === 'string' ? source.membersource : '',
+        memberid: memberIdText,
+        name: typeof source.name === 'string' ? source.name : '',
+        mention: typeof source.mention === 'string' ? source.mention : '',
+        role: source.role === 'officer' || source.role === 'leader' ? source.role : 'member',
+        taskkill: Number.isFinite(Number(source.taskkill)) ? Math.trunc(Number(source.taskkill)) : 0,
+        plan,
+        attacktime,
+        sortie: Number.isFinite(Number(source.sortie)) ? Math.trunc(Number(source.sortie)) : 0,
+        attackboss: Number.isFinite(Number(source.attackboss)) ? Math.trunc(Number(source.attackboss)) : 0,
+        overattack,
+        damage,
+        attackmessage: typeof source.attackmessage === 'string' ? source.attackmessage : null,
+        lastactive: toIsoStringOrEmpty(source.lastactive),
+        created_at: toIsoStringOrEmpty(source.created_at),
+        updated_at: toIsoStringOrEmpty(source.updated_at)
+    };
+}
+async function supabaseSelectClanByDiscordServer(config, discordServer) {
+    const clanId = normalizeDiscordServerToClanId(discordServer);
+    if (!clanId) {
+        return null;
+    }
+    const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLANS_TABLE);
+    const query = new URLSearchParams({
+        select: '*',
+        clanid: `eq.${clanId}`,
+        order: 'updated_at.desc',
+        limit: '1'
+    });
+    const response = await fetch(`${endpointUrl}?${query.toString()}`, {
+        method: 'GET',
+        headers: {
+            apikey: config.secretKey,
+            Authorization: `Bearer ${config.secretKey}`
+        }
+    });
+    if (!response.ok) {
+        const responseText = await response.text();
+        throw new Error(`Supabase select clan failed: ${response.status} ${responseText}`);
+    }
+    const rows = await response.json();
+    if (!Array.isArray(rows) || rows.length === 0) {
+        return null;
+    }
+    return normalizeClanInfoRow(rows[0]);
+}
+async function supabaseSelectClanMembersByDiscordServer(config, discordServer) {
+    const clanId = normalizeDiscordServerToClanId(discordServer);
+    if (!clanId) {
+        return [];
+    }
+    const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLAN_MEMBERS_TABLE);
+    const query = new URLSearchParams({
+        select: '*',
+        source: 'eq.discord',
+        clanid: `eq.${clanId}`,
+        order: 'updated_at.desc'
+    });
+    const response = await fetch(`${endpointUrl}?${query.toString()}`, {
+        method: 'GET',
+        headers: {
+            apikey: config.secretKey,
+            Authorization: `Bearer ${config.secretKey}`
+        }
+    });
+    if (!response.ok) {
+        const responseText = await response.text();
+        throw new Error(`Supabase select clan members failed: ${response.status} ${responseText}`);
+    }
+    const rows = await response.json();
+    if (!Array.isArray(rows)) {
+        return [];
+    }
+    return rows
+        .map((row) => normalizeClanMemberRow(row))
+        .filter((row) => !!row);
+}
+async function supabaseDeleteClanMember(config, clanId, membersource, memberid) {
+    const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLAN_MEMBERS_TABLE);
+    const query = new URLSearchParams({
+        source: 'eq.discord',
+        clanid: `eq.${clanId}`,
+        membersource: `eq.${membersource}`,
+        memberid: `eq.${memberid}`
+    });
+    const response = await fetch(`${endpointUrl}?${query.toString()}`, {
+        method: 'DELETE',
+        headers: {
+            apikey: config.secretKey,
+            Authorization: `Bearer ${config.secretKey}`,
+            Prefer: 'return=minimal'
+        }
+    });
+    if (!response.ok) {
+        const responseText = await response.text();
+        throw new Error(`Supabase delete clan member failed: ${response.status} ${responseText}`);
+    }
+}
+async function supabaseSelectNextWebClanMemberId(config, clanId) {
+    const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLAN_MEMBERS_TABLE);
+    const query = new URLSearchParams({
+        select: 'memberid',
+        source: 'eq.discord',
+        clanid: `eq.${clanId}`,
+        membersource: 'eq.web'
+    });
+    const response = await fetch(`${endpointUrl}?${query.toString()}`, {
+        method: 'GET',
+        headers: {
+            apikey: config.secretKey,
+            Authorization: `Bearer ${config.secretKey}`
+        }
+    });
+    if (!response.ok) {
+        const responseText = await response.text();
+        throw new Error(`Supabase select next clan member id failed: ${response.status} ${responseText}`);
+    }
+    const rows = await response.json();
+    const memberIds = Array.isArray(rows)
+        ? rows
+            .map((row) => {
+            if (!row || typeof row !== 'object') {
+                return null;
+            }
+            const value = row.memberid;
+            const numeric = Number(value);
+            return Number.isFinite(numeric) ? Math.trunc(numeric) : null;
+        })
+            .filter((value) => value !== null)
+        : [];
+    const nextMemberId = memberIds.length > 0 ? Math.max(...memberIds) + 1 : 1;
+    return String(nextMemberId);
+}
+async function supabaseInsertClanMember(config, member) {
+    const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLAN_MEMBERS_TABLE);
+    const response = await fetch(endpointUrl, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            apikey: config.secretKey,
+            Authorization: `Bearer ${config.secretKey}`,
+            Prefer: 'return=minimal'
+        },
+        body: JSON.stringify([member])
+    });
+    if (!response.ok) {
+        const responseText = await response.text();
+        throw new Error(`Supabase insert clan member failed: ${response.status} ${responseText}`);
+    }
+}
+function toRefreshToken(clan, members) {
+    const stamps = [];
+    if (clan?.updated_at) {
+        stamps.push(clan.updated_at);
+    }
+    for (const member of members) {
+        if (member.updated_at) {
+            stamps.push(member.updated_at);
+        }
+    }
+    const latest = stamps.sort().slice(-1)[0] || 'none';
+    return `${latest}:${members.length}`;
+}
+async function loadClanPagePayload(config, discordServer) {
+    const clan = await supabaseSelectClanByDiscordServer(config, discordServer);
+    const members = await supabaseSelectClanMembersByDiscordServer(config, discordServer);
+    return {
+        discordServer,
+        clan,
+        members,
+        refreshToken: toRefreshToken(clan, members),
+        loadError: ''
+    };
+}
+function normalizeClanBosslapsPayload(rawValue) {
+    if (!rawValue || typeof rawValue !== 'object') {
+        return null;
+    }
+    const source = rawValue;
+    if (!Array.isArray(source.bosslaps) || source.bosslaps.length !== 5) {
+        return null;
+    }
+    const normalized = [];
+    for (const value of source.bosslaps) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) {
+            return null;
+        }
+        const truncated = Math.trunc(numeric);
+        if (truncated < 1) {
+            return null;
+        }
+        normalized.push(truncated);
+    }
+    const minValue = Math.min(...normalized);
+    const maxValue = Math.max(...normalized);
+    if ((maxValue - minValue) >= 3) {
+        return null;
+    }
+    return normalized;
+}
+function normalizeClanBosslapsSavePayload(rawValue) {
+    if (!rawValue || typeof rawValue !== 'object') {
+        return null;
+    }
+    const source = rawValue;
+    const normalizedBosslaps = normalizeClanBosslapsPayload(rawValue);
+    if (!normalizedBosslaps) {
+        return null;
+    }
+    const rawSource = typeof source.source === 'string' ? source.source.trim() : '';
+    if (rawSource !== 'discord' && rawSource !== 'web') {
+        return null;
+    }
+    const clanId = typeof source.clanid === 'string'
+        ? source.clanid.trim()
+        : typeof source.clanid === 'number' && Number.isFinite(source.clanid)
+            ? String(Math.trunc(source.clanid))
+            : '';
+    if (!/^\d+$/.test(clanId)) {
+        return null;
+    }
+    return {
+        source: rawSource,
+        clanid: clanId,
+        bosslaps: normalizedBosslaps
+    };
+}
+async function supabaseUpdateClanBosslaps(config, source, clanId, bosslaps) {
+    const normalizedSource = typeof source === 'string' ? source.trim() : '';
+    if (!normalizedSource) {
+        throw new Error('Invalid clan source');
+    }
+    if (!/^\d+$/.test(clanId)) {
+        throw new Error('Invalid clan id');
+    }
+    const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLANS_TABLE);
+    const query = new URLSearchParams({
+        source: `eq.${normalizedSource}`,
+        clanid: `eq.${clanId}`
+    });
+    const response = await fetch(`${endpointUrl}?${query.toString()}`, {
+        method: 'PATCH',
+        headers: {
+            'Content-Type': 'application/json',
+            apikey: config.secretKey,
+            Authorization: `Bearer ${config.secretKey}`,
+            Prefer: 'return=representation'
+        },
+        body: JSON.stringify({
+            bosslaps,
+            updated_at: new Date().toISOString()
+        })
+    });
+    if (!response.ok) {
+        const responseText = await response.text();
+        throw new Error(`Supabase update clan bosslaps failed: ${response.status} ${responseText}`);
+    }
+    const rows = await response.json();
+    if (!Array.isArray(rows) || rows.length === 0) {
+        throw new Error('Supabase update clan bosslaps matched 0 rows');
+    }
 }
 function normalizeUserOwnedCharacters(rawValue) {
     if (rawValue === undefined || rawValue === null) {
@@ -630,6 +1214,44 @@ app.post('/api/clanbattle-settings/save', ensureAdmin, express_1.default.json(),
     catch (error) {
         console.error('Failed to save clanbattle settings to Supabase:', error);
         return res.status(502).json({ error: 'Failed to connect to Supabase' });
+    }
+});
+app.get('/api/clan/refresh-token', ensureDiscordServerLinked, async (req, res) => {
+    const config = getSupabaseConfig();
+    if (!config) {
+        return res.status(503).json({ error: 'Supabase is not configured' });
+    }
+    try {
+        const discordServer = getSessionDiscordServer(req);
+        const payload = await loadClanPagePayload(config, discordServer);
+        return res.json({ refreshToken: payload.refreshToken });
+    }
+    catch (error) {
+        console.error('Failed to load clan refresh token:', error);
+        return res.status(502).json({ error: 'Failed to load clan refresh token' });
+    }
+});
+app.post('/api/clan/bosslaps/save', ensureDiscordServerLinked, express_1.default.json(), async (req, res) => {
+    const payload = normalizeClanBosslapsSavePayload(req.body);
+    if (!payload) {
+        return res.status(400).json({ error: 'Invalid payload' });
+    }
+    const sessionClanId = normalizeDiscordServerToClanId(getSessionDiscordServer(req));
+    if (!sessionClanId) {
+        return res.status(403).json({ error: 'Invalid session clan id' });
+    }
+    const config = getSupabaseConfig();
+    if (!config) {
+        return res.status(503).json({ error: 'Supabase is not configured' });
+    }
+    try {
+        await supabaseUpdateClanBosslaps(config, payload.source, sessionClanId, payload.bosslaps);
+        return res.json({ success: true });
+    }
+    catch (error) {
+        console.error('Failed to save clan bosslaps:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Failed to save clan bosslaps';
+        return res.status(502).json({ error: errorMessage });
     }
 });
 const charaIndexPath = path_1.default.join(__dirname, '../chara/charaindex.json');
@@ -1142,13 +1764,15 @@ app.post('/api/user/session', express_1.default.json(), async (req, res) => {
         }
         const googleUserId = decodedToken.uid;
         const { displayName } = req.body;
+        const discordServer = typeof req.body?.discordServer === 'string' ? req.body.discordServer.trim() : '';
         // role は Firestore から取得（トークンの uid で検索）
         const role = await getUserRoleFromFirestore(googleUserId);
         // セッションにユーザー情報を保存
         req.session.user = {
             googleUserId,
             displayName: displayName || 'ユーザー',
-            role
+            role,
+            discordServer
         };
         res.json({ success: true, message: 'User session saved', role });
     }

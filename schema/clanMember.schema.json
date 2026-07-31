@@ -22,6 +22,11 @@
       "description": "The unique ID of the user.",
       "type": "string"
     },
+    "role": {
+      "description": "The role of the user in the clan.",
+      "type": "string",
+      "enum": ["member", "officer", "leader"]
+    },
     "name": {
       "description": "The user's name.",
       "type": "string"

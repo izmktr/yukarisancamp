@@ -38,6 +38,9 @@
                 <a href="/settings" class="tab <%= currentPage === 'settings' ? 'active' : '' %>">設定</a>
                 <% if (hasDiscordServer) { %>
                     <a href="/clan" class="tab <%= currentPage === 'clan' ? 'active' : '' %>">クラン</a>
+                    <% if (clanManagementTabVisible) { %>
+                        <a href="/clan-management" class="tab <%= currentPage === 'clan-management' ? 'active' : '' %>">クラン管理</a>
+                    <% } %>
                 <% } %>
             <% } %>
             <% if (isAdmin) { %>

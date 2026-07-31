@@ -17,6 +17,20 @@ begin
 end
 $$;
 
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_type t
+    join pg_namespace n on n.oid = t.typnamespace
+    where t.typname = 'clan_member_role'
+      and n.nspname = 'public'
+  ) then
+    create type public.clan_member_role as enum ('member', 'officer', 'leader');
+  end if;
+end
+$$;
+
 create table if not exists public.board_posts (
   id uuid primary key default gen_random_uuid(),
   legacy_id text unique,
@@ -103,6 +117,7 @@ create table if not exists public.clan_members (
   memberid text not null,
   name text not null,
   mention text not null,
+  role public.clan_member_role not null default 'member',
   taskkill integer not null default 0,
   plan integer[] not null default '{}'::integer[],
   attacktime integer[] not null default '{}'::integer[],
