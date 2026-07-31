@@ -355,6 +355,111 @@ body {
     color: #b42318;
 }
 
+.clan-summary-card h3 {
+    margin: 0 0 0.75rem 0;
+    color: #3d4666;
+    font-size: 1.05rem;
+}
+
+.clan-bosscount-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.clan-bosscount-header h3 {
+    margin: 0;
+}
+
+.clan-bosscount-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.clan-empty {
+    margin: 0;
+    color: #5f6a8a;
+}
+
+.bosscount-display {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+}
+
+.bosscount-item {
+    background-color: #d7ebff;
+    padding: 10px;
+    border-radius: 4px;
+    text-align: center;
+    border-left: 4px solid #0b5ed7;
+    box-shadow: 0 2px 8px rgba(11, 94, 215, 0.2);
+}
+
+.bosscount-item.bosscount-near-min {
+    background-color: #ffe6e6;
+    border-left-color: #d9534f;
+}
+
+.bosscount-item.bosscount-far-min {
+    background-color: #ececec;
+    border-left-color: #8a8a8a;
+}
+
+.bosscount-item p {
+    margin: 0;
+    font-size: 14px;
+}
+
+.clan-bosslap-input {
+    width: 72px;
+    margin: 0.35rem auto 0;
+    border: 1px solid #c8d0e1;
+    border-radius: 6px;
+    padding: 0.2rem 0.35rem;
+    font-size: 14px;
+    text-align: center;
+}
+
+.clan-bosslap-input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
+}
+
+.clan-lap-table-wrap {
+    overflow-x: auto;
+}
+
+.clan-lap-table {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid #e3e8f4;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.clan-lap-table th,
+.clan-lap-table td {
+    padding: 0.6rem 0.7rem;
+    border-bottom: 1px solid #edf1f8;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.clan-lap-table th {
+    background: #f7f9ff;
+    color: #3a4568;
+    font-size: 0.9rem;
+}
+
+.clan-lap-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
 .board-page-title-row {
     display: flex;
     align-items: baseline;
@@ -721,6 +826,20 @@ body {
 }
 
 @media (max-width: 768px) {
+    .bosscount-display {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    .bosscount-item {
+        padding: 8px;
+    }
+
+    .bosscount-item p {
+        font-size: 13px;
+        line-height: 1.3;
+    }
+
     .board-page-title-row {
         align-items: center;
     }

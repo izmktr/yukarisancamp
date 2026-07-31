@@ -1,0 +1,251 @@
+<div class="page-content clan-page">
+    <% const data = clanPageData || { discordServer: '', clan: null, members: [], refreshToken: 'none:0', loadError: '' }; %>
+    <h2><%= data.clan && data.clan.name ? data.clan.name : '未登録' %></h2>
+
+    <input type="hidden" id="clan-refresh-token" value="<%= data.refreshToken %>" />
+    <input type="hidden" id="clan-source" value="<%= data.clan && data.clan.source ? data.clan.source : '' %>" />
+    <input type="hidden" id="clan-id" value="<%= data.clan && Number.isFinite(Number(data.clan.clanid)) ? Number(data.clan.clanid) : '' %>" />
+
+    <% if (data.loadError) { %>
+        <div class="settings-firebase-error"><%= data.loadError %></div>
+    <% } else { %>
+        <div class="settings-card clan-summary-card">
+            <% const laps = data.clan && Array.isArray(data.clan.bosslaps) ? data.clan.bosslaps : []; %>
+            <% if (laps.length !== 5) { %>
+                <p class="clan-empty">bosslaps が未設定です。</p>
+            <% } else { %>
+                <%
+                    const numericBossCounts = laps.map((value) => Number(value));
+                    const minBossCount = numericBossCounts.length > 0 ? Math.min(...numericBossCounts) : 0;
+                %>
+                <section class="clandata-section">
+                    <div class="clan-bosscount-header">
+                        <h3>ボスカウント</h3>
+                        <div class="clan-bosscount-actions">
+                            <button id="clan-bosscount-edit-btn" type="button" class="btn btn-primary">修正</button>
+                            <button id="clan-bosscount-save-btn" type="button" class="btn btn-primary" style="display: none;">確定</button>
+                            <button id="clan-bosscount-cancel-btn" type="button" class="btn btn-danger" style="display: none;">破棄</button>
+                        </div>
+                    </div>
+                    <div class="bosscount-display">
+                        <% laps.forEach((count, idx) => { %>
+                            <%
+                                const currentCount = Number(count);
+                                let countStateClass = '';
+                                if (currentCount === minBossCount + 1) {
+                                    countStateClass = 'bosscount-near-min';
+                                } else if (currentCount >= minBossCount + 2) {
+                                    countStateClass = 'bosscount-far-min';
+                                }
+                            %>
+                            <div class="bosscount-item <%= countStateClass %>">
+                                <p>
+                                    <span class="boss-name-label" data-boss-index="<%= idx %>">ボス <%= idx + 1 %></span>:
+                                    <strong class="clan-bosslap-value" data-boss-index="<%= idx %>"><%= Number(count) %></strong>
+                                    <input
+                                        type="number"
+                                        class="clan-bosslap-input"
+                                        data-boss-index="<%= idx %>"
+                                        min="1"
+                                        step="1"
+                                        value="<%= Number(count) %>"
+                                        style="display: none;"
+                                    />
+                                </p>
+                            </div>
+                        <% }); %>
+                    </div>
+                    <p id="clan-bosslap-status" class="settings-status"></p>
+                </section>
+            <% } %>
+        </div>
+    <% } %>
+</div>
+
+<script>
+    async function replaceBossLabelsFromClanBattleSettings() {
+        const labelElements = Array.from(document.querySelectorAll('.boss-name-label[data-boss-index]'));
+        if (labelElements.length === 0) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/clanbattle-settings/current', {
+                method: 'GET',
+                cache: 'no-store'
+            });
+            if (!response.ok) {
+                return;
+            }
+
+            const payload = await response.json();
+            const state = payload && payload.state ? payload.state : null;
+            const bossNames = state && Array.isArray(state.bossname) ? state.bossname : [];
+
+            labelElements.forEach((element) => {
+                const index = Number(element.getAttribute('data-boss-index'));
+                const bossName = typeof bossNames[index] === 'string' ? bossNames[index].trim() : '';
+                if (bossName.length > 0) {
+                    element.textContent = bossName;
+                }
+            });
+        } catch (error) {
+            console.error('クラバト設定のボス名取得に失敗しました:', error);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        replaceBossLabelsFromClanBattleSettings();
+        initializeClanBosslapEditor();
+        initializeClanRealtimeSubscription();
+    });
+
+    function initializeClanRealtimeSubscription() {
+        const sourceInput = document.getElementById('clan-source');
+        const clanIdInput = document.getElementById('clan-id');
+        const source = sourceInput ? String(sourceInput.value || '').trim() : '';
+        const clanId = clanIdInput ? Number(clanIdInput.value) : NaN;
+
+        if (!source || !Number.isFinite(clanId) || !window.supabase || !window.__SUPABASE_PUBLIC_CONFIG__) {
+            return;
+        }
+
+        const config = window.__SUPABASE_PUBLIC_CONFIG__ || {};
+        const supabaseUrl = typeof config.url === 'string' ? config.url.trim() : '';
+        const publishableKey = typeof config.publishableKey === 'string' ? config.publishableKey.trim() : '';
+        if (!supabaseUrl || !publishableKey) {
+            return;
+        }
+
+        try {
+            const client = window.supabase.createClient(supabaseUrl, publishableKey);
+            const channel = client
+                .channel(`clan-realtime-${source}-${clanId}`)
+                .on('postgres_changes', {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'clans'
+                }, (payload) => {
+                    const next = payload && payload.new ? payload.new : null;
+                    const nextSource = next && typeof next.source === 'string' ? next.source : '';
+                    const nextClanId = next ? Number(next.clanid) : NaN;
+
+                    if (nextSource === source && Number.isFinite(nextClanId) && nextClanId === clanId) {
+                        window.location.reload();
+                    }
+                })
+                .subscribe();
+
+            window.addEventListener('beforeunload', () => {
+                client.removeChannel(channel);
+            });
+        } catch (error) {
+            console.error('Supabase Realtime の購読開始に失敗しました:', error);
+        }
+    }
+
+    function initializeClanBosslapEditor() {
+        const editButton = document.getElementById('clan-bosscount-edit-btn');
+        const saveButton = document.getElementById('clan-bosscount-save-btn');
+        const cancelButton = document.getElementById('clan-bosscount-cancel-btn');
+        const status = document.getElementById('clan-bosslap-status');
+        const valueElements = Array.from(document.querySelectorAll('.clan-bosslap-value'));
+        const inputElements = Array.from(document.querySelectorAll('.clan-bosslap-input'));
+
+        if (!editButton || !saveButton || !cancelButton || valueElements.length !== 5 || inputElements.length !== 5) {
+            return;
+        }
+
+        const originalValues = inputElements.map((input) => Number(input.value));
+        let isEditing = false;
+
+        const setStatus = (message, type) => {
+            if (!status) {
+                return;
+            }
+            status.textContent = message;
+            status.classList.remove('success', 'error');
+            if (type) {
+                status.classList.add(type);
+            }
+        };
+
+        const setEditingState = (editing) => {
+            isEditing = editing;
+            editButton.style.display = editing ? 'none' : '';
+            saveButton.style.display = editing ? '' : 'none';
+            cancelButton.style.display = editing ? '' : 'none';
+
+            valueElements.forEach((element) => {
+                element.style.display = editing ? 'none' : '';
+            });
+            inputElements.forEach((element) => {
+                element.style.display = editing ? 'block' : 'none';
+            });
+        };
+
+        editButton.addEventListener('click', () => {
+            setStatus('', '');
+            setEditingState(true);
+        });
+
+        cancelButton.addEventListener('click', () => {
+            inputElements.forEach((input, index) => {
+                input.value = String(originalValues[index]);
+            });
+            setStatus('変更を破棄しました。', 'success');
+            setEditingState(false);
+        });
+
+        saveButton.addEventListener('click', async () => {
+            if (!isEditing) {
+                return;
+            }
+
+            const nextValues = [];
+            for (const input of inputElements) {
+                const numeric = Number(input.value);
+                if (!Number.isFinite(numeric) || numeric < 1 || !Number.isInteger(numeric)) {
+                    setStatus('1以上の整数を入力してください。', 'error');
+                    return;
+                }
+                nextValues.push(numeric);
+            }
+
+            const minValue = Math.min(...nextValues);
+            const maxValue = Math.max(...nextValues);
+            if ((maxValue - minValue) >= 3) {
+                setStatus('最大値と最小値の差は2以下にしてください。', 'error');
+                return;
+            }
+
+            saveButton.disabled = true;
+            cancelButton.disabled = true;
+            setStatus('保存中です...', '');
+
+            try {
+                const response = await fetch('/api/clan/bosslaps/save', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        bosslaps: nextValues
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to save clan bosslaps');
+                }
+
+                window.location.reload();
+            } catch (error) {
+                console.error('ボスカウントの保存に失敗しました:', error);
+                setStatus('保存に失敗しました。時間をおいて再試行してください。', 'error');
+            } finally {
+                saveButton.disabled = false;
+                cancelButton.disabled = false;
+            }
+        });
+    }
+</script>

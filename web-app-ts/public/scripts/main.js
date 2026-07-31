@@ -1124,6 +1124,9 @@ document.addEventListener('DOMContentLoaded', function() {
         case '/clanbattle-settings':
             console.log('クラバト設定ページが読み込まれました');
             break;
+        case '/clan':
+            console.log('クランページが読み込まれました');
+            break;
         default:
             console.log('ホームページが読み込まれました');
     }
