@@ -3,6 +3,20 @@
 
 create extension if not exists pgcrypto;
 
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_type t
+    join pg_namespace n on n.oid = t.typnamespace
+    where t.typname = 'clan_source'
+      and n.nspname = 'public'
+  ) then
+    create type public.clan_source as enum ('discord', 'web');
+  end if;
+end
+$$;
+
 create table if not exists public.board_posts (
   id uuid primary key default gen_random_uuid(),
   legacy_id text unique,
@@ -69,6 +83,38 @@ create table if not exists public.setting_user_owned_character (
   "connectRank" integer not null,
   updated_at timestamptz not null default now(),
   primary key ("googleUserId", "officialName")
+);
+
+create table if not exists public.clans (
+  source public.clan_source not null,
+  clanid bigint not null,
+  name text not null,
+  bosslaps integer[] not null,
+  "createdAt" timestamptz not null,
+  updated_at timestamptz not null default now(),
+  primary key (source, clanid),
+  constraint clans_bosslaps_length_check check (cardinality(bosslaps) = 5)
+);
+
+create table if not exists public.clan_members (
+  source public.clan_source not null,
+  clanid bigint not null,
+  membersource public.clan_source not null,
+  memberid bigint not null,
+  name text not null,
+  mention text not null,
+  taskkill integer not null default 0,
+  plan integer[] not null default '{}'::integer[],
+  attacktime integer[] not null default '{}'::integer[],
+  sortie integer not null default 0,
+  attackboss integer not null default 0,
+  overattack integer null,
+  damage integer null,
+  attackmessage text null,
+  lastactive timestamptz not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (source, clanid, membersource, memberid)
 );
 
 -- Dummy seed data (re-runnable)

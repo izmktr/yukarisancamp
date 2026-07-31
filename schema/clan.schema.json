@@ -4,7 +4,12 @@
   "description": "A clan data structure for Discord bot.",
   "type": "object",
   "properties": {
-    "id": {
+    "source": {
+      "description": "The source of the clan data, either from Discord or web.",
+      "type": "string",
+      "enum": ["discord", "web"]
+    },
+    "clanid": {
       "description": "The unique ID of the clan.",
       "type": "integer"
     },
@@ -12,12 +17,14 @@
       "description": "The name of the clan.",
       "type": "string"
     },
-    "members": {
-      "description": "A list of clan members.",
+    "bosslaps":{
+      "description": "The number of laps for the clan battle boss.",
       "type": "array",
       "items": {
-        "$ref": "clanMember.schema.json"
-      }
+        "type": "integer"
+      },
+      "minItems": 5,
+      "maxItems": 5
     },
     "createdAt": {
       "description": "The timestamp when the clan was created.",
@@ -25,5 +32,5 @@
       "format": "date-time"
     }
   },
-  "required": ["id", "name", "members", "createdAt"]
+  "required": ["source", "clanid", "name", "bosslaps", "createdAt"]
 }

@@ -4,7 +4,21 @@
   "description": "A clan member data structure for Discord bot.",
   "type": "object",
   "properties": {
-    "id": {
+    "source": {
+      "description": "The source of the clan data, either from Discord or web.",
+      "type": "string",
+      "enum": ["discord", "web"]
+    },
+    "clanid": {
+      "description": "The unique ID of the clan.",
+      "type": "integer"
+    },
+    "membersource": {
+      "description": "The source of the member data, either from Discord or web.",
+      "type": "string",
+      "enum": ["discord", "web"]
+    },
+    "memberid": {
       "description": "The unique ID of the user.",
       "type": "integer"
     },
@@ -20,13 +34,6 @@
       "description": "The number of task kills performed.",
       "type": "integer"
     },
-    "history": {
-      "description": "The attack history list.",
-      "type": "array",
-      "items": {
-        "$ref": "attackHistory.schema.json"
-      }
-    },
     "plan": {
       "description": "The attack plan list.",
       "type": "array",
@@ -35,28 +42,31 @@
       }
     },
     "attacktime": {
-      "description": "Attack management flags (None: not attacked, number: overtime seconds).",
+      "description": "Attack management flags (0: not attacked, number: overtime seconds).",
       "type": "array",
       "items": {
         "type": ["integer", "null"]
       }
     },
     "sortie": {
-      "description": "Attack in progress flag (-1: not attacking, other: sortie number).",
+      "description": "Attack in progress flag (0: not attacking, other: sortie number).",
       "type": "integer"
     },
-    "boss": {
+    "attackboss": {
       "description": "The boss being attacked.",
       "type": "integer"
+    },
+    "overattack": {
+      "description": "The second attack details.",
+      "type": ["integer", "null"]
+    },
+    "damage": {
+      "description": "The damage dealt to the boss.",
+      "type": ["integer", "null"]
     },
     "attackmessage": {
       "description": "The attack declaration message (Discord Message object).",
       "type": ["string", "null"]
-    },
-    "reportlimit": {
-      "description": "The deadline for reminders.",
-      "type": ["string", "null"],
-      "format": "date-time"
     },
     "lastactive": {
       "description": "The timestamp of the last activity.",
@@ -64,5 +74,5 @@
       "format": "date-time"
     }
   },
-  "required": ["id", "name", "mention", "taskkill", "history", "plan", "attacktime", "sortie", "boss", "lastactive"]
+  "required": ["source", "clanid", "membersource", "memberid", "name", "mention", "taskkill", "plan", "attacktime", "sortie", "attackboss", "lastactive"]
 }
