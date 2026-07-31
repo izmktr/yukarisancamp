@@ -11,7 +11,7 @@
     },
     "clanid": {
       "description": "The unique ID of the clan.",
-      "type": "integer"
+      "type": "string"
     },
     "membersource": {
       "description": "The source of the member data, either from Discord or web.",
@@ -20,7 +20,7 @@
     },
     "memberid": {
       "description": "The unique ID of the user.",
-      "type": "integer"
+      "type": "string"
     },
     "name": {
       "description": "The user's name.",

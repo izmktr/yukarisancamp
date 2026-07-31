@@ -301,7 +301,7 @@ type UserOwnedCharacterRecord = UserOwnedCharacter & {
 
 type ClanInfoRow = {
   source: string;
-  clanid: number;
+  clanid: string;
   name: string;
   bosslaps: number[];
   createdAt: string;
@@ -310,9 +310,9 @@ type ClanInfoRow = {
 
 type ClanMemberRow = {
   source: string;
-  clanid: number;
+  clanid: string;
   membersource: string;
-  memberid: number;
+  memberid: string;
   name: string;
   mention: string;
   taskkill: number;
@@ -381,8 +381,12 @@ function normalizeClanInfoRow(raw: unknown): ClanInfoRow | null {
   }
 
   const source = raw as Record<string, unknown>;
-  const clanId = Number(source.clanid);
-  if (!Number.isFinite(clanId)) {
+  const clanIdText = typeof source.clanid === 'string'
+    ? source.clanid.trim()
+    : typeof source.clanid === 'number' && Number.isFinite(source.clanid)
+      ? String(Math.trunc(source.clanid))
+      : '';
+  if (!/^\d+$/.test(clanIdText)) {
     return null;
   }
 
@@ -395,7 +399,7 @@ function normalizeClanInfoRow(raw: unknown): ClanInfoRow | null {
 
   return {
     source: typeof source.source === 'string' ? source.source : '',
-    clanid: Math.trunc(clanId),
+    clanid: clanIdText,
     name: typeof source.name === 'string' ? source.name : '',
     bosslaps,
     createdAt: toIsoStringOrEmpty(source.createdAt),
@@ -409,9 +413,17 @@ function normalizeClanMemberRow(raw: unknown): ClanMemberRow | null {
   }
 
   const source = raw as Record<string, unknown>;
-  const clanId = Number(source.clanid);
-  const memberId = Number(source.memberid);
-  if (!Number.isFinite(clanId) || !Number.isFinite(memberId)) {
+  const clanIdText = typeof source.clanid === 'string'
+    ? source.clanid.trim()
+    : typeof source.clanid === 'number' && Number.isFinite(source.clanid)
+      ? String(Math.trunc(source.clanid))
+      : '';
+  const memberIdText = typeof source.memberid === 'string'
+    ? source.memberid.trim()
+    : typeof source.memberid === 'number' && Number.isFinite(source.memberid)
+      ? String(Math.trunc(source.memberid))
+      : '';
+  if (!/^\d+$/.test(clanIdText) || !/^\d+$/.test(memberIdText)) {
     return null;
   }
 
@@ -443,9 +455,9 @@ function normalizeClanMemberRow(raw: unknown): ClanMemberRow | null {
 
   return {
     source: typeof source.source === 'string' ? source.source : '',
-    clanid: Math.trunc(clanId),
+    clanid: clanIdText,
     membersource: typeof source.membersource === 'string' ? source.membersource : '',
-    memberid: Math.trunc(memberId),
+    memberid: memberIdText,
     name: typeof source.name === 'string' ? source.name : '',
     mention: typeof source.mention === 'string' ? source.mention : '',
     taskkill: Number.isFinite(Number(source.taskkill)) ? Math.trunc(Number(source.taskkill)) : 0,
@@ -591,14 +603,56 @@ function normalizeClanBosslapsPayload(rawValue: unknown): number[] | null {
   return normalized;
 }
 
-async function supabaseUpdateClanBosslapsByDiscordServer(config: SupabaseConfig, discordServer: string, bosslaps: number[]): Promise<void> {
-  const clanId = normalizeDiscordServerToClanId(discordServer);
-  if (!clanId) {
-    throw new Error('Invalid discord server id');
+type ClanBosslapsSavePayload = {
+  source: 'discord' | 'web';
+  clanid: string;
+  bosslaps: number[];
+};
+
+function normalizeClanBosslapsSavePayload(rawValue: unknown): ClanBosslapsSavePayload | null {
+  if (!rawValue || typeof rawValue !== 'object') {
+    return null;
+  }
+
+  const source = rawValue as Record<string, unknown>;
+  const normalizedBosslaps = normalizeClanBosslapsPayload(rawValue);
+  if (!normalizedBosslaps) {
+    return null;
+  }
+
+  const rawSource = typeof source.source === 'string' ? source.source.trim() : '';
+  if (rawSource !== 'discord' && rawSource !== 'web') {
+    return null;
+  }
+
+  const clanId = typeof source.clanid === 'string'
+    ? source.clanid.trim()
+    : typeof source.clanid === 'number' && Number.isFinite(source.clanid)
+      ? String(Math.trunc(source.clanid))
+      : '';
+  if (!/^\d+$/.test(clanId)) {
+    return null;
+  }
+
+  return {
+    source: rawSource,
+    clanid: clanId,
+    bosslaps: normalizedBosslaps
+  };
+}
+
+async function supabaseUpdateClanBosslaps(config: SupabaseConfig, source: string, clanId: string, bosslaps: number[]): Promise<void> {
+  const normalizedSource = typeof source === 'string' ? source.trim() : '';
+  if (!normalizedSource) {
+    throw new Error('Invalid clan source');
+  }
+  if (!/^\d+$/.test(clanId)) {
+    throw new Error('Invalid clan id');
   }
 
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLANS_TABLE);
   const query = new URLSearchParams({
+    source: `eq.${normalizedSource}`,
     clanid: `eq.${clanId}`
   });
 
@@ -608,7 +662,7 @@ async function supabaseUpdateClanBosslapsByDiscordServer(config: SupabaseConfig,
       'Content-Type': 'application/json',
       apikey: config.secretKey,
       Authorization: `Bearer ${config.secretKey}`,
-      Prefer: 'return=minimal'
+      Prefer: 'return=representation'
     },
     body: JSON.stringify({
       bosslaps,
@@ -619,6 +673,11 @@ async function supabaseUpdateClanBosslapsByDiscordServer(config: SupabaseConfig,
   if (!response.ok) {
     const responseText = await response.text();
     throw new Error(`Supabase update clan bosslaps failed: ${response.status} ${responseText}`);
+  }
+
+  const rows = await response.json() as unknown;
+  if (!Array.isArray(rows) || rows.length === 0) {
+    throw new Error('Supabase update clan bosslaps matched 0 rows');
   }
 }
 
@@ -1122,9 +1181,14 @@ app.get('/api/clan/refresh-token', ensureDiscordServerLinked, async (req, res) =
 });
 
 app.post('/api/clan/bosslaps/save', ensureDiscordServerLinked, express.json(), async (req, res) => {
-  const payload = normalizeClanBosslapsPayload(req.body);
+  const payload = normalizeClanBosslapsSavePayload(req.body);
   if (!payload) {
     return res.status(400).json({ error: 'Invalid payload' });
+  }
+
+  const sessionClanId = normalizeDiscordServerToClanId(getSessionDiscordServer(req));
+  if (!sessionClanId) {
+    return res.status(403).json({ error: 'Invalid session clan id' });
   }
 
   const config = getSupabaseConfig();
@@ -1133,12 +1197,12 @@ app.post('/api/clan/bosslaps/save', ensureDiscordServerLinked, express.json(), a
   }
 
   try {
-    const discordServer = getSessionDiscordServer(req);
-    await supabaseUpdateClanBosslapsByDiscordServer(config, discordServer, payload);
+    await supabaseUpdateClanBosslaps(config, payload.source, sessionClanId, payload.bosslaps);
     return res.json({ success: true });
   } catch (error) {
     console.error('Failed to save clan bosslaps:', error);
-    return res.status(502).json({ error: 'Failed to save clan bosslaps' });
+    const errorMessage = error instanceof Error ? error.message : 'Failed to save clan bosslaps';
+    return res.status(502).json({ error: errorMessage });
   }
 });
 

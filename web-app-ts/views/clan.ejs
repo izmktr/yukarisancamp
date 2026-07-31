@@ -4,7 +4,7 @@
 
     <input type="hidden" id="clan-refresh-token" value="<%= data.refreshToken %>" />
     <input type="hidden" id="clan-source" value="<%= data.clan && data.clan.source ? data.clan.source : '' %>" />
-    <input type="hidden" id="clan-id" value="<%= data.clan && Number.isFinite(Number(data.clan.clanid)) ? Number(data.clan.clanid) : '' %>" />
+    <input type="hidden" id="clan-id" value="<%= data.clan && data.clan.clanid ? data.clan.clanid : '' %>" />
 
     <% if (data.loadError) { %>
         <div class="settings-firebase-error"><%= data.loadError %></div>
@@ -97,62 +97,22 @@
     document.addEventListener('DOMContentLoaded', () => {
         replaceBossLabelsFromClanBattleSettings();
         initializeClanBosslapEditor();
-        initializeClanRealtimeSubscription();
     });
-
-    function initializeClanRealtimeSubscription() {
-        const sourceInput = document.getElementById('clan-source');
-        const clanIdInput = document.getElementById('clan-id');
-        const source = sourceInput ? String(sourceInput.value || '').trim() : '';
-        const clanId = clanIdInput ? Number(clanIdInput.value) : NaN;
-
-        if (!source || !Number.isFinite(clanId) || !window.supabase || !window.__SUPABASE_PUBLIC_CONFIG__) {
-            return;
-        }
-
-        const config = window.__SUPABASE_PUBLIC_CONFIG__ || {};
-        const supabaseUrl = typeof config.url === 'string' ? config.url.trim() : '';
-        const publishableKey = typeof config.publishableKey === 'string' ? config.publishableKey.trim() : '';
-        if (!supabaseUrl || !publishableKey) {
-            return;
-        }
-
-        try {
-            const client = window.supabase.createClient(supabaseUrl, publishableKey);
-            const channel = client
-                .channel(`clan-realtime-${source}-${clanId}`)
-                .on('postgres_changes', {
-                    event: 'UPDATE',
-                    schema: 'public',
-                    table: 'clans'
-                }, (payload) => {
-                    const next = payload && payload.new ? payload.new : null;
-                    const nextSource = next && typeof next.source === 'string' ? next.source : '';
-                    const nextClanId = next ? Number(next.clanid) : NaN;
-
-                    if (nextSource === source && Number.isFinite(nextClanId) && nextClanId === clanId) {
-                        window.location.reload();
-                    }
-                })
-                .subscribe();
-
-            window.addEventListener('beforeunload', () => {
-                client.removeChannel(channel);
-            });
-        } catch (error) {
-            console.error('Supabase Realtime の購読開始に失敗しました:', error);
-        }
-    }
 
     function initializeClanBosslapEditor() {
         const editButton = document.getElementById('clan-bosscount-edit-btn');
         const saveButton = document.getElementById('clan-bosscount-save-btn');
         const cancelButton = document.getElementById('clan-bosscount-cancel-btn');
         const status = document.getElementById('clan-bosslap-status');
+        const sourceInput = document.getElementById('clan-source');
+        const clanIdInput = document.getElementById('clan-id');
         const valueElements = Array.from(document.querySelectorAll('.clan-bosslap-value'));
         const inputElements = Array.from(document.querySelectorAll('.clan-bosslap-input'));
 
-        if (!editButton || !saveButton || !cancelButton || valueElements.length !== 5 || inputElements.length !== 5) {
+        const source = sourceInput ? String(sourceInput.value || '').trim() : '';
+        const clanId = clanIdInput ? String(clanIdInput.value || '').trim() : '';
+
+        if (!editButton || !saveButton || !cancelButton || valueElements.length !== 5 || inputElements.length !== 5 || !source || !/^\d+$/.test(clanId)) {
             return;
         }
 
@@ -230,12 +190,23 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
+                        source,
+                        clanid: clanId,
                         bosslaps: nextValues
                     })
                 });
 
                 if (!response.ok) {
-                    throw new Error('Failed to save clan bosslaps');
+                    let serverMessage = 'Failed to save clan bosslaps';
+                    try {
+                        const errorPayload = await response.json();
+                        if (errorPayload && typeof errorPayload.error === 'string' && errorPayload.error.trim().length > 0) {
+                            serverMessage = errorPayload.error.trim();
+                        }
+                    } catch (parseError) {
+                        // noop
+                    }
+                    throw new Error(serverMessage);
                 }
 
                 window.location.reload();
@@ -248,4 +219,59 @@
             }
         });
     }
+</script>
+
+<script type="module">
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+    function initializeClanRealtimeSubscription() {
+        const sourceInput = document.getElementById('clan-source');
+        const clanIdInput = document.getElementById('clan-id');
+        const source = sourceInput ? String(sourceInput.value || '').trim() : '';
+        const clanId = clanIdInput ? String(clanIdInput.value || '').trim() : '';
+
+        if (!source || !/^\d+$/.test(clanId) || !window.__SUPABASE_PUBLIC_CONFIG__) {
+            console.warn('Supabase Realtime を開始できません: source/clanId/config が不足しています。');
+            return;
+        }
+
+        const config = window.__SUPABASE_PUBLIC_CONFIG__ || {};
+        const supabaseUrl = typeof config.url === 'string' ? config.url.trim() : '';
+        const publishableKey = typeof config.publishableKey === 'string' ? config.publishableKey.trim() : '';
+        if (!supabaseUrl || !publishableKey) {
+            console.warn('Supabase Realtime を開始できません: SUPABASE_URL または SUPABASE_PUBLISHABLE_KEY が不足しています。');
+            return;
+        }
+
+        try {
+            const client = createClient(supabaseUrl, publishableKey);
+            const channel = client
+                .channel(`clan-realtime-${source}-${clanId}`)
+                .on('postgres_changes', {
+                    event: '*',
+                    schema: 'public',
+                    table: 'clans'
+                }, (payload) => {
+                    console.log('Supabase Realtime clans change payload:', payload);
+                    const next = payload && payload.new ? payload.new : null;
+                    const nextSource = next && typeof next.source === 'string' ? next.source.trim() : '';
+                    const nextClanId = next && next.clanid !== undefined && next.clanid !== null ? String(next.clanid).trim() : '';
+
+                    if (nextSource === source && nextClanId === clanId) {
+                        window.location.reload();
+                    }
+                })
+                .subscribe((status, error) => {
+                    console.log('Supabase Realtime subscription status:', status, error || '');
+                });
+
+            window.addEventListener('beforeunload', () => {
+                client.removeChannel(channel);
+            });
+        } catch (error) {
+            console.error('Supabase Realtime の購読開始に失敗しました:', error);
+        }
+    }
+
+    initializeClanRealtimeSubscription();
 </script>

@@ -136,7 +136,57 @@ Supabaseダッシュボードから取得します。
 6. 所持キャラ更新を保存し、`setting_user_owned_character` の対象 `googleUserId` 行が delete/insert されることを確認
 7. `/clanbattle-settings` を開いて保存し、`setting_clanbattle` の `id=0` 行が insert/update されることを確認
 
-## 8. よくある問題
+## 8. クラン画面 Realtime 更新設定（source/clanid 一致時）
+
+クラン画面（`/clan`）では、Supabase Realtime を使って `public.clans` の更新を購読します。
+同じ `source` / `clanid` の行が更新されたら、表示中ページが自動リロードされます。
+
+### 8-1. 環境変数を確認
+
+`web-app-ts/.env.local` に以下が入っていることを確認します。
+
+```env
+SUPABASE_URL=
+SUPABASE_PUBLISHABLE_KEY=
+```
+
+補足:
+- `SUPABASE_PUBLISHABLE_KEY` はブラウザで Realtime 購読に使います。
+- 値変更後は web-app-ts サーバーを再起動してください。
+
+### 8-2. Realtime で `clans` を配信対象に追加
+
+Supabase ダッシュボード:
+1. Database > Replication（または Realtime）
+2. `public.clans` を配信対象に追加
+3. `UPDATE` イベントが有効なことを確認
+
+### 8-3. RLS/Policy を確認（anon で購読できるようにする）
+
+RLS を有効にしている場合、`anon` ロールに `SELECT` 許可が必要です。
+
+例（必要に応じて調整）:
+
+```sql
+alter table public.clans enable row level security;
+
+create policy "anon can read clans"
+on public.clans
+for select
+to anon
+using (true);
+```
+
+注意:
+- 本番では `using (true)` をそのまま使わず、要件に応じた条件に絞ってください。
+
+### 8-4. 動作確認
+
+1. ブラウザAで `/clan` を開く
+2. ブラウザBで同じクラン（同じ `source` / `clanid`）の `bosslaps` を保存
+3. ブラウザAが自動で更新されることを確認
+
+## 9. よくある問題
 
 ### 502 Failed to save clanbattle settings to Supabase
 - 原因例: テーブル未作成、`id` 主キー/`id=0` CHECK制約の不一致、カラム名不一致
@@ -149,3 +199,11 @@ Supabaseダッシュボードから取得します。
 ### 403 管理者のみ閲覧できます
 - 原因: 保存APIは `ensureAdmin` 保護
 - 対処: Firebase 側 `userRoles/{uid}.role = "admin"` を確認
+
+### クラン画面が自動更新されない
+- 原因例:
+  - `SUPABASE_PUBLISHABLE_KEY` 未設定
+  - `public.clans` が Realtime 配信対象に未追加
+  - RLS で `anon` の `SELECT` が拒否されている
+- 対処:
+  - 本ドキュメントの「8. クラン画面 Realtime 更新設定」を順に確認

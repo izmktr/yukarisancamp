@@ -87,7 +87,7 @@ create table if not exists public.setting_user_owned_character (
 
 create table if not exists public.clans (
   source public.clan_source not null,
-  clanid bigint not null,
+  clanid text not null,
   name text not null,
   bosslaps integer[] not null,
   "createdAt" timestamptz not null,
@@ -98,9 +98,9 @@ create table if not exists public.clans (
 
 create table if not exists public.clan_members (
   source public.clan_source not null,
-  clanid bigint not null,
+  clanid text not null,
   membersource public.clan_source not null,
-  memberid bigint not null,
+  memberid text not null,
   name text not null,
   mention text not null,
   taskkill integer not null default 0,
@@ -137,4 +137,22 @@ values (
 
 -- board_posts は掲示板投稿を 1 行で保持する最小構成です。
 -- party / ub_rows / raw_article は JSONB で、現行のファイル保存構造をそのまま移しやすくしています。
+
+do $$
+begin
+  if exists (
+    select 1
+    from pg_publication
+    where pubname = 'supabase_realtime'
+  ) and not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'clans'
+  ) then
+    execute 'alter publication supabase_realtime add table public.clans';
+  end if;
+end
+$$;
 
