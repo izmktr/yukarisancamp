@@ -1,5 +1,8 @@
 <div class="page-content clan-page">
-    <% const data = clanPageData || { discordServer: '', clan: null, members: [], refreshToken: 'none:0', loadError: '' }; %>
+    <% const data = clanPageData || { discordServer: '', clan: null, members: [], currentMember: null, attackHistories: [], bossNames: [], baseDate: '', refreshToken: 'none:0', loadError: '' }; %>
+    <% if (data.currentMember && Number(data.currentMember.attackboss) !== 0) { %>
+        <div class="clan-attack-active-status" role="status">攻撃中</div>
+    <% } %>
     <h2><%= data.clan && data.clan.name ? data.clan.name : '未登録' %></h2>
 
     <input type="hidden" id="clan-refresh-token" value="<%= data.refreshToken %>" />
@@ -17,6 +20,8 @@
                 <%
                     const numericBossCounts = laps.map((value) => Number(value));
                     const minBossCount = numericBossCounts.length > 0 ? Math.min(...numericBossCounts) : 0;
+                    const clanMembers = Array.isArray(data.members) ? data.members : [];
+                    const canStartAttack = data.currentMember && Number(data.currentMember.attackboss) === 0;
                 %>
                 <section class="clandata-section">
                     <div class="clan-bosscount-header">
@@ -37,6 +42,12 @@
                                 } else if (currentCount >= minBossCount + 2) {
                                     countStateClass = 'bosscount-far-min';
                                 }
+                                const attackingMembers = clanMembers.filter((member) => {
+                                    const attackBoss = Number(member.attackboss);
+                                    return Number.isInteger(attackBoss)
+                                        && attackBoss > 0
+                                        && (attackBoss - 1) % 5 === idx;
+                                });
                             %>
                             <div class="bosscount-item <%= countStateClass %>">
                                 <p>
@@ -52,12 +63,64 @@
                                         style="display: none;"
                                     />
                                 </p>
+                                <div class="clan-attacking-members">
+                                    <% attackingMembers.forEach((member) => { %>
+                                        <span class="clan-attacking-member-name"><%= member.name || 'Unknown' %></span>
+                                    <% }); %>
+                                </div>
+                                <% if (canStartAttack) { %>
+                                    <button
+                                        type="button"
+                                        class="btn btn-primary clan-attack-button"
+                                        data-boss="<%= idx + 1 %>"
+                                        aria-label="ボス<%= idx + 1 %>を攻撃"
+                                    >攻撃</button>
+                                <% } %>
                             </div>
                         <% }); %>
                     </div>
                     <p id="clan-bosslap-status" class="settings-status"></p>
+                    <p id="clan-attack-status" class="settings-status" aria-live="polite"></p>
                 </section>
             <% } %>
+
+            <% const attackHistories = Array.isArray(data.attackHistories) ? data.attackHistories : []; %>
+            <% const bossNames = Array.isArray(data.bossNames) ? data.bossNames : []; %>
+            <section class="clandata-section clan-attack-history-section">
+                <h3>凸履歴</h3>
+                <% if (attackHistories.length === 0) { %>
+                    <p class="clan-empty">本日の凸履歴はありません。</p>
+                <% } else { %>
+                    <div class="clan-attack-history-table-wrapper">
+                        <table class="clan-attack-history-table">
+                            <thead>
+                                <tr>
+                                    <th>凸数</th>
+                                    <th>ボス</th>
+                                    <th>状態</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% attackHistories.forEach((history) => { %>
+                                    <%
+                                        const bossNumber = Number(history.boss);
+                                        const bossIndex = bossNumber >= 0 ? bossNumber % 5 : -1;
+                                        const configuredBossName = bossIndex >= 0 && typeof bossNames[bossIndex] === 'string'
+                                            ? bossNames[bossIndex].trim()
+                                            : '';
+                                        const bossName = configuredBossName || (bossIndex >= 0 ? `ボス ${bossIndex + 1}` : 'ボス不明');
+                                    %>
+                                    <tr>
+                                        <td><%= Number(history.sortie) %>凸</td>
+                                        <td><%= bossName %></td>
+                                        <td><%= history.defeat === true ? `（討伐:${Number(history.overtime)}秒）` : '済' %></td>
+                                    </tr>
+                                <% }); %>
+                            </tbody>
+                        </table>
+                    </div>
+                <% } %>
+            </section>
         </div>
     <% } %>
 </div>
@@ -97,7 +160,64 @@
     document.addEventListener('DOMContentLoaded', () => {
         replaceBossLabelsFromClanBattleSettings();
         initializeClanBosslapEditor();
+        initializeClanAttackButtons();
     });
+
+    function initializeClanAttackButtons() {
+        const attackButtons = Array.from(document.querySelectorAll('.clan-attack-button[data-boss]'));
+        const status = document.getElementById('clan-attack-status');
+        if (attackButtons.length === 0) {
+            return;
+        }
+
+        const setStatus = (message, type) => {
+            if (!status) {
+                return;
+            }
+            status.textContent = message;
+            status.classList.remove('success', 'error');
+            if (type) {
+                status.classList.add(type);
+            }
+        };
+
+        attackButtons.forEach((button) => {
+            button.addEventListener('click', async () => {
+                const attackBoss = Number(button.getAttribute('data-boss'));
+                if (!Number.isInteger(attackBoss) || attackBoss < 1 || attackBoss > 5) {
+                    return;
+                }
+
+                attackButtons.forEach((item) => {
+                    item.disabled = true;
+                });
+                setStatus('攻撃開始を登録しています...', '');
+
+                try {
+                    const response = await fetch('/api/clan/attack/start', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ attackBoss })
+                    });
+
+                    if (!response.ok) {
+                        const payload = await response.json().catch(() => null);
+                        throw new Error(payload && payload.error ? payload.error : 'Failed to start attack');
+                    }
+
+                    window.location.reload();
+                } catch (error) {
+                    console.error('攻撃開始の登録に失敗しました:', error);
+                    setStatus('攻撃開始の登録に失敗しました。画面を更新して再試行してください。', 'error');
+                    attackButtons.forEach((item) => {
+                        item.disabled = false;
+                    });
+                }
+            });
+        });
+    }
 
     function initializeClanBosslapEditor() {
         const editButton = document.getElementById('clan-bosscount-edit-btn');

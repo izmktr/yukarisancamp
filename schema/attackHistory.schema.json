@@ -4,13 +4,32 @@
   "description": "A history record of attack data.",
   "type": "object",
   "properties": {
-    "member": {
-      "description": "The member ID who performed the attack.",
+    "id": {
+      "description": "The unique identifier for the attack history record.",
       "type": "integer"
+    },
+    "source": {
+      "description": "The source of the clan data, either from Discord or web.",
+      "type": "string",
+      "enum": ["discord", "web"]
+    },
+    "clanid": {
+      "description": "The unique ID of the clan.",
+      "type": "string"
+    },
+    "membersource": {
+      "description": "The source of the member data, either from Discord or web.",
+      "type": "string",
+      "enum": ["discord", "web"]
+    },
+    "memberid": {
+      "description": "The unique ID of the user.",
+      "type": "string"
     },
     "day": {
       "description": "The day of the attack.",
-      "type": "integer"
+      "type": "string",
+      "format": "date"
     },
     "sortie": {
       "description": "The sortie information.",
@@ -25,8 +44,8 @@
       "type": "integer"
     },
     "overtime": {
-      "description": "Whether the attack was during overtime.",
-      "type": "boolean"
+      "description": "The number of overtime seconds carried over after defeating the boss.",
+      "type": "integer"
     },
     "defeat": {
       "description": "Whether the boss was defeated.",

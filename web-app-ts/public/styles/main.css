@@ -361,6 +361,18 @@ body {
     font-size: 1.05rem;
 }
 
+.clan-attack-active-status {
+    margin-bottom: 1rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid #f1b84b;
+    border-left: 5px solid #d58a00;
+    border-radius: 6px;
+    background: #fff7e6;
+    color: #704600;
+    font-size: 1rem;
+    font-weight: 700;
+}
+
 .clan-bosscount-header {
     display: flex;
     align-items: center;
@@ -382,6 +394,41 @@ body {
 .clan-empty {
     margin: 0;
     color: #5f6a8a;
+}
+
+.clan-attack-history-section {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #e7ebf2;
+}
+
+.clan-attack-history-table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.clan-attack-history-table {
+    width: 100%;
+    min-width: 420px;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.clan-attack-history-table th,
+.clan-attack-history-table td {
+    padding: 0.75rem;
+    border-bottom: 1px solid #e7ebf2;
+    text-align: left;
+}
+
+.clan-attack-history-table th {
+    background: #f6f8fb;
+    color: #3d4666;
+    font-weight: 600;
+}
+
+.clan-attack-history-table tbody tr:last-child td {
+    border-bottom: none;
 }
 
 .bosscount-display {
@@ -412,6 +459,29 @@ body {
 .bosscount-item p {
     margin: 0;
     font-size: 14px;
+}
+
+.clan-attacking-members {
+    display: flex;
+    min-height: 1.75rem;
+    margin-top: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-content: flex-start;
+    gap: 0.25rem 0.5rem;
+}
+
+.clan-attacking-member-name {
+    color: #26334d;
+    font-size: 0.85rem;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.clan-attack-button {
+    width: 100%;
+    min-height: 38px;
+    margin-top: 0.5rem;
 }
 
 .clan-bosslap-input {

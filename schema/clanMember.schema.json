@@ -61,6 +61,10 @@
       "description": "The boss being attacked.",
       "type": "integer"
     },
+    "attacklap": {
+      "description": "The lap of the attack.",
+      "type": "integer"
+    },
     "overattack": {
       "description": "The second attack details.",
       "type": ["integer", "null"]

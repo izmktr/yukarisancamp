@@ -18,6 +18,7 @@ import multer from 'multer';
 import { cert, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
+import { getBaseDate } from './utils/baseDate';
 
 // Firebase Admin SDK 初期化
 let adminDb: Firestore | null = null;
@@ -314,6 +315,10 @@ app.get('/clan', ensureDiscordServerLinked, async (req, res) => {
     discordServer,
     clan: null,
     members: [],
+    currentMember: null,
+    attackHistories: [],
+    bossNames: [],
+    baseDate: getBaseDate(),
     refreshToken: 'none:0',
     loadError: ''
   };
@@ -332,7 +337,13 @@ app.get('/clan', ensureDiscordServerLinked, async (req, res) => {
   }
 
   try {
-    const clanPageData = await loadClanPagePayload(config, discordServer);
+    const userSession = req.session.user as any;
+    const googleUserId = typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '';
+    const profile = googleUserId
+      ? await supabaseSelectUserProfileByGoogleUserId(config, googleUserId)
+      : null;
+    const discordId = profile && isNonEmptyTrimmedString(profile.discordId) ? profile.discordId.trim() : '';
+    const clanPageData = await loadClanPagePayload(config, discordServer, discordId);
     res.render('clan', {
       title: 'ゆかりさん△',
       currentPage: 'clan',
@@ -465,6 +476,7 @@ app.post('/clan-management/members/add', ensureDiscordServerLinked, async (req, 
       attacktime: [],
       sortie: 0,
       attackboss: 0,
+      attacklap: 0,
       overattack: null,
       damage: null,
       attackmessage: null,
@@ -532,6 +544,7 @@ type ClanMemberRow = {
   attacktime: Array<number | null>;
   sortie: number;
   attackboss: number;
+  attacklap: number;
   overattack: number | null;
   damage: number | null;
   attackmessage: string | null;
@@ -540,10 +553,22 @@ type ClanMemberRow = {
   updated_at: string;
 };
 
+type AttackHistoryRow = {
+  id: number;
+  sortie: number;
+  boss: number;
+  overtime: number;
+  defeat: boolean;
+};
+
 type ClanPagePayload = {
   discordServer: string;
   clan: ClanInfoRow | null;
   members: ClanMemberRow[];
+  currentMember: ClanMemberRow | null;
+  attackHistories: AttackHistoryRow[];
+  bossNames: string[];
+  baseDate: string;
   refreshToken: string;
   loadError: string;
 };
@@ -558,6 +583,7 @@ const SUPABASE_USER_PROFILE_TABLE = 'setting_userprofile';
 const SUPABASE_USER_OWNED_CHARACTER_TABLE = 'setting_user_owned_character';
 const SUPABASE_CLANS_TABLE = 'clans';
 const SUPABASE_CLAN_MEMBERS_TABLE = 'clan_members';
+const SUPABASE_ATTACK_HISTORIES_TABLE = 'attack_histories';
 const SUPABASE_CLAN_BATTLE_SINGLETON_ID = 0;
 
 function getSupabaseConfig(): SupabaseConfig | null {
@@ -678,6 +704,7 @@ function normalizeClanMemberRow(raw: unknown): ClanMemberRow | null {
     attacktime,
     sortie: Number.isFinite(Number(source.sortie)) ? Math.trunc(Number(source.sortie)) : 0,
     attackboss: Number.isFinite(Number(source.attackboss)) ? Math.trunc(Number(source.attackboss)) : 0,
+    attacklap: Number.isFinite(Number(source.attacklap)) ? Math.trunc(Number(source.attacklap)) : 0,
     overattack,
     damage,
     attackmessage: typeof source.attackmessage === 'string' ? source.attackmessage : null,
@@ -757,6 +784,69 @@ async function supabaseSelectClanMembersByDiscordServer(config: SupabaseConfig, 
   return rows
     .map((row) => normalizeClanMemberRow(row))
     .filter((row): row is ClanMemberRow => !!row);
+}
+
+function normalizeAttackHistoryRow(raw: unknown): AttackHistoryRow | null {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  const source = raw as Record<string, unknown>;
+  const id = Number(source.id);
+  const sortie = Number(source.sortie);
+  const boss = Number(source.boss);
+  const overtime = Number(source.overtime);
+  if (![id, sortie, boss, overtime].every(Number.isFinite) || typeof source.defeat !== 'boolean') {
+    return null;
+  }
+
+  return {
+    id: Math.trunc(id),
+    sortie: Math.trunc(sortie),
+    boss: Math.trunc(boss),
+    overtime: Math.trunc(overtime),
+    defeat: source.defeat
+  };
+}
+
+async function supabaseSelectAttackHistories(
+  config: SupabaseConfig,
+  member: ClanMemberRow,
+  day: string
+): Promise<AttackHistoryRow[]> {
+  const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_ATTACK_HISTORIES_TABLE);
+  const query = new URLSearchParams({
+    select: 'id,sortie,boss,overtime,defeat',
+    source: `eq.${member.source}`,
+    clanid: `eq.${member.clanid}`,
+    membersource: `eq.${member.membersource}`,
+    memberid: `eq.${member.memberid}`,
+    day: `eq.${day}`,
+    order: 'sortie.asc,defeat.asc'
+  });
+
+  const response = await fetch(`${endpointUrl}?${query.toString()}`, {
+    method: 'GET',
+    headers: {
+      apikey: config.secretKey,
+      Authorization: `Bearer ${config.secretKey}`
+    }
+  });
+
+  if (!response.ok) {
+    const responseText = await response.text();
+    throw new Error(`Supabase select attack histories failed: ${response.status} ${responseText}`);
+  }
+
+  const rows = await response.json() as unknown;
+  if (!Array.isArray(rows)) {
+    return [];
+  }
+
+  return rows
+    .map((row) => normalizeAttackHistoryRow(row))
+    .filter((row): row is AttackHistoryRow => !!row)
+    .sort((left, right) => left.sortie - right.sortie || Number(left.defeat) - Number(right.defeat));
 }
 
 async function supabaseDeleteClanMember(
@@ -861,13 +951,31 @@ function toRefreshToken(clan: ClanInfoRow | null, members: ClanMemberRow[]): str
   return `${latest}:${members.length}`;
 }
 
-async function loadClanPagePayload(config: SupabaseConfig, discordServer: string): Promise<ClanPagePayload> {
+async function loadClanPagePayload(
+  config: SupabaseConfig,
+  discordServer: string,
+  currentDiscordId = ''
+): Promise<ClanPagePayload> {
   const clan = await supabaseSelectClanByDiscordServer(config, discordServer);
-  const members = await supabaseSelectClanMembersByDiscordServer(config, discordServer);
+  const [members, clanBattleState] = await Promise.all([
+    supabaseSelectClanMembersByDiscordServer(config, discordServer),
+    supabaseSelectClanBattleState(config)
+  ]);
+  const currentMember = members.find((member) => (
+    member.membersource === 'discord' && member.memberid === currentDiscordId
+  ));
+  const baseDate = getBaseDate();
+  const attackHistories = currentMember
+    ? await supabaseSelectAttackHistories(config, currentMember, baseDate)
+    : [];
   return {
     discordServer,
     clan,
     members,
+    currentMember: currentMember || null,
+    attackHistories,
+    bossNames: clanBattleState?.bossname || [],
+    baseDate,
     refreshToken: toRefreshToken(clan, members),
     loadError: ''
   };
@@ -980,6 +1088,52 @@ async function supabaseUpdateClanBosslaps(config: SupabaseConfig, source: string
   const rows = await response.json() as unknown;
   if (!Array.isArray(rows) || rows.length === 0) {
     throw new Error('Supabase update clan bosslaps matched 0 rows');
+  }
+}
+
+async function supabaseStartClanMemberAttack(
+  config: SupabaseConfig,
+  member: ClanMemberRow,
+  attackBoss: number,
+  attackLap: number,
+  sortie: number
+): Promise<void> {
+  const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLAN_MEMBERS_TABLE);
+  const query = new URLSearchParams({
+    source: `eq.${member.source}`,
+    clanid: `eq.${member.clanid}`,
+    membersource: `eq.${member.membersource}`,
+    memberid: `eq.${member.memberid}`,
+    attackboss: 'eq.0'
+  });
+
+  const response = await fetch(`${endpointUrl}?${query.toString()}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: config.secretKey,
+      Authorization: `Bearer ${config.secretKey}`,
+      Prefer: 'return=representation'
+    },
+    body: JSON.stringify({
+      attackboss: attackBoss,
+      attacklap: attackLap,
+      sortie,
+      overattack: 0,
+      damage: 0,
+      attackmessage: '',
+      updated_at: new Date().toISOString()
+    })
+  });
+
+  if (!response.ok) {
+    const responseText = await response.text();
+    throw new Error(`Supabase start clan member attack failed: ${response.status} ${responseText}`);
+  }
+
+  const rows = await response.json() as unknown;
+  if (!Array.isArray(rows) || rows.length === 0) {
+    throw new Error('Attack has already started or clan member was not found');
   }
 }
 
@@ -1504,6 +1658,64 @@ app.post('/api/clan/bosslaps/save', ensureDiscordServerLinked, express.json(), a
   } catch (error) {
     console.error('Failed to save clan bosslaps:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to save clan bosslaps';
+    return res.status(502).json({ error: errorMessage });
+  }
+});
+
+app.post('/api/clan/attack/start', ensureDiscordServerLinked, express.json(), async (req, res) => {
+  const attackBoss = Number(req.body?.attackBoss);
+  if (!Number.isInteger(attackBoss) || attackBoss < 1 || attackBoss > 5) {
+    return res.status(400).json({ error: 'Invalid attack boss' });
+  }
+
+  const config = getSupabaseConfig();
+  if (!config) {
+    return res.status(503).json({ error: 'Supabase is not configured' });
+  }
+
+  const userSession = req.session.user as any;
+  const googleUserId = typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '';
+  if (!googleUserId) {
+    return res.status(403).json({ error: 'User is not authenticated' });
+  }
+
+  try {
+    const profile = await supabaseSelectUserProfileByGoogleUserId(config, googleUserId);
+    const discordId = profile && isNonEmptyTrimmedString(profile.discordId) ? profile.discordId.trim() : '';
+    if (!discordId) {
+      return res.status(403).json({ error: 'Discord account is not linked' });
+    }
+
+    const discordServer = getSessionDiscordServer(req);
+    const [clan, members] = await Promise.all([
+      supabaseSelectClanByDiscordServer(config, discordServer),
+      supabaseSelectClanMembersByDiscordServer(config, discordServer)
+    ]);
+    if (!clan || clan.bosslaps.length !== 5) {
+      return res.status(404).json({ error: 'Clan boss laps were not found' });
+    }
+
+    const currentMember = members.find((member) => (
+      member.membersource === 'discord' && member.memberid === discordId
+    ));
+    if (!currentMember) {
+      return res.status(404).json({ error: 'Clan member was not found' });
+    }
+    if (currentMember.attackboss !== 0) {
+      return res.status(409).json({ error: 'Attack has already started' });
+    }
+
+    const attackHistories = await supabaseSelectAttackHistories(config, currentMember, getBaseDate());
+    const sortie = attackHistories.length === 0
+      ? 1
+      : Math.max(...attackHistories.map((history) => history.sortie)) + 1;
+    const attackLap = clan.bosslaps[attackBoss - 1];
+
+    await supabaseStartClanMemberAttack(config, currentMember, attackBoss, attackLap, sortie);
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to start clan member attack:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to start attack';
     return res.status(502).json({ error: errorMessage });
   }
 });
