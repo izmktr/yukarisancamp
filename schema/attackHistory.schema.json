@@ -43,6 +43,10 @@
       "description": "The boss that was attacked.",
       "type": "integer"
     },
+    "attacklap": {
+      "description": "The boss lap when the attack started.",
+      "type": ["integer", "null"]
+    },
     "overtime": {
       "description": "The number of overtime seconds carried over after defeating the boss.",
       "type": "integer"

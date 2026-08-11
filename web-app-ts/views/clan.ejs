@@ -173,8 +173,10 @@
                             <thead>
                                 <tr>
                                     <th>凸数</th>
+                                    <th>周回数</th>
                                     <th>ボス</th>
                                     <th>状態</th>
+                                    <th>操作</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -190,14 +192,17 @@
                                     <tr
                                         class="clan-attack-history-row"
                                         data-history-id="<%= Number(history.id) %>"
-                                        data-original-sortie="<%= Number(history.sortie) %>"
+                                        data-original-attacklap="<%= Number.isInteger(history.attacklap) ? Number(history.attacklap) : '' %>"
                                         data-original-boss="<%= bossNumber %>"
                                         data-original-defeat="<%= history.defeat === true ? 'true' : 'false' %>"
                                         data-original-overtime="<%= Number(history.overtime) %>"
                                     >
                                         <td>
-                                            <span class="clan-history-display"><%= Number(history.sortie) %>凸</span>
-                                            <input class="clan-history-input clan-history-sortie-input" type="number" min="1" max="3" step="1" value="<%= Number(history.sortie) %>" />
+                                            <span><%= Number(history.sortie) %>凸</span>
+                                        </td>
+                                        <td>
+                                            <span class="clan-history-display"><%= Number.isInteger(history.attacklap) ? `${Number(history.attacklap)}周目` : '不明' %></span>
+                                            <input class="clan-history-input clan-history-attacklap-input" type="number" min="0" step="1" value="<%= Number.isInteger(history.attacklap) ? Number(history.attacklap) : '' %>" aria-label="周回数" />
                                         </td>
                                         <td>
                                             <span class="clan-history-display"><%= bossName %></span>
@@ -218,6 +223,9 @@
                                                 <input class="clan-history-overtime-input" type="number" min="20" max="90" step="1" value="<%= Number(history.overtime) %>" aria-label="持ち越し時間" />
                                                 <span class="clan-history-overtime-unit">秒</span>
                                             </div>
+                                        </td>
+                                        <td>
+                                            <button type="button" class="clan-history-input clan-history-delete-button btn btn-danger">削除</button>
                                         </td>
                                     </tr>
                                 <% }); %>
@@ -319,11 +327,11 @@
         };
         const restoreOriginalValues = () => {
             rows.forEach((row) => {
-                const sortieInput = row.querySelector('.clan-history-sortie-input');
+                const attacklapInput = row.querySelector('.clan-history-attacklap-input');
                 const bossInput = row.querySelector('.clan-history-boss-input');
                 const defeatInput = row.querySelector('.clan-history-defeat-input');
                 const overtimeInput = row.querySelector('.clan-history-overtime-input');
-                if (sortieInput) sortieInput.value = row.getAttribute('data-original-sortie') || '';
+                if (attacklapInput) attacklapInput.value = row.getAttribute('data-original-attacklap') || '';
                 if (bossInput) bossInput.value = row.getAttribute('data-original-boss') || '';
                 if (defeatInput) defeatInput.value = row.getAttribute('data-original-defeat') || 'false';
                 if (overtimeInput) overtimeInput.value = row.getAttribute('data-original-overtime') || '0';
@@ -333,8 +341,39 @@
 
         rows.forEach((row) => {
             const defeatInput = row.querySelector('.clan-history-defeat-input');
+            const deleteButton = row.querySelector('.clan-history-delete-button');
             if (defeatInput) {
                 defeatInput.addEventListener('change', () => updateOvertimeVisibility(row));
+            }
+            if (deleteButton) {
+                deleteButton.addEventListener('click', async () => {
+                    const id = Number(row.getAttribute('data-history-id'));
+                    if (!Number.isInteger(id) || !window.confirm('この凸履歴を削除しますか？')) {
+                        return;
+                    }
+                    deleteButton.disabled = true;
+                    saveButton.disabled = true;
+                    cancelButton.disabled = true;
+                    setStatus('削除中です...', '');
+                    try {
+                        const response = await fetch('/api/clan/attack-history/delete', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id })
+                        });
+                        if (!response.ok) {
+                            const payload = await response.json().catch(() => null);
+                            throw new Error(payload && payload.error ? payload.error : 'Failed to delete attack history');
+                        }
+                        window.location.reload();
+                    } catch (error) {
+                        console.error('凸履歴の削除に失敗しました:', error);
+                        setStatus('削除に失敗しました。画面を更新して再試行してください。', 'error');
+                        deleteButton.disabled = false;
+                        saveButton.disabled = false;
+                        cancelButton.disabled = false;
+                    }
+                });
             }
         });
         editButton.addEventListener('click', () => {
@@ -350,17 +389,17 @@
             const histories = [];
             for (const row of rows) {
                 const id = Number(row.getAttribute('data-history-id'));
-                const sortie = Number(row.querySelector('.clan-history-sortie-input')?.value);
+                const attacklap = Number(row.querySelector('.clan-history-attacklap-input')?.value);
                 const boss = Number(row.querySelector('.clan-history-boss-input')?.value);
                 const defeat = row.querySelector('.clan-history-defeat-input')?.value === 'true';
                 const overtime = defeat ? Number(row.querySelector('.clan-history-overtime-input')?.value) : 0;
-                if (!Number.isInteger(id) || !Number.isInteger(sortie) || sortie < 1 || sortie > 3
+                if (!Number.isInteger(id) || !Number.isInteger(attacklap) || attacklap < 0
                     || !Number.isInteger(boss) || boss < 1 || boss > 5
                     || !Number.isInteger(overtime) || (defeat && (overtime < 20 || overtime > 90))) {
-                    setStatus('凸数は1～3、持ち越し時間は20～90の整数で入力してください。', 'error');
+                    setStatus('周回数は0以上、持ち越し時間は20～90の整数で入力してください。', 'error');
                     return;
                 }
-                histories.push({ id, sortie, boss, defeat, overtime });
+                histories.push({ id, attacklap, boss, defeat, overtime });
             }
 
             saveButton.disabled = true;

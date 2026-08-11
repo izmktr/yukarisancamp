@@ -573,6 +573,11 @@ body {
     white-space: nowrap;
 }
 
+.clan-history-delete-button {
+    width: auto;
+    white-space: nowrap;
+}
+
 .bosscount-display {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));

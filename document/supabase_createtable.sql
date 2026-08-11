@@ -143,6 +143,7 @@ create table if not exists public.attack_histories (
   sortie integer not null,
   messageid text null,
   boss integer not null,
+  attacklap integer null,
   overtime integer not null,
   defeat boolean not null,
   sortiecount integer not null,
@@ -235,6 +236,7 @@ begin
       sortie,
       messageid,
       boss,
+      attacklap,
       overtime,
       defeat,
       sortiecount,
@@ -248,6 +250,7 @@ begin
       target_member.sortie,
       null,
       target_member.attackboss,
+      target_member.attacklap,
       case when p_action = 'defeat' then p_overtime else 0 end,
       p_action = 'defeat',
       case when p_action = 'defeat' then 1 else 2 end,
@@ -293,6 +296,66 @@ grant execute on function public.finish_clan_member_attack(
   integer
 ) to service_role;
 
+create or replace function public.delete_clan_member_attack_history(
+  p_source public.clan_source,
+  p_clanid text,
+  p_membersource public.clan_source,
+  p_memberid text,
+  p_day date,
+  p_history_id bigint
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  removed_sortie integer;
+  changed_at timestamptz := now();
+begin
+  delete from public.attack_histories
+  where id = p_history_id
+    and source = p_source
+    and clanid = p_clanid
+    and membersource = p_membersource
+    and memberid = p_memberid
+    and day = p_day
+  returning sortie into removed_sortie;
+
+  if removed_sortie is null then
+    raise exception 'Attack history was not found';
+  end if;
+
+  update public.attack_histories
+  set sortie = sortie - 1,
+      updatetime = changed_at
+  where source = p_source
+    and clanid = p_clanid
+    and membersource = p_membersource
+    and memberid = p_memberid
+    and day = p_day
+    and sortie > removed_sortie;
+end;
+$$;
+
+revoke all on function public.delete_clan_member_attack_history(
+  public.clan_source,
+  text,
+  public.clan_source,
+  text,
+  date,
+  bigint
+) from public, anon, authenticated;
+
+grant execute on function public.delete_clan_member_attack_history(
+  public.clan_source,
+  text,
+  public.clan_source,
+  text,
+  date,
+  bigint
+) to service_role;
+
 -- Dummy seed data (re-runnable)
 insert into public.setting_clanbattle (
   id,
@@ -331,4 +394,6 @@ begin
   end if;
 end
 $$;
+
+notify pgrst, 'reload schema';
 

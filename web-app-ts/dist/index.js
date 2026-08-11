@@ -649,14 +649,20 @@ function normalizeAttackHistoryRow(raw) {
     const id = Number(source.id);
     const sortie = Number(source.sortie);
     const boss = Number(source.boss);
+    const attacklap = source.attacklap === null || source.attacklap === undefined
+        ? null
+        : Number(source.attacklap);
     const overtime = Number(source.overtime);
-    if (![id, sortie, boss, overtime].every(Number.isFinite) || typeof source.defeat !== 'boolean') {
+    if (![id, sortie, boss, overtime].every(Number.isFinite)
+        || (attacklap !== null && !Number.isFinite(attacklap))
+        || typeof source.defeat !== 'boolean') {
         return null;
     }
     return {
         id: Math.trunc(id),
         sortie: Math.trunc(sortie),
         boss: Math.trunc(boss),
+        attacklap: attacklap === null ? null : Math.trunc(attacklap),
         overtime: Math.trunc(overtime),
         defeat: source.defeat
     };
@@ -664,7 +670,7 @@ function normalizeAttackHistoryRow(raw) {
 async function supabaseSelectAttackHistories(config, member, day) {
     const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_ATTACK_HISTORIES_TABLE);
     const query = new URLSearchParams({
-        select: 'id,sortie,boss,overtime,defeat',
+        select: 'id,sortie,boss,attacklap,overtime,defeat',
         source: `eq.${member.source}`,
         clanid: `eq.${member.clanid}`,
         membersource: `eq.${member.membersource}`,
@@ -956,19 +962,19 @@ function normalizeAttackHistoryEditInput(raw) {
     }
     const source = raw;
     const id = Number(source.id);
-    const sortie = Number(source.sortie);
+    const attacklap = Number(source.attacklap);
     const boss = Number(source.boss);
     const defeat = source.defeat;
     const overtime = Number(source.overtime);
     if (!Number.isInteger(id) || id < 1
-        || !Number.isInteger(sortie) || sortie < 1 || sortie > 3
+        || !Number.isInteger(attacklap) || attacklap < 0
         || !Number.isInteger(boss) || boss < 1 || boss > 5
         || typeof defeat !== 'boolean'
         || !Number.isInteger(overtime)
         || (defeat && (overtime < 20 || overtime > 90))) {
         return null;
     }
-    return { id, sortie, boss, defeat, overtime: defeat ? overtime : 0 };
+    return { id, attacklap, boss, defeat, overtime: defeat ? overtime : 0 };
 }
 async function supabaseUpdateAttackHistory(config, member, day, input) {
     const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_ATTACK_HISTORIES_TABLE);
@@ -989,7 +995,7 @@ async function supabaseUpdateAttackHistory(config, member, day, input) {
             Prefer: 'return=representation'
         },
         body: JSON.stringify({
-            sortie: input.sortie,
+            attacklap: input.attacklap,
             boss: input.boss,
             defeat: input.defeat,
             overtime: input.overtime,
@@ -1004,6 +1010,29 @@ async function supabaseUpdateAttackHistory(config, member, day, input) {
     const rows = await response.json();
     if (!Array.isArray(rows) || rows.length === 0) {
         throw new Error('Attack history was not found');
+    }
+}
+async function supabaseDeleteAttackHistory(config, member, day, historyId) {
+    const endpointUrl = `${config.url.replace(/\/$/, '')}/rest/v1/rpc/delete_clan_member_attack_history`;
+    const response = await fetch(endpointUrl, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            apikey: config.secretKey,
+            Authorization: `Bearer ${config.secretKey}`
+        },
+        body: JSON.stringify({
+            p_source: member.source,
+            p_clanid: member.clanid,
+            p_membersource: member.membersource,
+            p_memberid: member.memberid,
+            p_day: day,
+            p_history_id: historyId
+        })
+    });
+    if (!response.ok) {
+        const responseText = await response.text();
+        throw new Error(`Supabase delete attack history failed: ${response.status} ${responseText}`);
     }
 }
 function normalizeUserOwnedCharacters(rawValue) {
@@ -1577,6 +1606,40 @@ app.post('/api/clan/attack-history/save', ensureDiscordServerLinked, express_1.d
     catch (error) {
         console.error('Failed to update attack histories:', error);
         const errorMessage = error instanceof Error ? error.message : 'Failed to update attack histories';
+        return res.status(502).json({ error: errorMessage });
+    }
+});
+app.post('/api/clan/attack-history/delete', ensureDiscordServerLinked, express_1.default.json(), async (req, res) => {
+    const historyId = Number(req.body?.id);
+    if (!Number.isInteger(historyId) || historyId < 1) {
+        return res.status(400).json({ error: 'Invalid attack history ID' });
+    }
+    const config = getSupabaseConfig();
+    if (!config) {
+        return res.status(503).json({ error: 'Supabase is not configured' });
+    }
+    const userSession = req.session.user;
+    const googleUserId = typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '';
+    if (!googleUserId) {
+        return res.status(403).json({ error: 'User is not authenticated' });
+    }
+    try {
+        const profile = await supabaseSelectUserProfileByGoogleUserId(config, googleUserId);
+        const discordId = profile && isNonEmptyTrimmedString(profile.discordId) ? profile.discordId.trim() : '';
+        if (!discordId) {
+            return res.status(403).json({ error: 'Discord account is not linked' });
+        }
+        const members = await supabaseSelectClanMembersByDiscordServer(config, getSessionDiscordServer(req));
+        const currentMember = members.find((member) => (member.membersource === 'discord' && member.memberid === discordId));
+        if (!currentMember) {
+            return res.status(404).json({ error: 'Clan member was not found' });
+        }
+        await supabaseDeleteAttackHistory(config, currentMember, (0, baseDate_1.getBaseDate)(), historyId);
+        return res.json({ success: true });
+    }
+    catch (error) {
+        console.error('Failed to delete attack history:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Failed to delete attack history';
         return res.status(502).json({ error: errorMessage });
     }
 });
