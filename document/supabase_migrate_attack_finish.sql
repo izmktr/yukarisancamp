@@ -30,10 +30,6 @@ begin
     raise exception 'Invalid attack action';
   end if;
 
-  if p_action = 'defeat' and (p_overtime < 20 or p_overtime > 90) then
-    raise exception 'Overtime must be between 20 and 90';
-  end if;
-
   select *
   into strict target_member
   from public.clan_members
@@ -45,6 +41,15 @@ begin
 
   if target_member.attackboss = 0 then
     raise exception 'Attack is not active';
+  end if;
+
+  if p_action = 'defeat' then
+    if coalesce(target_member.overattack, 0) = 1 and p_overtime <> 0 then
+      raise exception 'Carry-over attack overtime must be zero';
+    elsif coalesce(target_member.overattack, 0) <> 1
+      and (p_overtime < 20 or p_overtime > 90) then
+      raise exception 'Overtime must be between 20 and 90';
+    end if;
   end if;
 
   if p_action <> 'cancel' then
@@ -61,9 +66,17 @@ begin
       null,
       target_member.attackboss,
       target_member.attacklap,
-      case when p_action = 'defeat' then p_overtime else 0 end,
+      case
+        when coalesce(target_member.overattack, 0) = 1 then 0
+        when p_action = 'defeat' then p_overtime
+        else 0
+      end,
       p_action = 'defeat',
-      case when p_action = 'defeat' then 1 else 2 end,
+      case
+        when coalesce(target_member.overattack, 0) = 1 then 1
+        when p_action = 'defeat' then 1
+        else 2
+      end,
       changed_at
     );
   end if;
@@ -111,20 +124,40 @@ set search_path = public
 as $$
 declare
   removed_sortie integer;
+  removed_overtime integer;
   changed_at timestamptz := now();
 begin
-  delete from public.attack_histories
+  select sortie, overtime
+  into removed_sortie, removed_overtime
+  from public.attack_histories
   where id = p_history_id
     and source = p_source
     and clanid = p_clanid
     and membersource = p_membersource
     and memberid = p_memberid
     and day = p_day
-  returning sortie into removed_sortie;
+  for update;
 
   if removed_sortie is null then
     raise exception 'Attack history was not found';
   end if;
+
+  if removed_overtime > 0 and exists (
+    select 1
+    from public.attack_histories
+    where id <> p_history_id
+      and source = p_source
+      and clanid = p_clanid
+      and membersource = p_membersource
+      and memberid = p_memberid
+      and day = p_day
+      and sortie = removed_sortie
+  ) then
+    raise exception 'Carry-over source history cannot be deleted after use';
+  end if;
+
+  delete from public.attack_histories
+  where id = p_history_id;
 
   update public.attack_histories
   set sortie = sortie - 1,

@@ -38,7 +38,12 @@
             />
             <div class="clan-attack-active-actions">
                 <button id="clan-attack-complete-button" type="button" class="btn btn-primary">完了</button>
-                <button id="clan-attack-defeat-button" type="button" class="btn btn-primary">討伐</button>
+                <button
+                    id="clan-attack-defeat-button"
+                    type="button"
+                    class="btn btn-primary"
+                    data-overattack="<%= Number(data.currentMember.overattack) === 1 ? '1' : '0' %>"
+                >討伐</button>
                 <button id="clan-attack-cancel-button" type="button" class="btn btn-danger">キャンセル</button>
             </div>
             <p id="clan-attack-active-action-status" class="settings-status" aria-live="polite"></p>
@@ -87,9 +92,23 @@
                         const sortie = Number(history.sortie);
                         return Number.isFinite(sortie) ? Math.max(max, sortie) : max;
                     }, 0);
+                    const historyCountBySortie = currentAttackHistories.reduce((counts, history) => {
+                        const sortie = Number(history.sortie);
+                        counts.set(sortie, (counts.get(sortie) || 0) + 1);
+                        return counts;
+                    }, new Map());
+                    const carryOverHistories = currentAttackHistories.filter((history) => (
+                        history.defeat === true
+                        && historyCountBySortie.get(Number(history.sortie)) === 1
+                        && Number.isInteger(Number(history.overtime))
+                        && Number(history.overtime) >= 20
+                        && Number(history.overtime) <= 90
+                    ));
                     const canStartAttack = data.currentMember
                         && Number(data.currentMember.attackboss) === 0
                         && maxSortie < 3;
+                    const canStartCarryOverAttack = data.currentMember
+                        && Number(data.currentMember.attackboss) === 0;
                 %>
                 <section class="clandata-section">
                     <div class="clan-bosscount-header">
@@ -110,6 +129,7 @@
                                 } else if (currentCount >= minBossCount + 2) {
                                     countStateClass = 'bosscount-far-min';
                                 }
+                                const isAttackDisabled = currentCount >= minBossCount + 2;
                                 const attackingMembers = clanMembers.filter((member) => {
                                     const attackBoss = Number(member.attackboss);
                                     return Number.isInteger(attackBoss)
@@ -142,7 +162,20 @@
                                         class="btn btn-primary clan-attack-button"
                                         data-boss="<%= idx + 1 %>"
                                         aria-label="ボス<%= idx + 1 %>を攻撃"
-                                    >攻撃</button>
+                                        <%= isAttackDisabled ? 'disabled' : '' %>
+                                    >新規攻撃</button>
+                                <% } %>
+                                <% if (canStartCarryOverAttack) { %>
+                                    <% carryOverHistories.forEach((history) => { %>
+                                        <button
+                                            type="button"
+                                            class="btn clan-attack-button clan-carryover-attack-button"
+                                            data-boss="<%= idx + 1 %>"
+                                            data-history-id="<%= Number(history.id) %>"
+                                            aria-label="<%= Number(history.overtime) %>秒の持ち越しでボス<%= idx + 1 %>を攻撃"
+                                            <%= isAttackDisabled ? 'disabled' : '' %>
+                                        ><%= Number(history.overtime) %>s攻撃</button>
+                                    <% }); %>
                                 <% } %>
                             </div>
                         <% }); %>
@@ -188,14 +221,23 @@
                                             ? bossNames[bossIndex].trim()
                                             : '';
                                         const bossName = configuredBossName || (bossIndex >= 0 ? `ボス ${bossIndex + 1}` : 'ボス不明');
+                                        const hasSameSortieHistory = attackHistories.some((otherHistory) => (
+                                            Number(otherHistory.id) !== Number(history.id)
+                                            && Number(otherHistory.sortie) === Number(history.sortie)
+                                        ));
+                                        const hasEditableOvertime = !hasSameSortieHistory || Number(history.overtime) > 0;
+                                        const isDefeatOnly = hasSameSortieHistory && Number(history.overtime) > 0;
+                                        const isDeleteDisabled = isDefeatOnly;
+                                        const isUnusedCarryOver = !hasSameSortieHistory && Number(history.overtime) > 0;
                                     %>
                                     <tr
-                                        class="clan-attack-history-row"
+                                        class="clan-attack-history-row <%= isUnusedCarryOver ? 'clan-attack-history-carryover-source' : '' %>"
                                         data-history-id="<%= Number(history.id) %>"
                                         data-original-attacklap="<%= Number.isInteger(history.attacklap) ? Number(history.attacklap) : '' %>"
                                         data-original-boss="<%= bossNumber %>"
                                         data-original-defeat="<%= history.defeat === true ? 'true' : 'false' %>"
                                         data-original-overtime="<%= Number(history.overtime) %>"
+                                        data-fixed-overtime="<%= hasEditableOvertime ? '' : '0' %>"
                                     >
                                         <td>
                                             <span><%= Number(history.sortie) %>凸</span>
@@ -214,18 +256,28 @@
                                             </select>
                                         </td>
                                         <td>
-                                            <span class="clan-history-display"><%= history.defeat === true ? `（討伐:${Number(history.overtime)}秒）` : '未討伐' %></span>
+                                            <span class="clan-history-display"><%= history.defeat === true
+                                                ? Number(history.overtime) > 0 ? `討伐:${Number(history.overtime)}秒` : '討伐'
+                                                : '未討伐' %></span>
                                             <div class="clan-history-input clan-history-state-editor">
                                                 <select class="clan-history-defeat-input">
-                                                    <option value="false" <%= history.defeat !== true ? 'selected' : '' %>>未討伐</option>
+                                                    <% if (!isDefeatOnly) { %>
+                                                        <option value="false" <%= history.defeat !== true ? 'selected' : '' %>>未討伐</option>
+                                                    <% } %>
                                                     <option value="true" <%= history.defeat === true ? 'selected' : '' %>>討伐</option>
                                                 </select>
-                                                <input class="clan-history-overtime-input" type="number" min="20" max="90" step="1" value="<%= Number(history.overtime) %>" aria-label="持ち越し時間" />
-                                                <span class="clan-history-overtime-unit">秒</span>
+                                                <% if (hasEditableOvertime) { %>
+                                                    <input class="clan-history-overtime-input" type="number" min="20" max="90" step="1" value="<%= Number(history.overtime) %>" aria-label="持ち越し時間" />
+                                                    <span class="clan-history-overtime-unit">秒</span>
+                                                <% } %>
                                             </div>
                                         </td>
                                         <td>
-                                            <button type="button" class="clan-history-input clan-history-delete-button btn btn-danger">削除</button>
+                                            <button
+                                                type="button"
+                                                class="clan-history-input clan-history-delete-button btn btn-danger"
+                                                <%= isDeleteDisabled ? 'disabled title="持ち越し使用後の討伐履歴は削除できません"' : '' %>
+                                            >削除</button>
                                         </td>
                                     </tr>
                                 <% }); %>
@@ -392,10 +444,14 @@
                 const attacklap = Number(row.querySelector('.clan-history-attacklap-input')?.value);
                 const boss = Number(row.querySelector('.clan-history-boss-input')?.value);
                 const defeat = row.querySelector('.clan-history-defeat-input')?.value === 'true';
-                const overtime = defeat ? Number(row.querySelector('.clan-history-overtime-input')?.value) : 0;
+                const fixedOvertime = row.getAttribute('data-fixed-overtime');
+                const overtime = fixedOvertime === '0'
+                    ? 0
+                    : defeat ? Number(row.querySelector('.clan-history-overtime-input')?.value) : 0;
                 if (!Number.isInteger(id) || !Number.isInteger(attacklap) || attacklap < 0
                     || !Number.isInteger(boss) || boss < 1 || boss > 5
-                    || !Number.isInteger(overtime) || (defeat && (overtime < 20 || overtime > 90))) {
+                    || !Number.isInteger(overtime)
+                    || (defeat && fixedOvertime !== '0' && (overtime < 20 || overtime > 90))) {
                     setStatus('周回数は0以上、持ち越し時間は20～90の整数で入力してください。', 'error');
                     return;
                 }
@@ -496,6 +552,11 @@
         completeButton.addEventListener('click', () => submitAction('complete'));
         cancelButton.addEventListener('click', () => submitAction('cancel'));
         defeatButton.addEventListener('click', () => {
+            if (defeatButton.getAttribute('data-overattack') === '1') {
+                submitAction('defeat', 0);
+                return;
+            }
+
             const overtime = findOvertimeInMessage();
             if (overtime !== null) {
                 submitAction('defeat', overtime);
@@ -560,7 +621,12 @@
         attackButtons.forEach((button) => {
             button.addEventListener('click', async () => {
                 const attackBoss = Number(button.getAttribute('data-boss'));
+                const historyIdText = button.getAttribute('data-history-id');
+                const historyId = historyIdText === null ? null : Number(historyIdText);
                 if (!Number.isInteger(attackBoss) || attackBoss < 1 || attackBoss > 5) {
+                    return;
+                }
+                if (historyId !== null && (!Number.isInteger(historyId) || historyId < 1)) {
                     return;
                 }
 
@@ -570,12 +636,14 @@
                 setStatus('攻撃開始を登録しています...', '');
 
                 try {
-                    const response = await fetch('/api/clan/attack/start', {
+                    const response = await fetch(historyId === null
+                        ? '/api/clan/attack/start'
+                        : '/api/clan/attack/carryover/start', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify({ attackBoss })
+                        body: JSON.stringify(historyId === null ? { attackBoss } : { attackBoss, historyId })
                     });
 
                     if (!response.ok) {

@@ -547,6 +547,10 @@ body {
     border-bottom: none;
 }
 
+.clan-attack-history-carryover-source td {
+    background: #fff3bf;
+}
+
 .clan-history-input {
     display: none;
 }

@@ -612,6 +612,14 @@ function normalizeDiscordServerToClanId(value: string): string {
   return /^\d+$/.test(trimmed) ? trimmed : '';
 }
 
+function canAttackClanBoss(bosslaps: number[], attackBoss: number): boolean {
+  return bosslaps.length === 5
+    && Number.isInteger(attackBoss)
+    && attackBoss >= 1
+    && attackBoss <= 5
+    && bosslaps[attackBoss - 1] < Math.min(...bosslaps) + 2;
+}
+
 function toIsoStringOrEmpty(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
@@ -831,7 +839,7 @@ async function supabaseSelectAttackHistories(
     membersource: `eq.${member.membersource}`,
     memberid: `eq.${member.memberid}`,
     day: `eq.${day}`,
-    order: 'sortie.asc,defeat.asc'
+    order: 'sortie.asc,overtime.desc'
   });
 
   const response = await fetch(`${endpointUrl}?${query.toString()}`, {
@@ -855,7 +863,7 @@ async function supabaseSelectAttackHistories(
   return rows
     .map((row) => normalizeAttackHistoryRow(row))
     .filter((row): row is AttackHistoryRow => !!row)
-    .sort((left, right) => left.sortie - right.sortie || Number(left.defeat) - Number(right.defeat));
+    .sort((left, right) => left.sortie - right.sortie || right.overtime - left.overtime);
 }
 
 async function supabaseDeleteClanMember(
@@ -1106,7 +1114,8 @@ async function supabaseStartClanMemberAttack(
   member: ClanMemberRow,
   attackBoss: number,
   attackLap: number,
-  sortie: number
+  sortie: number,
+  carryOvertime: number | null = null
 ): Promise<void> {
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLAN_MEMBERS_TABLE);
   const query = new URLSearchParams({
@@ -1117,6 +1126,27 @@ async function supabaseStartClanMemberAttack(
     attackboss: 'eq.0'
   });
 
+  const attacktime = [...member.attacktime];
+  if (carryOvertime !== null) {
+    while (attacktime.length < sortie) {
+      attacktime.push(null);
+    }
+    attacktime[sortie - 1] = carryOvertime;
+  }
+
+  const updatePayload: Record<string, unknown> = {
+    attackboss: attackBoss,
+    attacklap: attackLap,
+    sortie,
+    overattack: carryOvertime === null ? 0 : 1,
+    damage: 0,
+    attackmessage: '',
+    updated_at: new Date().toISOString()
+  };
+  if (carryOvertime !== null) {
+    updatePayload.attacktime = attacktime;
+  }
+
   const response = await fetch(`${endpointUrl}?${query.toString()}`, {
     method: 'PATCH',
     headers: {
@@ -1125,15 +1155,7 @@ async function supabaseStartClanMemberAttack(
       Authorization: `Bearer ${config.secretKey}`,
       Prefer: 'return=representation'
     },
-    body: JSON.stringify({
-      attackboss: attackBoss,
-      attacklap: attackLap,
-      sortie,
-      overattack: 0,
-      damage: 0,
-      attackmessage: '',
-      updated_at: new Date().toISOString()
-    })
+    body: JSON.stringify(updatePayload)
   });
 
   if (!response.ok) {
@@ -1201,7 +1223,7 @@ function normalizeAttackHistoryEditInput(raw: unknown): AttackHistoryEditInput |
     || !Number.isInteger(boss) || boss < 1 || boss > 5
     || typeof defeat !== 'boolean'
     || !Number.isInteger(overtime)
-    || (defeat && (overtime < 20 || overtime > 90))) {
+    || (defeat && overtime !== 0 && (overtime < 20 || overtime > 90))) {
     return null;
   }
 
@@ -1839,6 +1861,9 @@ app.post('/api/clan/attack/start', ensureDiscordServerLinked, express.json(), as
     if (!clan || clan.bosslaps.length !== 5) {
       return res.status(404).json({ error: 'Clan boss laps were not found' });
     }
+    if (!canAttackClanBoss(clan.bosslaps, attackBoss)) {
+      return res.status(409).json({ error: 'This boss cannot be attacked at its current lap' });
+    }
 
     const currentMember = members.find((member) => (
       member.membersource === 'discord' && member.memberid === discordId
@@ -1869,6 +1894,81 @@ app.post('/api/clan/attack/start', ensureDiscordServerLinked, express.json(), as
   }
 });
 
+app.post('/api/clan/attack/carryover/start', ensureDiscordServerLinked, express.json(), async (req, res) => {
+  const attackBoss = Number(req.body?.attackBoss);
+  const historyId = Number(req.body?.historyId);
+  if (!Number.isInteger(attackBoss) || attackBoss < 1 || attackBoss > 5
+    || !Number.isInteger(historyId) || historyId < 1) {
+    return res.status(400).json({ error: 'Invalid carry-over attack' });
+  }
+
+  const config = getSupabaseConfig();
+  if (!config) {
+    return res.status(503).json({ error: 'Supabase is not configured' });
+  }
+
+  const userSession = req.session.user as any;
+  const googleUserId = typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '';
+  if (!googleUserId) {
+    return res.status(403).json({ error: 'User is not authenticated' });
+  }
+
+  try {
+    const profile = await supabaseSelectUserProfileByGoogleUserId(config, googleUserId);
+    const discordId = profile && isNonEmptyTrimmedString(profile.discordId) ? profile.discordId.trim() : '';
+    if (!discordId) {
+      return res.status(403).json({ error: 'Discord account is not linked' });
+    }
+
+    const discordServer = getSessionDiscordServer(req);
+    const [clan, members] = await Promise.all([
+      supabaseSelectClanByDiscordServer(config, discordServer),
+      supabaseSelectClanMembersByDiscordServer(config, discordServer)
+    ]);
+    if (!clan || clan.bosslaps.length !== 5) {
+      return res.status(404).json({ error: 'Clan boss laps were not found' });
+    }
+    if (!canAttackClanBoss(clan.bosslaps, attackBoss)) {
+      return res.status(409).json({ error: 'This boss cannot be attacked at its current lap' });
+    }
+
+    const currentMember = members.find((member) => (
+      member.membersource === 'discord' && member.memberid === discordId
+    ));
+    if (!currentMember) {
+      return res.status(404).json({ error: 'Clan member was not found' });
+    }
+    if (currentMember.attackboss !== 0) {
+      return res.status(409).json({ error: 'Attack has already started' });
+    }
+
+    const attackHistories = await supabaseSelectAttackHistories(config, currentMember, getBaseDate());
+    const carryHistory = attackHistories.find((history) => history.id === historyId);
+    const sameSortieCount = carryHistory
+      ? attackHistories.filter((history) => history.sortie === carryHistory.sortie).length
+      : 0;
+    if (!carryHistory || !carryHistory.defeat || sameSortieCount !== 1
+      || carryHistory.overtime < 20 || carryHistory.overtime > 90) {
+      return res.status(409).json({ error: 'Carry-over attack is no longer available' });
+    }
+
+    const attackLap = clan.bosslaps[attackBoss - 1];
+    await supabaseStartClanMemberAttack(
+      config,
+      currentMember,
+      attackBoss,
+      attackLap,
+      carryHistory.sortie,
+      carryHistory.overtime
+    );
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to start carry-over attack:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to start carry-over attack';
+    return res.status(502).json({ error: errorMessage });
+  }
+});
+
 app.post('/api/clan/attack/finish', ensureDiscordServerLinked, express.json(), async (req, res) => {
   const action = req.body?.action;
   if (action !== 'complete' && action !== 'defeat' && action !== 'cancel') {
@@ -1876,8 +1976,8 @@ app.post('/api/clan/attack/finish', ensureDiscordServerLinked, express.json(), a
   }
 
   const overtime = action === 'defeat' ? Number(req.body?.overtime) : 0;
-  if (action === 'defeat' && (!Number.isInteger(overtime) || overtime < 20 || overtime > 90)) {
-    return res.status(400).json({ error: 'Overtime must be between 20 and 90' });
+  if (!Number.isInteger(overtime)) {
+    return res.status(400).json({ error: 'Invalid overtime' });
   }
 
   const config = getSupabaseConfig();
@@ -1907,6 +2007,16 @@ app.post('/api/clan/attack/finish', ensureDiscordServerLinked, express.json(), a
     }
     if (currentMember.attackboss === 0) {
       return res.status(409).json({ error: 'Attack is not active' });
+    }
+    const isCarryOverAttack = currentMember.overattack === 1;
+    if (action === 'defeat'
+      && ((!isCarryOverAttack && (overtime < 20 || overtime > 90))
+        || (isCarryOverAttack && overtime !== 0))) {
+      return res.status(400).json({
+        error: isCarryOverAttack
+          ? 'Carry-over attack overtime must be zero'
+          : 'Overtime must be between 20 and 90'
+      });
     }
 
     await supabaseFinishClanMemberAttack(config, currentMember, action, overtime);
@@ -1952,6 +2062,28 @@ app.post('/api/clan/attack-history/save', ensureDiscordServerLinked, express.jso
     }
 
     const day = getBaseDate();
+    const currentHistories = await supabaseSelectAttackHistories(config, currentMember, day);
+    for (const history of histories as AttackHistoryEditInput[]) {
+      const currentHistory = currentHistories.find((item) => item.id === history.id);
+      if (!currentHistory) {
+        return res.status(404).json({ error: 'Attack history was not found' });
+      }
+      const hasSameSortieHistory = currentHistories.some((item) => (
+        item.id !== currentHistory.id && item.sortie === currentHistory.sortie
+      ));
+      const isZeroOvertimeFixed = hasSameSortieHistory && currentHistory.overtime === 0;
+      if (history.defeat && !isZeroOvertimeFixed
+        && (history.overtime < 20 || history.overtime > 90)) {
+        return res.status(400).json({ error: 'Overtime must be between 20 and 90' });
+      }
+      if (hasSameSortieHistory && currentHistory.overtime > 0
+        && (!history.defeat || history.overtime < 20 || history.overtime > 90)) {
+        return res.status(409).json({ error: 'Carry-over source history must remain defeated' });
+      }
+      if (hasSameSortieHistory && currentHistory.overtime === 0 && history.overtime !== 0) {
+        return res.status(409).json({ error: 'Carry-over attack history overtime must remain zero' });
+      }
+    }
     for (const history of histories as AttackHistoryEditInput[]) {
       await supabaseUpdateAttackHistory(config, currentMember, day, history);
     }
@@ -1995,7 +2127,20 @@ app.post('/api/clan/attack-history/delete', ensureDiscordServerLinked, express.j
       return res.status(404).json({ error: 'Clan member was not found' });
     }
 
-    await supabaseDeleteAttackHistory(config, currentMember, getBaseDate(), historyId);
+    const day = getBaseDate();
+    const attackHistories = await supabaseSelectAttackHistories(config, currentMember, day);
+    const targetHistory = attackHistories.find((history) => history.id === historyId);
+    if (!targetHistory) {
+      return res.status(404).json({ error: 'Attack history was not found' });
+    }
+    const hasSameSortieHistory = attackHistories.some((history) => (
+      history.id !== targetHistory.id && history.sortie === targetHistory.sortie
+    ));
+    if (targetHistory.overtime > 0 && hasSameSortieHistory) {
+      return res.status(409).json({ error: 'Carry-over source history cannot be deleted after use' });
+    }
+
+    await supabaseDeleteAttackHistory(config, currentMember, day, historyId);
     return res.json({ success: true });
   } catch (error) {
     console.error('Failed to delete attack history:', error);
