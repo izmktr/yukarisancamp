@@ -1,5 +1,6 @@
 <div class="page-content clan-page">
     <% const data = clanPageData || { discordServer: '', clan: null, members: [], currentMember: null, attackHistories: [], bossNames: [], bossHp: [], baseDate: '', refreshToken: 'none:0', loadError: '' }; %>
+    <h2><%= data.clan && data.clan.name ? data.clan.name : '未登録' %></h2>
     <% if (data.currentMember && Number(data.currentMember.attackboss) !== 0) { %>
         <%
             const activeBossNumber = Number(data.currentMember.attackboss);
@@ -69,7 +70,6 @@
             </form>
         </dialog>
     <% } %>
-    <h2><%= data.clan && data.clan.name ? data.clan.name : '未登録' %></h2>
 
     <input type="hidden" id="clan-refresh-token" value="<%= data.refreshToken %>" />
     <input type="hidden" id="clan-source" value="<%= data.clan && data.clan.source ? data.clan.source : '' %>" />
@@ -785,14 +785,22 @@
     }
 </script>
 
-<script type="module">
-    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
     function initializeClanRealtimeSubscription() {
         const sourceInput = document.getElementById('clan-source');
         const clanIdInput = document.getElementById('clan-id');
         const source = sourceInput ? String(sourceInput.value || '').trim() : '';
         const clanId = clanIdInput ? String(clanIdInput.value || '').trim() : '';
+        let isReloading = false;
+
+        const reloadPage = () => {
+            if (isReloading) {
+                return;
+            }
+            isReloading = true;
+            window.location.reload();
+        };
 
         if (!source || !/^\d+$/.test(clanId) || !window.__SUPABASE_PUBLIC_CONFIG__) {
             console.warn('Supabase Realtime を開始できません: source/clanId/config が不足しています。');
@@ -806,9 +814,13 @@
             console.warn('Supabase Realtime を開始できません: SUPABASE_URL または SUPABASE_PUBLISHABLE_KEY が不足しています。');
             return;
         }
+        if (!window.supabase || typeof window.supabase.createClient !== 'function') {
+            console.error('Supabase Realtime を開始できません: Supabaseクライアントの読み込みに失敗しました。');
+            return;
+        }
 
         try {
-            const client = createClient(supabaseUrl, publishableKey);
+            const client = window.supabase.createClient(supabaseUrl, publishableKey);
             const channel = client
                 .channel(`clan-realtime-${source}-${clanId}`)
                 .on('postgres_changes', {
@@ -822,7 +834,7 @@
                     const nextClanId = next && next.clanid !== undefined && next.clanid !== null ? String(next.clanid).trim() : '';
 
                     if (nextSource === source && nextClanId === clanId) {
-                        window.location.reload();
+                        reloadPage();
                     }
                 })
                 .on('postgres_changes', {
@@ -836,11 +848,14 @@
                     const rowClanId = row && row.clanid !== undefined && row.clanid !== null ? String(row.clanid).trim() : '';
 
                     if (rowSource === source && rowClanId === clanId) {
-                        window.location.reload();
+                        reloadPage();
                     }
                 })
                 .subscribe((status, error) => {
                     console.log('Supabase Realtime subscription status:', status, error || '');
+                    if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                        console.error('Supabase Realtimeの購読に失敗しました:', status, error || '');
+                    }
                 });
 
             window.addEventListener('beforeunload', () => {
