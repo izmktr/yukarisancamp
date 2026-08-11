@@ -438,9 +438,21 @@ body {
     flex-wrap: wrap;
 }
 
+.clan-overtime-anchor {
+    position: relative;
+    display: flex;
+}
+
 .clan-overtime-dialog {
-    width: min(420px, calc(100% - 2rem));
+    position: absolute;
+    inset: auto;
+    top: calc(100% + 0.5rem);
+    left: 50%;
+    z-index: 10;
+    width: min(280px, calc(100vw - 2rem));
+    margin: 0;
     padding: 0;
+    transform: translateX(-50%);
     border: 1px solid #d7dce6;
     border-radius: 8px;
     background: #ffffff;
@@ -453,22 +465,30 @@ body {
 }
 
 .clan-overtime-dialog-content {
-    padding: 1.25rem;
+    padding: 1rem;
 }
 
 .clan-overtime-dialog-content h3 {
-    margin: 0 0 1rem;
+    margin: 0 0 0.75rem;
     color: #26334d;
     font-size: 1.05rem;
 }
 
+.clan-overtime-field {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
 .clan-overtime-input {
-    width: 100%;
-    min-height: 42px;
-    padding: 0 0.75rem;
+    width: 5.5ch;
+    min-height: 40px;
+    padding: 0 0.35rem;
     border: 1px solid #aeb8ca;
     border-radius: 6px;
     font: inherit;
+    font-size: 1.1rem;
+    text-align: right;
 }
 
 .clan-overtime-dialog-actions {
@@ -484,8 +504,16 @@ body {
         gap: 0.2rem;
     }
 
-    .clan-attack-active-actions .btn {
+    .clan-attack-active-actions > .btn {
         flex: 1 1 100px;
+    }
+
+    .clan-overtime-anchor {
+        flex: 1 1 100px;
+    }
+
+    .clan-overtime-anchor > .btn {
+        width: 100%;
     }
 }
 

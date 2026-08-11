@@ -159,15 +159,26 @@ begin
   delete from public.attack_histories
   where id = p_history_id;
 
-  update public.attack_histories
-  set sortie = sortie - 1,
-      updatetime = changed_at
-  where source = p_source
-    and clanid = p_clanid
-    and membersource = p_membersource
-    and memberid = p_memberid
-    and day = p_day
-    and sortie > removed_sortie;
+  if not exists (
+    select 1
+    from public.attack_histories
+    where source = p_source
+      and clanid = p_clanid
+      and membersource = p_membersource
+      and memberid = p_memberid
+      and day = p_day
+      and sortie = removed_sortie
+  ) then
+    update public.attack_histories
+    set sortie = sortie - 1,
+        updatetime = changed_at
+    where source = p_source
+      and clanid = p_clanid
+      and membersource = p_membersource
+      and memberid = p_memberid
+      and day = p_day
+      and sortie > removed_sortie;
+  end if;
 end;
 $$;
 

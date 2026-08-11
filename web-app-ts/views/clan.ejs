@@ -39,36 +39,41 @@
             />
             <div class="clan-attack-active-actions">
                 <button id="clan-attack-complete-button" type="button" class="btn btn-primary">完了</button>
-                <button
-                    id="clan-attack-defeat-button"
-                    type="button"
-                    class="btn btn-primary"
-                    data-overattack="<%= Number(data.currentMember.overattack) === 1 ? '1' : '0' %>"
-                >討伐</button>
+                <div class="clan-overtime-anchor">
+                    <button
+                        id="clan-attack-defeat-button"
+                        type="button"
+                        class="btn btn-primary"
+                        data-overattack="<%= Number(data.currentMember.overattack) === 1 ? '1' : '0' %>"
+                    >討伐</button>
+                    <dialog id="clan-overtime-dialog" class="clan-overtime-dialog" aria-labelledby="clan-overtime-dialog-title">
+                        <form method="dialog" class="clan-overtime-dialog-content">
+                            <h3 id="clan-overtime-dialog-title">持ち越し時間</h3>
+                            <div class="clan-overtime-field">
+                                <input
+                                    id="clan-overtime-input"
+                                    class="clan-overtime-input"
+                                    type="number"
+                                    min="20"
+                                    max="90"
+                                    step="1"
+                                    inputmode="numeric"
+                                    autocomplete="off"
+                                    aria-label="持ち越し時間"
+                                />
+                                <span>秒</span>
+                            </div>
+                            <div class="clan-overtime-dialog-actions">
+                                <button id="clan-overtime-cancel-button" type="button" class="btn">キャンセル</button>
+                                <button id="clan-overtime-ok-button" type="submit" class="btn btn-primary" disabled>OK</button>
+                            </div>
+                        </form>
+                    </dialog>
+                </div>
                 <button id="clan-attack-cancel-button" type="button" class="btn btn-danger">キャンセル</button>
             </div>
             <p id="clan-attack-active-action-status" class="settings-status" aria-live="polite"></p>
         </section>
-
-        <dialog id="clan-overtime-dialog" class="clan-overtime-dialog" aria-labelledby="clan-overtime-dialog-title">
-            <form method="dialog" class="clan-overtime-dialog-content">
-                <h3 id="clan-overtime-dialog-title">持ち越し時間を入れてください</h3>
-                <input
-                    id="clan-overtime-input"
-                    class="clan-overtime-input"
-                    type="number"
-                    min="20"
-                    max="90"
-                    step="1"
-                    inputmode="numeric"
-                    aria-label="持ち越し時間"
-                />
-                <div class="clan-overtime-dialog-actions">
-                    <button id="clan-overtime-ok-button" type="button" class="btn btn-primary" disabled>OK</button>
-                    <button id="clan-overtime-cancel-button" type="button" class="btn">キャンセル</button>
-                </div>
-            </form>
-        </dialog>
     <% } %>
 
     <input type="hidden" id="clan-refresh-token" value="<%= data.refreshToken %>" />
@@ -490,6 +495,7 @@
         const messageInput = document.getElementById('clan-attack-message');
         const status = document.getElementById('clan-attack-active-action-status');
         const overtimeDialog = document.getElementById('clan-overtime-dialog');
+        const overtimeForm = overtimeDialog ? overtimeDialog.querySelector('form') : null;
         const overtimeInput = document.getElementById('clan-overtime-input');
         const overtimeOkButton = document.getElementById('clan-overtime-ok-button');
         const overtimeCancelButton = document.getElementById('clan-overtime-cancel-button');
@@ -563,14 +569,14 @@
                 return;
             }
 
-            if (overtimeDialog && typeof overtimeDialog.showModal === 'function') {
+            if (overtimeDialog && typeof overtimeDialog.show === 'function') {
                 if (overtimeInput) {
                     overtimeInput.value = '';
                 }
                 if (overtimeOkButton) {
                     overtimeOkButton.disabled = true;
                 }
-                overtimeDialog.showModal();
+                overtimeDialog.show();
                 if (overtimeInput) {
                     overtimeInput.focus();
                 }
@@ -581,7 +587,11 @@
             overtimeInput.addEventListener('input', () => {
                 overtimeOkButton.disabled = getValidDialogOvertime() === null;
             });
-            overtimeOkButton.addEventListener('click', () => {
+        }
+
+        if (overtimeForm) {
+            overtimeForm.addEventListener('submit', (event) => {
+                event.preventDefault();
                 const overtime = getValidDialogOvertime();
                 if (overtime === null) {
                     return;
