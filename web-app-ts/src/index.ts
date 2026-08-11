@@ -318,6 +318,7 @@ app.get('/clan', ensureDiscordServerLinked, async (req, res) => {
     currentMember: null,
     attackHistories: [],
     bossNames: [],
+    bossHp: [],
     baseDate: getBaseDate(),
     refreshToken: 'none:0',
     loadError: ''
@@ -568,6 +569,7 @@ type ClanPagePayload = {
   currentMember: ClanMemberRow | null;
   attackHistories: AttackHistoryRow[];
   bossNames: string[];
+  bossHp: Array<number | null>;
   baseDate: string;
   refreshToken: string;
   loadError: string;
@@ -975,6 +977,7 @@ async function loadClanPagePayload(
     currentMember: currentMember || null,
     attackHistories,
     bossNames: clanBattleState?.bossname || [],
+    bossHp: clanBattleState?.bossHp || [],
     baseDate,
     refreshToken: toRefreshToken(clan, members),
     loadError: ''
@@ -1134,6 +1137,111 @@ async function supabaseStartClanMemberAttack(
   const rows = await response.json() as unknown;
   if (!Array.isArray(rows) || rows.length === 0) {
     throw new Error('Attack has already started or clan member was not found');
+  }
+}
+
+async function supabaseFinishClanMemberAttack(
+  config: SupabaseConfig,
+  member: ClanMemberRow,
+  action: 'complete' | 'defeat' | 'cancel',
+  overtime: number
+): Promise<void> {
+  const endpointUrl = `${config.url.replace(/\/$/, '')}/rest/v1/rpc/finish_clan_member_attack`;
+  const response = await fetch(endpointUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: config.secretKey,
+      Authorization: `Bearer ${config.secretKey}`
+    },
+    body: JSON.stringify({
+      p_source: member.source,
+      p_clanid: member.clanid,
+      p_membersource: member.membersource,
+      p_memberid: member.memberid,
+      p_action: action,
+      p_overtime: overtime
+    })
+  });
+
+  if (!response.ok) {
+    const responseText = await response.text();
+    throw new Error(`Supabase finish clan member attack failed: ${response.status} ${responseText}`);
+  }
+}
+
+type AttackHistoryEditInput = {
+  id: number;
+  sortie: number;
+  boss: number;
+  defeat: boolean;
+  overtime: number;
+};
+
+function normalizeAttackHistoryEditInput(raw: unknown): AttackHistoryEditInput | null {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  const source = raw as Record<string, unknown>;
+  const id = Number(source.id);
+  const sortie = Number(source.sortie);
+  const boss = Number(source.boss);
+  const defeat = source.defeat;
+  const overtime = Number(source.overtime);
+  if (!Number.isInteger(id) || id < 1
+    || !Number.isInteger(sortie) || sortie < 1 || sortie > 3
+    || !Number.isInteger(boss) || boss < 1 || boss > 5
+    || typeof defeat !== 'boolean'
+    || !Number.isInteger(overtime)
+    || (defeat && (overtime < 20 || overtime > 90))) {
+    return null;
+  }
+
+  return { id, sortie, boss, defeat, overtime: defeat ? overtime : 0 };
+}
+
+async function supabaseUpdateAttackHistory(
+  config: SupabaseConfig,
+  member: ClanMemberRow,
+  day: string,
+  input: AttackHistoryEditInput
+): Promise<void> {
+  const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_ATTACK_HISTORIES_TABLE);
+  const query = new URLSearchParams({
+    id: `eq.${input.id}`,
+    source: `eq.${member.source}`,
+    clanid: `eq.${member.clanid}`,
+    membersource: `eq.${member.membersource}`,
+    memberid: `eq.${member.memberid}`,
+    day: `eq.${day}`
+  });
+  const response = await fetch(`${endpointUrl}?${query.toString()}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: config.secretKey,
+      Authorization: `Bearer ${config.secretKey}`,
+      Prefer: 'return=representation'
+    },
+    body: JSON.stringify({
+      sortie: input.sortie,
+      boss: input.boss,
+      defeat: input.defeat,
+      overtime: input.overtime,
+      sortiecount: input.defeat ? 1 : 2,
+      updatetime: new Date().toISOString()
+    })
+  });
+
+  if (!response.ok) {
+    const responseText = await response.text();
+    throw new Error(`Supabase update attack history failed: ${response.status} ${responseText}`);
+  }
+
+  const rows = await response.json() as unknown;
+  if (!Array.isArray(rows) || rows.length === 0) {
+    throw new Error('Attack history was not found');
   }
 }
 
@@ -1706,9 +1814,13 @@ app.post('/api/clan/attack/start', ensureDiscordServerLinked, express.json(), as
     }
 
     const attackHistories = await supabaseSelectAttackHistories(config, currentMember, getBaseDate());
-    const sortie = attackHistories.length === 0
-      ? 1
-      : Math.max(...attackHistories.map((history) => history.sortie)) + 1;
+    const maxSortie = attackHistories.length === 0
+      ? 0
+      : Math.max(...attackHistories.map((history) => history.sortie));
+    if (maxSortie >= 3) {
+      return res.status(409).json({ error: 'All attacks have already been completed' });
+    }
+    const sortie = maxSortie + 1;
     const attackLap = clan.bosslaps[attackBoss - 1];
 
     await supabaseStartClanMemberAttack(config, currentMember, attackBoss, attackLap, sortie);
@@ -1716,6 +1828,100 @@ app.post('/api/clan/attack/start', ensureDiscordServerLinked, express.json(), as
   } catch (error) {
     console.error('Failed to start clan member attack:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to start attack';
+    return res.status(502).json({ error: errorMessage });
+  }
+});
+
+app.post('/api/clan/attack/finish', ensureDiscordServerLinked, express.json(), async (req, res) => {
+  const action = req.body?.action;
+  if (action !== 'complete' && action !== 'defeat' && action !== 'cancel') {
+    return res.status(400).json({ error: 'Invalid attack action' });
+  }
+
+  const overtime = action === 'defeat' ? Number(req.body?.overtime) : 0;
+  if (action === 'defeat' && (!Number.isInteger(overtime) || overtime < 20 || overtime > 90)) {
+    return res.status(400).json({ error: 'Overtime must be between 20 and 90' });
+  }
+
+  const config = getSupabaseConfig();
+  if (!config) {
+    return res.status(503).json({ error: 'Supabase is not configured' });
+  }
+
+  const userSession = req.session.user as any;
+  const googleUserId = typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '';
+  if (!googleUserId) {
+    return res.status(403).json({ error: 'User is not authenticated' });
+  }
+
+  try {
+    const profile = await supabaseSelectUserProfileByGoogleUserId(config, googleUserId);
+    const discordId = profile && isNonEmptyTrimmedString(profile.discordId) ? profile.discordId.trim() : '';
+    if (!discordId) {
+      return res.status(403).json({ error: 'Discord account is not linked' });
+    }
+
+    const members = await supabaseSelectClanMembersByDiscordServer(config, getSessionDiscordServer(req));
+    const currentMember = members.find((member) => (
+      member.membersource === 'discord' && member.memberid === discordId
+    ));
+    if (!currentMember) {
+      return res.status(404).json({ error: 'Clan member was not found' });
+    }
+    if (currentMember.attackboss === 0) {
+      return res.status(409).json({ error: 'Attack is not active' });
+    }
+
+    await supabaseFinishClanMemberAttack(config, currentMember, action, overtime);
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to finish clan member attack:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to finish attack';
+    return res.status(502).json({ error: errorMessage });
+  }
+});
+
+app.post('/api/clan/attack-history/save', ensureDiscordServerLinked, express.json(), async (req, res) => {
+  const rawHistories = Array.isArray(req.body?.histories) ? req.body.histories : [];
+  const histories: Array<AttackHistoryEditInput | null> = rawHistories.map(normalizeAttackHistoryEditInput);
+  if (histories.length === 0 || histories.some((history) => history === null)) {
+    return res.status(400).json({ error: 'Invalid attack histories' });
+  }
+
+  const config = getSupabaseConfig();
+  if (!config) {
+    return res.status(503).json({ error: 'Supabase is not configured' });
+  }
+
+  const userSession = req.session.user as any;
+  const googleUserId = typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '';
+  if (!googleUserId) {
+    return res.status(403).json({ error: 'User is not authenticated' });
+  }
+
+  try {
+    const profile = await supabaseSelectUserProfileByGoogleUserId(config, googleUserId);
+    const discordId = profile && isNonEmptyTrimmedString(profile.discordId) ? profile.discordId.trim() : '';
+    if (!discordId) {
+      return res.status(403).json({ error: 'Discord account is not linked' });
+    }
+
+    const members = await supabaseSelectClanMembersByDiscordServer(config, getSessionDiscordServer(req));
+    const currentMember = members.find((member) => (
+      member.membersource === 'discord' && member.memberid === discordId
+    ));
+    if (!currentMember) {
+      return res.status(404).json({ error: 'Clan member was not found' });
+    }
+
+    const day = getBaseDate();
+    for (const history of histories as AttackHistoryEditInput[]) {
+      await supabaseUpdateAttackHistory(config, currentMember, day, history);
+    }
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to update attack histories:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to update attack histories';
     return res.status(502).json({ error: errorMessage });
   }
 });

@@ -37,7 +37,7 @@
     },
     "messageid": {
       "description": "The message ID related to the attack.",
-      "type": "string"
+      "type": ["string", "null"]
     },
     "boss": {
       "description": "The boss that was attacked.",
@@ -61,5 +61,5 @@
       "format": "date-time"
     }
   },
-  "required": ["member", "day", "sortie", "messageid", "boss", "overtime", "defeat", "sortiecount", "updatetime"]
+  "required": ["source", "clanid", "membersource", "memberid", "day", "sortie", "messageid", "boss", "overtime", "defeat", "sortiecount", "updatetime"]
 }
