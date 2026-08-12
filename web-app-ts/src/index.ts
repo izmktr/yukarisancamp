@@ -365,6 +365,46 @@ app.get('/clan', ensureDiscordServerLinked, async (req, res) => {
   }
 });
 
+app.get('/clan-data', ensureDiscordServerLinked, async (req, res) => {
+  const config = getSupabaseConfig();
+  const userSession = req.session.user as any;
+  const googleUserId = typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '';
+
+  if (!config || !googleUserId) {
+    res.redirect('/settings');
+    return;
+  }
+
+  try {
+    const profile = await supabaseSelectUserProfileByGoogleUserId(config, googleUserId);
+    const discordServer = profile && isNonEmptyTrimmedString(profile.discordServer)
+      ? profile.discordServer.trim()
+      : getSessionDiscordServer(req);
+
+    if (!discordServer) {
+      res.redirect('/settings');
+      return;
+    }
+
+    const clanDataPage = await loadClanDataPagePayload(config, discordServer);
+    if (!clanDataPage) {
+      res.redirect('/clan');
+      return;
+    }
+
+    res.render('clan-data', {
+      title: 'ゆかりさん△',
+      currentPage: 'clan-data',
+      ...getAuthViewData(req),
+      clanDataPageData: clanDataPage,
+      clanId: normalizeDiscordServerToClanId(discordServer)
+    });
+  } catch (error) {
+    console.error('Failed to load clan data page:', error);
+    res.redirect('/clan');
+  }
+});
+
 app.get('/clan-management', ensureDiscordServerLinked, async (req, res) => {
   const config = getSupabaseConfig();
   const userSession = req.session.user as any;
@@ -556,7 +596,13 @@ type ClanMemberRow = {
 
 type AttackHistoryRow = {
   id: number;
+  day?: string | number | null;
+  source?: string;
+  clanid?: string;
+  membersource?: string;
+  memberid?: string;
   sortie: number;
+  sortiecount?: number;
   boss: number;
   attacklap: number | null;
   overtime: number;
@@ -810,15 +856,30 @@ function normalizeAttackHistoryRow(raw: unknown): AttackHistoryRow | null {
     ? null
     : Number(source.attacklap);
   const overtime = Number(source.overtime);
+  const sorteiCountValue = source.sortiecount === null || source.sortiecount === undefined
+    ? undefined
+    : Number(source.sortiecount);
+  const dayValue = source.day === null || source.day === undefined
+    ? null
+    : typeof source.day === 'string' || typeof source.day === 'number'
+      ? source.day
+      : null;
   if (![id, sortie, boss, overtime].every(Number.isFinite)
     || (attacklap !== null && !Number.isFinite(attacklap))
+    || (sorteiCountValue !== undefined && !Number.isFinite(sorteiCountValue))
     || typeof source.defeat !== 'boolean') {
     return null;
   }
 
   return {
     id: Math.trunc(id),
+    day: dayValue,
+    source: typeof source.source === 'string' ? source.source : undefined,
+    clanid: typeof source.clanid === 'string' || typeof source.clanid === 'number' ? String(source.clanid) : undefined,
+    membersource: typeof source.membersource === 'string' ? source.membersource : undefined,
+    memberid: typeof source.memberid === 'string' || typeof source.memberid === 'number' ? String(source.memberid) : undefined,
     sortie: Math.trunc(sortie),
+    sortiecount: sorteiCountValue === undefined ? undefined : Math.trunc(sorteiCountValue),
     boss: Math.trunc(boss),
     attacklap: attacklap === null ? null : Math.trunc(attacklap),
     overtime: Math.trunc(overtime),
@@ -833,7 +894,7 @@ async function supabaseSelectAttackHistories(
 ): Promise<AttackHistoryRow[]> {
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_ATTACK_HISTORIES_TABLE);
   const query = new URLSearchParams({
-    select: 'id,sortie,boss,attacklap,overtime,defeat',
+    select: 'id,day,source,clanid,membersource,memberid,sortie,boss,attacklap,overtime,defeat',
     source: `eq.${member.source}`,
     clanid: `eq.${member.clanid}`,
     membersource: `eq.${member.membersource}`,
@@ -864,6 +925,55 @@ async function supabaseSelectAttackHistories(
     .map((row) => normalizeAttackHistoryRow(row))
     .filter((row): row is AttackHistoryRow => !!row)
     .sort((left, right) => left.sortie - right.sortie || right.overtime - left.overtime);
+}
+
+async function supabaseSelectClanAttackHistories(config: SupabaseConfig, discordServer: string, baseDate: string): Promise<AttackHistoryRow[]> {
+  const clanId = normalizeDiscordServerToClanId(discordServer);
+  if (!clanId || !baseDate) {
+    return [];
+  }
+
+  const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_ATTACK_HISTORIES_TABLE);
+  const query = new URLSearchParams({
+    select: 'id,day,source,clanid,membersource,memberid,sortie,sortiecount,boss,attacklap,overtime,defeat',
+    source: 'eq.discord',
+    clanid: `eq.${clanId}`,
+    day: `eq.${baseDate}`,
+    order: 'sortie.asc,overtime.desc'
+  });
+
+  const response = await fetch(`${endpointUrl}?${query.toString()}`, {
+    method: 'GET',
+    headers: {
+      apikey: config.secretKey,
+      Authorization: `Bearer ${config.secretKey}`
+    }
+  });
+
+  if (!response.ok) {
+    const responseText = await response.text();
+    throw new Error(`Supabase select clan attack histories failed: ${response.status} ${responseText}`);
+  }
+
+  const rows = await response.json() as unknown;
+  if (!Array.isArray(rows)) {
+    return [];
+  }
+
+  return rows
+    .map((row) => normalizeAttackHistoryRow(row))
+    .filter((row): row is AttackHistoryRow => !!row)
+    .sort((left, right) => {
+      const leftDay = Number(left.day ?? 0);
+      const rightDay = Number(right.day ?? 0);
+      if (leftDay !== rightDay) {
+        return leftDay - rightDay;
+      }
+      if (left.sortie !== right.sortie) {
+        return left.sortie - right.sortie;
+      }
+      return left.boss - right.boss;
+    });
 }
 
 async function supabaseDeleteClanMember(
@@ -995,6 +1105,38 @@ async function loadClanPagePayload(
     bossHp: clanBattleState?.bossHp || [],
     baseDate,
     refreshToken: toRefreshToken(clan, members),
+    loadError: ''
+  };
+}
+
+async function loadClanDataPagePayload(config: SupabaseConfig, discordServer: string): Promise<{
+  clan: ClanInfoRow | null;
+  members: ClanMemberRow[];
+  bossNames: string[];
+  bossHp: Array<number | null>;
+  bossHistories: AttackHistoryRow[];
+  baseDate: string;
+  loadError: string;
+} | null> {
+  const clan = await supabaseSelectClanByDiscordServer(config, discordServer);
+  if (!clan) {
+    return null;
+  }
+
+  const baseDate = getBaseDate();
+  const [members, clanBattleState, bossHistories] = await Promise.all([
+    supabaseSelectClanMembersByDiscordServer(config, discordServer),
+    supabaseSelectClanBattleState(config),
+    supabaseSelectClanAttackHistories(config, discordServer, baseDate)
+  ]);
+
+  return {
+    clan,
+    members,
+    bossNames: clanBattleState?.bossname || [],
+    bossHp: clanBattleState?.bossHp || [],
+    bossHistories,
+    baseDate,
     loadError: ''
   };
 }
