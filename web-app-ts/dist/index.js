@@ -755,7 +755,14 @@ async function supabaseSelectAttackHistories(config, member, day) {
         .filter((row) => !!row)
         .sort((left, right) => left.sortie - right.sortie || right.overtime - left.overtime);
 }
-async function supabaseSelectClanAttackHistories(config, discordServer, baseDate) {
+function isWithinClanBattleDateRange(dayValue, startDate, endDate) {
+    const normalizedDay = String(dayValue ?? '');
+    if (!normalizedDay || !startDate || !endDate) {
+        return false;
+    }
+    return normalizedDay >= startDate && normalizedDay <= endDate;
+}
+async function supabaseSelectClanAttackHistories(config, discordServer, baseDate, startDate, endDate) {
     const clanId = normalizeDiscordServerToClanId(discordServer);
     if (!clanId || !baseDate) {
         return [];
@@ -765,8 +772,7 @@ async function supabaseSelectClanAttackHistories(config, discordServer, baseDate
         select: 'id,day,source,clanid,membersource,memberid,sortie,sortiecount,boss,attacklap,overtime,defeat',
         source: 'eq.discord',
         clanid: `eq.${clanId}`,
-        day: `eq.${baseDate}`,
-        order: 'sortie.asc,overtime.desc'
+        order: 'day.asc,sortie.asc,overtime.asc'
     });
     const response = await fetch(`${endpointUrl}?${query.toString()}`, {
         method: 'GET',
@@ -783,19 +789,25 @@ async function supabaseSelectClanAttackHistories(config, discordServer, baseDate
     if (!Array.isArray(rows)) {
         return [];
     }
+    const baseRangeStart = startDate && endDate ? startDate : baseDate;
+    const baseRangeEnd = endDate && startDate ? endDate : baseDate;
     return rows
         .map((row) => normalizeAttackHistoryRow(row))
         .filter((row) => !!row)
+        .filter((row) => {
+        const dayValue = String(row.day ?? '');
+        return dayValue === baseDate || isWithinClanBattleDateRange(dayValue, baseRangeStart, baseRangeEnd);
+    })
         .sort((left, right) => {
-        const leftDay = Number(left.day ?? 0);
-        const rightDay = Number(right.day ?? 0);
+        const leftDay = String(left.day ?? '');
+        const rightDay = String(right.day ?? '');
         if (leftDay !== rightDay) {
-            return leftDay - rightDay;
+            return leftDay.localeCompare(rightDay);
         }
         if (left.sortie !== right.sortie) {
             return left.sortie - right.sortie;
         }
-        return left.boss - right.boss;
+        return left.overtime - right.overtime;
     });
 }
 async function supabaseDeleteClanMember(config, clanId, membersource, memberid) {
@@ -914,10 +926,10 @@ async function loadClanDataPagePayload(config, discordServer) {
         return null;
     }
     const baseDate = (0, baseDate_1.getBaseDate)();
-    const [members, clanBattleState, bossHistories] = await Promise.all([
+    const clanBattleState = await ensureClanBattleStateFromSupabase(config);
+    const [members, bossHistories] = await Promise.all([
         supabaseSelectClanMembersByDiscordServer(config, discordServer),
-        supabaseSelectClanBattleState(config),
-        supabaseSelectClanAttackHistories(config, discordServer, baseDate)
+        supabaseSelectClanAttackHistories(config, discordServer, baseDate, clanBattleState.startDate, clanBattleState.endDate)
     ]);
     return {
         clan,
@@ -926,6 +938,8 @@ async function loadClanDataPagePayload(config, discordServer) {
         bossHp: clanBattleState?.bossHp || [],
         bossHistories,
         baseDate,
+        startDate: clanBattleState.startDate,
+        endDate: clanBattleState.endDate,
         loadError: ''
     };
 }

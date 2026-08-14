@@ -4,12 +4,21 @@
   <% const members = Array.isArray(data.members) ? [...data.members] : []; %>
   <% const bossHistoryRows = Array.isArray(data.bossHistories) ? [...data.bossHistories] : []; %>
   <% const currentDate = String(data.baseDate || ''); %>
+  <% const clanBattleStartDate = String(data.startDate || ''); %>
+  <% const clanBattleEndDate = String(data.endDate || ''); %>
   <% const memberNameMap = new Map(members.map((member) => [String(member.memberid || member.id || ''), member.name || 'Unknown'])); %>
   <% const bossNamesByIndex = Array.isArray(data.bossNames) ? data.bossNames : []; %>
   <% const formatBossName = (bossNumber) => { const normalizedBossNumber = Number(bossNumber); const bossIndex = Number.isFinite(normalizedBossNumber) ? Math.max(0, Math.min(4, normalizedBossNumber - 1)) : 0; const configuredName = typeof bossNamesByIndex[bossIndex] === 'string' ? bossNamesByIndex[bossIndex].trim() : ''; return configuredName || `ボス${Number.isFinite(normalizedBossNumber) ? normalizedBossNumber : 1}`; }; %>
+  <% const getBossColumnIndex = (history) => { const bossNumber = Number(history.boss); if (!Number.isFinite(bossNumber)) { return 0; } return Math.max(0, bossNumber - 1); }; %>
+  <% const getHistoryLoopNumber = (history) => { const lapValue = Number(history.attacklap); if (!Number.isFinite(lapValue)) { return 1; } return Math.max(1, lapValue); }; %>
   <% const formatHistoryText = (history) => { const sortie = Number(history.sortie); const attackLap = Number(history.attacklap); const overtime = Number(history.overtime || 0); const isDefeat = history.defeat === true; const sortieCount = Number(history.sortiecount ?? (isDefeat ? 1 : 2)); const bossName = formatBossName(history.boss); const baseText = `${sortie}凸 ${Number.isFinite(attackLap) ? attackLap : 0}周 ${bossName}`; if (sortieCount === 2) return baseText; if (sortieCount === 1 && overtime > 0) return `${baseText} 討伐:${overtime}秒`; if (sortieCount === 1 && overtime === 0 && isDefeat) return `${baseText} 持討伐:0秒`; return `${baseText} 持`; }; %>
+  <% const getIndexDayInfo = (dayValue) => { const day = String(dayValue ?? ''); if (!day) return { indexDay: 'x', indexDayLabel: 'x日目', value: Number.MAX_SAFE_INTEGER }; if (clanBattleStartDate && clanBattleEndDate && day >= clanBattleStartDate && day <= clanBattleEndDate) { const start = new Date(`${clanBattleStartDate}T00:00:00`); const current = new Date(`${day}T00:00:00`); const diffDays = Math.round((current.getTime() - start.getTime()) / 86400000); const indexDay = diffDays + 1; return { indexDay: String(indexDay), indexDayLabel: `${indexDay}日目`, value: indexDay }; } return { indexDay: 'x', indexDayLabel: 'x日目', value: Number.MAX_SAFE_INTEGER }; }; %>
+  <% const normalizeBossHistoryRow = (history) => { const day = String(history.day ?? ''); const indexInfo = getIndexDayInfo(day); return { ...history, day, indexDay: indexInfo.indexDay, indexDayLabel: indexInfo.indexDayLabel, indexDayValue: indexInfo.value, isCurrentDay: day === currentDate }; }; %>
   <% const memberHistoryMap = new Map(); %>
-  <% const todayHistoryRows = bossHistoryRows.filter((history) => String(history.day ?? '') === currentDate).sort((left, right) => Number(left.sortie) - Number(right.sortie) || Number(right.overtime) - Number(left.overtime)); %>
+  <% const relevantBossHistoryRows = bossHistoryRows.filter((history) => { const day = String(history.day ?? ''); return day === currentDate || (clanBattleStartDate && clanBattleEndDate && day >= clanBattleStartDate && day <= clanBattleEndDate); }).map(normalizeBossHistoryRow); %>
+  <% const relevantHistoryDates = [...relevantBossHistoryRows].map((history) => String(history.day ?? '')).filter(Boolean).sort((left, right) => left.localeCompare(right)); %>
+  <% const latestVisibleHistoryDate = relevantHistoryDates.includes(currentDate) ? currentDate : (relevantHistoryDates.length > 0 ? relevantHistoryDates[relevantHistoryDates.length - 1] : currentDate); %>
+  <% const todayHistoryRows = relevantBossHistoryRows.filter((history) => history.isCurrentDay).sort((left, right) => Number(left.sortie) - Number(right.sortie) || Number(right.overtime) - Number(left.overtime)); %>
   <% todayHistoryRows.forEach((history) => { const memberKey = String(history.memberid || ''); if (!memberKey) return; const entries = memberHistoryMap.get(memberKey) || []; entries.push(formatHistoryText(history)); memberHistoryMap.set(memberKey, entries); }); %>
   <% const getMemberHistoryRows = (member) => { const memberKey = String(member.memberid || ''); return todayHistoryRows.filter((history) => String(history.memberid || '') === memberKey); }; %>
   <% const getMemberAttackDisplay = (member) => { const memberRows = getMemberHistoryRows(member); const uniqueSortieCount = new Set(memberRows.map((history) => Number(history.sortie))).size; const carryOverSeconds = memberRows.filter((history) => { const sameSortieCount = memberRows.filter((otherHistory) => Number(otherHistory.sortie) === Number(history.sortie)).length; return Number(history.overtime) > 0 && history.defeat === true && sameSortieCount === 1; }).map((history) => Number(history.overtime)).sort((left, right) => left - right); const baseDisplayCount = Math.max(0, uniqueSortieCount - carryOverSeconds.length); const baseText = `${baseDisplayCount}凸`; if (carryOverSeconds.length === 0) return baseText; return `${baseText}[持:${carryOverSeconds.map((second) => `${second}秒`).join(',')}]`; }; %>
@@ -110,7 +119,7 @@
         <table class="bosshistory-table">
           <thead>
             <tr>
-              <th>日付</th>
+              <th>周回数</th>
               <th><span class="boss-name-label" data-boss-index="0">ボス1</span></th>
               <th><span class="boss-name-label" data-boss-index="1">ボス2</span></th>
               <th><span class="boss-name-label" data-boss-index="2">ボス3</span></th>
@@ -120,35 +129,131 @@
           </thead>
           <tbody>
             <%
-              const bossHistoryDays = Array.from(new Set(bossHistoryRows
-                .map((history) => String(history.day ?? ''))
-                .filter((day) => day.trim().length > 0)))
-                .sort((left, right) => Number(left || 0) - Number(right || 0) || left.localeCompare(right));
+              const historyList = [...relevantBossHistoryRows].sort((left, right) => {
+                const dayDiff = String(left.day ?? '').localeCompare(String(right.day ?? ''));
+                if (dayDiff !== 0) {
+                  return dayDiff;
+                }
+                const leftLoop = getHistoryLoopNumber(left);
+                const rightLoop = getHistoryLoopNumber(right);
+                if (leftLoop !== rightLoop) {
+                  return leftLoop - rightLoop;
+                }
+                const leftBossIndex = getBossColumnIndex(left);
+                const rightBossIndex = getBossColumnIndex(right);
+                if (leftBossIndex !== rightBossIndex) {
+                  return leftBossIndex - rightBossIndex;
+                }
+                return Number(left.overtime || 0) - Number(right.overtime || 0);
+              });
+              const maxHistoryLoop = historyList.reduce((max, item) => Math.max(max, getHistoryLoopNumber(item)), 1);
+              const maxLoop = Math.max(maxHistoryLoop, 1);
+              const defaultVisibleMinLoop = Math.max(1, maxLoop - 5);
             %>
-            <% bossHistoryDays.forEach((day, dayIndex) => { %>
-              <% const dayHistories = bossHistoryRows.filter((history) => String(history.day ?? '') === day); %>
-              <% const hideByDefault = dayIndex >= Math.max(0, bossHistoryDays.length - 6); %>
-              <tr class="bosshistory-row <%= hideByDefault ? 'bosshistory-row-hidden-by-default' : '' %>" data-loop-number="<%= dayIndex + 1 %>" data-hidden-by-default="<%= hideByDefault ? '1' : '0' %>">
-                <td class="bosshistory-loop"><%= day %></td>
+            <% for (let loop = maxLoop; loop >= 1; loop -= 1) { %>
+              <% const loopNumber = loop; %>
+              <% const hideByDefault = loop < defaultVisibleMinLoop; %>
+              <tr class="bosshistory-row <%= hideByDefault ? 'bosshistory-row-hidden-by-default' : '' %>" data-loop-number="<%= loopNumber %>" data-hidden-by-default="<%= hideByDefault ? '1' : '0' %>">
+                <td class="bosshistory-loop"><%= loopNumber %></td>
                 <% for (let bossid = 0; bossid < 5; bossid += 1) { %>
-                  <% const bossMatches = dayHistories.filter((history) => Number(history.boss) === bossid + 1); %>
+                  <% const cellItems = historyList.filter((item) => getHistoryLoopNumber(item) === loopNumber && getBossColumnIndex(item) === bossid).sort((left, right) => Number(left.sortie) - Number(right.sortie) || Number(left.overtime) - Number(right.overtime)); %>
                   <td class="bosshistory-cell" data-boss-index="<%= bossid %>">
-                    <div class="bosshistory-mobile-boss-label"><span class="boss-name-label" data-boss-index="<%= bossid %>">ボス<%= bossid + 1 %></span></div>
-                    <% bossMatches.forEach((history) => { %>
+                    <% cellItems.forEach((history) => { %>
                       <% const memberName = memberNameMap.get(String(history.memberid || '')) || 'Unknown'; %>
-                      <% const sortieLabel = Number.isInteger(Number(history.sortie)) ? `${Number(history.sortie)}凸` : '凸'; %>
-                      <% const overtimeText = Number(history.overtime) > 0 && history.defeat === true ? ` / ${Number(history.overtime)}秒` : ''; %>
-                      <div class="bosshistory-entry"><%= memberName %> <%= sortieLabel %><%= overtimeText %></div>
+                      <% const optionText = history.defeat === true ? ` [討伐:${Number(history.overtime ?? 0)}]` : Number(history.overtime) > 0 ? ` [持:${Number(history.overtime)}秒]` : ' [持]'; %>
+                      <% const entryText = `${Number(history.sortie) + 1}凸 ${memberName}${optionText}`; %>
+                      <% const fadedClass = String(history.day ?? '') !== latestVisibleHistoryDate ? 'history-old-day' : ''; %>
+                      <div class="bosshistory-entry <%= fadedClass %>"><%= entryText %></div>
                     <% }); %>
-                    <% if (bossMatches.length === 0) { %>
+                    <% if (cellItems.length === 0) { %>
                       <div class="bosshistory-empty">-</div>
                     <% } %>
                   </td>
                 <% } %>
               </tr>
-            <% }); %>
+            <% } %>
           </tbody>
         </table>
+      </div>
+    </section>
+
+    <section class="clandata-section">
+      <div class="clandata-section-header clandata-memberhistory-header">
+        <h3>メンバー履歴</h3>
+        <button type="button" id="memberhistory-toggle-btn" class="memberhistory-toggle-btn" aria-pressed="false">表示する</button>
+      </div>
+      <div id="memberhistory-container" class="memberhistory-container">
+        <%
+          const memberHistoryByMember = new Map();
+          relevantBossHistoryRows.forEach((history) => {
+            const memberId = String(history.memberid || '');
+            if (!memberId) {
+              return;
+            }
+            const existing = memberHistoryByMember.get(memberId) || {
+              memberName: memberNameMap.get(memberId) || 'Unknown',
+              bossEntries: [[], [], [], [], []]
+            };
+            const bossId = getBossColumnIndex(history);
+            existing.bossEntries[bossId].push(history);
+            memberHistoryByMember.set(memberId, existing);
+          });
+
+          const memberHistoryRows = Array.from(memberHistoryByMember.values())
+            .map((item) => ({
+              memberName: item.memberName,
+              bossEntries: item.bossEntries.map((entries) => [...entries].sort((left, right) => {
+                const leftDayValue = getIndexDayInfo(left.day).value;
+                const rightDayValue = getIndexDayInfo(right.day).value;
+                if (leftDayValue !== rightDayValue) {
+                  return leftDayValue - rightDayValue;
+                }
+                const sortieDiff = Number(left.sortie) - Number(right.sortie);
+                if (sortieDiff !== 0) {
+                  return sortieDiff;
+                }
+                return Number(left.overtime || 0) - Number(right.overtime || 0);
+              }))
+            }))
+            .sort((left, right) => String(left.memberName || '').localeCompare(String(right.memberName || ''), 'ja'));
+        %>
+
+        <% if (memberHistoryRows.length > 0) { %>
+          <div class="memberhistory-table-wrapper">
+            <table class="memberhistory-table">
+              <thead>
+                <tr>
+                  <th>メンバー</th>
+                  <th><span class="boss-name-label" data-boss-index="0">ボス1</span></th>
+                  <th><span class="boss-name-label" data-boss-index="1">ボス2</span></th>
+                  <th><span class="boss-name-label" data-boss-index="2">ボス3</span></th>
+                  <th><span class="boss-name-label" data-boss-index="3">ボス4</span></th>
+                  <th><span class="boss-name-label" data-boss-index="4">ボス5</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                <% memberHistoryRows.forEach((row) => { %>
+                  <tr>
+                    <td class="memberhistory-member-cell"><%= row.memberName %></td>
+                    <% for (let bossid = 0; bossid < 5; bossid += 1) { %>
+                      <td class="memberhistory-cell" data-boss-index="<%= bossid %>">
+                        <% row.bossEntries[bossid].forEach((history) => { %>
+                          <% const dayInfo = getIndexDayInfo(history.day); %>
+                          <% const optionText = history.defeat === true ? ` [討伐:${Number(history.overtime ?? 0)}]` : Number(history.overtime) > 0 ? ` [持:${Number(history.overtime)}秒]` : ' [持]'; %>
+                          <% const entryText = `${dayInfo.indexDayLabel} ${Number(history.sortie) + 1}凸${optionText}`; %>
+                          <% const fadedClass = String(history.day ?? '') !== latestVisibleHistoryDate ? 'history-old-day' : ''; %>
+                          <div class="memberhistory-entry <%= fadedClass %>"><%= entryText %></div>
+                        <% }); %>
+                      </td>
+                    <% } %>
+                  </tr>
+                <% }); %>
+              </tbody>
+            </table>
+          </div>
+        <% } else { %>
+          <p class="memberhistory-empty">表示できる履歴がありません</p>
+        <% } %>
       </div>
     </section>
   </div>
@@ -226,10 +331,34 @@
     applyState();
   }
 
+  function initMemberHistoryToggle() {
+    const toggleButton = document.getElementById('memberhistory-toggle-btn');
+    const historyContainer = document.getElementById('memberhistory-container');
+    if (!(toggleButton instanceof HTMLButtonElement) || !(historyContainer instanceof HTMLElement)) {
+      return;
+    }
+
+    let isOpen = false;
+    const applyState = () => {
+      historyContainer.classList.toggle('is-open', isOpen);
+      toggleButton.textContent = isOpen ? '閉じる' : '表示する';
+      toggleButton.classList.toggle('is-active', isOpen);
+      toggleButton.setAttribute('aria-pressed', isOpen ? 'true' : 'false');
+    };
+
+    toggleButton.addEventListener('click', () => {
+      isOpen = !isOpen;
+      applyState();
+    });
+
+    applyState();
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     replaceBossLabelsFromClanBattleSettings();
     initBossHistoryLoopToggle();
     initMembersAttackCountToggle();
+    initMemberHistoryToggle();
   });
 </script>
 
@@ -376,6 +505,84 @@
     padding: 0.2rem 0;
     color: #26334d;
     overflow-wrap: anywhere;
+  }
+
+  .bosshistory-entry.history-old-day,
+  .memberhistory-entry.history-old-day {
+    color: #6ea8d9;
+  }
+
+  .memberhistory-container {
+    display: none;
+  }
+
+  .memberhistory-container.is-open {
+    display: block;
+  }
+
+  .memberhistory-toggle-btn {
+    border: 1px solid #bcd0ea;
+    border-radius: 999px;
+    background: #f7fbff;
+    color: #1f4f79;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 8px 14px;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+
+  .memberhistory-toggle-btn.is-active {
+    background: #1f4f79;
+    border-color: #1f4f79;
+    color: #fff;
+  }
+
+  .memberhistory-table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .memberhistory-table {
+    width: 100%;
+    min-width: 720px;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+
+  .memberhistory-table th,
+  .memberhistory-table td {
+    padding: 0.75rem;
+    border-bottom: 1px solid #e7ebf2;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .memberhistory-table th {
+    background: #f6f8fb;
+    color: #3d4666;
+    font-weight: 600;
+  }
+
+  .memberhistory-member-cell {
+    width: 140px;
+    color: #1e293b;
+    font-weight: 600;
+  }
+
+  .memberhistory-cell {
+    min-width: 120px;
+  }
+
+  .memberhistory-entry {
+    padding: 0.2rem 0;
+    color: #26334d;
+    overflow-wrap: anywhere;
+  }
+
+  .memberhistory-empty {
+    margin: 0;
+    color: #53627a;
   }
 
   .bosshistory-mobile-filter {
