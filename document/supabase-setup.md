@@ -18,8 +18,9 @@ SUPABASE_JWKS_URL=
 ```
 
 補足:
-- テーブル名は `board_posts`、`setting_clanbattle`、`setting_userprofile`、`setting_user_owned_character` の固定です。
+- テーブル名は `board_posts`、`setting_clanbattle`、`clan_boss_state`、`setting_userprofile`、`setting_user_owned_character` の固定です。
 - 掲示板用に `board_posts` も `document/supabase_createtable.sql` へ追加しています。
+- ボスHPの現在値は `clan_boss_state` に管理し、履歴は `attack_histories` に記録します。
 - APIはサーバ側で `SUPABASE_SECRET_KEY` を使って Supabase REST API に `upsert` します。
 - テーブル作成SQLは `document/supabase_createtable.sql` に集約しています。
 
@@ -57,7 +58,26 @@ Supabaseダッシュボードから取得します。
 - 現在の保存APIは camelCase カラム名（`bossHp`, `startDate`, `endDate`）で保存します。
 - PostgreSQL で camelCase を使う場合はダブルクォートが必要です。
 
-## 4. 掲示板保存テーブル要件
+## 4. ボス状態保存テーブル要件
+
+ボスの現在HPは履歴から再計算せず、独立した `clan_boss_state` テーブルで管理します。
+
+- テーブル名: `clan_boss_state`（固定）
+- 主キー: `(source, clanid, yearmonth, boss_index)`
+- 想定カラム:
+  - `source` public.clan_source
+  - `clanid` text
+  - `yearmonth` text（例: `202606`）
+  - `boss_index` integer（1〜5）
+  - `current_hp` integer（0 以上）
+  - `max_hp` integer（0 以上）
+  - `is_defeated` boolean
+  - `updated_at` timestamptz
+  - `updated_by` text null
+
+このテーブルがその月のボス状態の正本となり、画面表示はこの値を参照します。
+
+## 5. 掲示板保存テーブル要件
 
 掲示板の投稿本文は、まず 1 行の `board_posts` にまとめて保存する前提です。
 表示対象は `public.board_posts_current_month` か、`board_posts.yearmonth = setting_clanbattle.yearmonth` で絞った行のみです。
@@ -92,14 +112,14 @@ Supabaseダッシュボードから取得します。
 - 一覧表示は `board_posts` だけを見れば足りるようにして、詳細画面では `party` と `ub_rows` を展開する想定です。
 - 既存の `board` ルーティングは、移行後にファイルではなくこのテーブルを参照する形へ置き換えます。
 
-## 5. セキュリティ注意
+## 6. セキュリティ注意
 
 - `SUPABASE_SECRET_KEY` はサーバ専用です。ブラウザへ渡さないでください。
 - `.env.local` はコミットしないでください。
 - ログにキー全文を出さないでください。
 - 本アプリでは `ensureAdmin` を通過したユーザーのみ保存APIを実行できます。
 
-## 6. 設定画面プロフィールテーブル要件（schema準拠）
+## 7. 設定画面プロフィールテーブル要件（schema準拠）
 
 設定画面API（`GET /api/settings/profile/current`, `POST /api/settings/profile/save`）が期待するテーブル要件です。
 

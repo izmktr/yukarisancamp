@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ClanBossState",
+  "description": "Current HP state for each boss in the active clan battle.",
+  "type": "object",
+  "properties": {
+    "source": {
+      "description": "The source of the clan data, either from Discord or web.",
+      "type": "string",
+      "enum": ["discord", "web"]
+    },
+    "clanid": {
+      "description": "The unique ID of the clan.",
+      "type": "string"
+    },
+    "yearmonth": {
+      "description": "The year and month in YYYYMM format.",
+      "type": "string",
+      "pattern": "^[0-9]{6}$"
+    },
+    "boss_index": {
+      "description": "The boss index from 1 to 5.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "current_hp": {
+      "description": "The remaining HP for the current boss.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "max_hp": {
+      "description": "The maximum HP for the boss, used as the baseline for the current battle state.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "is_defeated": {
+      "description": "Whether the boss has been defeated.",
+      "type": "boolean"
+    },
+    "updated_at": {
+      "description": "The timestamp when the boss state was last updated.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_by": {
+      "description": "The user or system that last updated the boss state.",
+      "type": ["string", "null"]
+    }
+  },
+  "required": [
+    "source",
+    "clanid",
+    "yearmonth",
+    "boss_index",
+    "current_hp",
+    "max_hp",
+    "is_defeated",
+    "updated_at"
+  ]
+}
