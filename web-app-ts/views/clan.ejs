@@ -334,6 +334,7 @@
         initializeClanAttackButtons();
         initializeClanActiveAttackActions();
         initializeClanHistoryEditor();
+        initializeClanRealtimeSubscription();
     });
 
     function initializeClanHistoryEditor() {
@@ -813,7 +814,19 @@
         };
 
         if (!source || !/^\d+$/.test(clanId) || !window.__SUPABASE_PUBLIC_CONFIG__) {
-            console.warn('Supabase Realtime を開始できません: source/clanId/config が不足しています。');
+            const configExists = !!window.__SUPABASE_PUBLIC_CONFIG__;
+            const debugInfo = {
+                source,
+                clanId,
+                hasConfig: configExists,
+                config: window.__SUPABASE_PUBLIC_CONFIG__ || null,
+                missing: {
+                    source: !source,
+                    clanId: !/^\d+$/.test(clanId),
+                    config: !configExists
+                }
+            };
+            console.warn('Supabase Realtime を開始できません: source/clanId/config が不足しています。', debugInfo);
             return;
         }
 
@@ -876,5 +889,4 @@
         }
     }
 
-    initializeClanRealtimeSubscription();
 </script>
