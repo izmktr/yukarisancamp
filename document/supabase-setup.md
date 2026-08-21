@@ -158,7 +158,7 @@ Supabaseダッシュボードから取得します。
 
 ## 8. クラン画面 Realtime 更新設定（source/clanid 一致時）
 
-クラン画面（`/clan`）では、Supabase Realtime を使って `public.clans` の更新を購読します。
+クラン画面（`/clan`）では、Supabase Realtime を使って `public.clans`、`public.clan_members`、`public.clan_boss_state` の更新を購読します。
 同じ `source` / `clanid` の行が更新されたら、表示中ページが自動リロードされます。
 
 ### 8-1. 環境変数を確認
@@ -174,12 +174,24 @@ SUPABASE_PUBLISHABLE_KEY=
 - `SUPABASE_PUBLISHABLE_KEY` はブラウザで Realtime 購読に使います。
 - 値変更後は web-app-ts サーバーを再起動してください。
 
-### 8-2. Realtime で `clans` を配信対象に追加
+### 8-2. Realtime で `clans` / `clan_members` / `clan_boss_state` を配信対象に追加
 
 Supabase ダッシュボード:
 1. Database > Replication（または Realtime）
 2. `public.clans` を配信対象に追加
-3. `UPDATE` イベントが有効なことを確認
+3. `public.clan_members` を配信対象に追加
+4. `public.clan_boss_state` を配信対象に追加
+5. 3テーブルで `UPDATE` イベントが有効なことを確認
+
+SQLで確認する場合（任意）:
+
+```sql
+select schemaname, tablename
+from pg_publication_tables
+where pubname = 'supabase_realtime'
+  and schemaname = 'public'
+  and tablename in ('clans', 'clan_members', 'clan_boss_state');
+```
 
 ### 8-3. RLS/Policy を確認（anon で購読できるようにする）
 
@@ -189,9 +201,23 @@ RLS を有効にしている場合、`anon` ロールに `SELECT` 許可が必�
 
 ```sql
 alter table public.clans enable row level security;
+alter table public.clan_members enable row level security;
+alter table public.clan_boss_state enable row level security;
 
 create policy "anon can read clans"
 on public.clans
+for select
+to anon
+using (true);
+
+create policy "anon can read clan_members"
+on public.clan_members
+for select
+to anon
+using (true);
+
+create policy "anon can read clan_boss_state"
+on public.clan_boss_state
 for select
 to anon
 using (true);
@@ -224,6 +250,8 @@ using (true);
 - 原因例:
   - `SUPABASE_PUBLISHABLE_KEY` 未設定
   - `public.clans` が Realtime 配信対象に未追加
+  - `public.clan_members` が Realtime 配信対象に未追加
+  - `public.clan_boss_state` が Realtime 配信対象に未追加
   - RLS で `anon` の `SELECT` が拒否されている
 - 対処:
   - 本ドキュメントの「8. クラン画面 Realtime 更新設定」を順に確認

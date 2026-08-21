@@ -459,5 +459,23 @@ begin
 end
 $$;
 
+do $$
+begin
+  if exists (
+    select 1
+    from pg_publication
+    where pubname = 'supabase_realtime'
+  ) and not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'clan_boss_state'
+  ) then
+    execute 'alter publication supabase_realtime add table public.clan_boss_state';
+  end if;
+end
+$$;
+
 notify pgrst, 'reload schema';
 

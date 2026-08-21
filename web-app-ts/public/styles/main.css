@@ -384,6 +384,33 @@ body {
     margin: 0;
 }
 
+.clan-active-boss-hp-block {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.clan-active-boss-hp-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+}
+
+.clan-active-boss-hp-input {
+    width: 12ch;
+    min-height: 38px;
+    padding: 0 0.55rem;
+    border: 1px solid #c8a85d;
+    border-radius: 6px;
+    background: #ffffff;
+    color: #26334d;
+    font: inherit;
+    text-align: right;
+}
+
 .clan-attack-active-header h2 {
     color: #704600;
     font-size: 1.2rem;
@@ -414,10 +441,15 @@ body {
     font-weight: 600;
 }
 
-.clan-attack-message-input {
-    width: 100%;
-    min-height: 40px;
+.clan-attack-message-row {
+    display: flex;
+    gap: 0.5rem;
     margin-top: 0.35rem;
+}
+
+.clan-attack-message-input {
+    flex: 1 1 auto;
+    min-height: 40px;
     padding: 0 0.75rem;
     border: 1px solid #c8a85d;
     border-radius: 6px;
@@ -435,6 +467,20 @@ body {
     display: flex;
     gap: 0.5rem;
     margin-top: 0.75rem;
+    flex-wrap: wrap;
+}
+
+#clan-attack-complete-button {
+    background: #2f9e44;
+}
+
+#clan-attack-complete-button:hover:not(:disabled) {
+    background: #2b8a3e;
+}
+
+.clan-defeat-buttons {
+    display: flex;
+    gap: 0.4rem;
     flex-wrap: wrap;
 }
 
@@ -499,13 +545,43 @@ body {
 }
 
 @media (max-width: 640px) {
+    .clan-active-boss-hp-block {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .clan-active-boss-hp-actions {
+        width: 100%;
+    }
+
+    .clan-active-boss-hp-input {
+        flex: 1 1 140px;
+    }
+
     .clan-attack-member-row {
         grid-template-columns: 1fr;
         gap: 0.2rem;
     }
 
+    .clan-attack-message-row {
+        flex-wrap: wrap;
+    }
+
+    .clan-attack-message-row > .btn {
+        flex: 1 1 100%;
+    }
+
     .clan-attack-active-actions > .btn {
         flex: 1 1 100px;
+    }
+
+    .clan-defeat-buttons {
+        flex: 1 1 100%;
+    }
+
+    .clan-defeat-buttons > .btn {
+        flex: 1 1 calc(25% - 0.4rem);
+        min-width: 88px;
     }
 
     .clan-overtime-anchor {
