@@ -406,6 +406,10 @@ app.get('/clan-data', ensureDiscordServerLinked, async (req, res) => {
 });
 
 app.get('/clan-management', ensureDiscordServerLinked, async (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+
   const config = getSupabaseConfig();
   const userSession = req.session.user as any;
   const googleUserId = typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '';
@@ -458,18 +462,19 @@ app.post('/clan-management/members/delete', ensureDiscordServerLinked, async (re
   const discordServer = profile && isNonEmptyTrimmedString(profile.discordServer) ? profile.discordServer : getSessionDiscordServer(req);
   const clanId = normalizeDiscordServerToClanId(discordServer);
   const body = req.body && typeof req.body === 'object' ? req.body as Record<string, unknown> : {};
+  const source = body.source === 'discord' || body.source === 'web' ? body.source : '';
   const membersource = body.membersource === 'discord' || body.membersource === 'web' ? body.membersource : '';
   const memberid = typeof body.memberid === 'string' ? body.memberid.trim() : '';
   const bodyClanId = typeof body.clanid === 'string' ? body.clanid.trim() : '';
 
-  if (!clanId || bodyClanId !== clanId || !membersource || !/^[0-9]+$/.test(memberid)) {
+  if (!clanId || bodyClanId !== clanId || !source || !membersource || !/^[0-9]+$/.test(memberid)) {
     res.status(400).send('不正な削除リクエストです');
     return;
   }
 
   try {
-    await supabaseDeleteClanMember(config, clanId, membersource, memberid);
-    res.redirect('/clan-management');
+    await supabaseDeleteClanMember(config, source, clanId, membersource, memberid);
+    res.redirect(`/clan-management?updatedAt=${Date.now()}`);
   } catch (error) {
     console.error('Failed to delete clan member:', error);
     res.status(502).send('メンバーの削除に失敗しました');
@@ -525,7 +530,7 @@ app.post('/clan-management/members/add', ensureDiscordServerLinked, async (req, 
       created_at: now,
       updated_at: now
     });
-    res.redirect('/clan-management');
+    res.redirect(`/clan-management?updatedAt=${Date.now()}`);
   } catch (error) {
     console.error('Failed to add clan member:', error);
     res.status(502).send('メンバーの追加に失敗しました');
@@ -828,7 +833,7 @@ async function supabaseSelectClanMembersByDiscordServer(config: SupabaseConfig, 
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLAN_MEMBERS_TABLE);
   const query = new URLSearchParams({
     select: '*',
-    source: 'eq.discord',
+    or: '(source.eq.discord,source.eq.web)',
     clanid: `eq.${clanId}`,
     order: 'updated_at.desc'
   });
@@ -1147,13 +1152,14 @@ async function supabaseSelectClanAttackHistories(
 
 async function supabaseDeleteClanMember(
   config: SupabaseConfig,
+  source: 'discord' | 'web',
   clanId: string,
   membersource: 'discord' | 'web',
   memberid: string
 ): Promise<void> {
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLAN_MEMBERS_TABLE);
   const query = new URLSearchParams({
-    source: 'eq.discord',
+    source: `eq.${source}`,
     clanid: `eq.${clanId}`,
     membersource: `eq.${membersource}`,
     memberid: `eq.${memberid}`
@@ -1178,7 +1184,7 @@ async function supabaseSelectNextWebClanMemberId(config: SupabaseConfig, clanId:
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLAN_MEMBERS_TABLE);
   const query = new URLSearchParams({
     select: 'memberid',
-    source: 'eq.discord',
+    source: 'eq.web',
     clanid: `eq.${clanId}`,
     membersource: 'eq.web'
   });

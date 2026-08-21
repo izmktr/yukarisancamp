@@ -361,6 +361,15 @@ body {
     font-size: 1.05rem;
 }
 
+.clan-show-all-active-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0.35rem 0 0.85rem;
+    color: #26334d;
+    font-weight: 600;
+}
+
 .clan-attack-active-panel {
     margin-bottom: 1rem;
     padding: 1rem;

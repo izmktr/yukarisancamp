@@ -97,6 +97,7 @@
                 </td>
                 <td>
                   <form method="post" action="/clan-management/members/delete" class="clan-management-delete-form" onsubmit="return confirm('このメンバーを削除します。よろしいですか？');">
+                    <input type="hidden" name="source" value="<%= member.source %>" />
                     <input type="hidden" name="clanid" value="<%= member.clanid %>" />
                     <input type="hidden" name="membersource" value="<%= member.membersource %>" />
                     <input type="hidden" name="memberid" value="<%= member.memberid %>" />

@@ -1,17 +1,32 @@
 <div class="page-content clan-page">
     <% const data = clanPageData || { discordServer: '', clan: null, members: [], currentMember: null, attackHistories: [], bossNames: [], bossHp: [], baseDate: '', refreshToken: 'none:0', loadError: '' }; %>
     <h2><%= data.clan && data.clan.name ? data.clan.name : '未登録' %></h2>
-    <% if (data.currentMember && Number(data.currentMember.attackboss) !== 0) { %>
+    <%
+        const allMembers = Array.isArray(data.members) ? data.members : [];
+        const activeBossNumbers = Array.from(new Set(allMembers
+            .map((member) => Number(member.attackboss))
+            .filter((attackBoss) => Number.isInteger(attackBoss) && attackBoss >= 1 && attackBoss <= 5)))
+            .sort((left, right) => left - right);
+        const selfActiveBossNumber = data.currentMember ? Number(data.currentMember.attackboss) : 0;
+        const selfIsAttacking = Number.isInteger(selfActiveBossNumber) && selfActiveBossNumber >= 1 && selfActiveBossNumber <= 5;
+    %>
+    <% if (activeBossNumbers.length > 0) { %>
+        <label class="clan-show-all-active-toggle">
+            <input id="clan-show-all-active-checkbox" type="checkbox" />
+            すべての攻撃中を表示
+        </label>
+    <% } %>
+    <% if (selfIsAttacking) { %>
         <%
-            const activeBossNumber = Number(data.currentMember.attackboss);
+            const activeBossNumber = selfActiveBossNumber;
             const activeBossIndex = activeBossNumber - 1;
             const activeBossName = Array.isArray(data.bossNames) && typeof data.bossNames[activeBossIndex] === 'string' && data.bossNames[activeBossIndex].trim()
                 ? data.bossNames[activeBossIndex].trim()
                 : `ボス ${activeBossNumber}`;
             const activeBossHpValue = Array.isArray(data.bossHp) ? Number(data.bossHp[activeBossIndex]) : NaN;
             const activeBossHp = Number.isFinite(activeBossHpValue) ? activeBossHpValue.toLocaleString('ja-JP') : '未設定';
-            const activeAttackMembers = Array.isArray(data.members)
-                ? data.members.filter((member) => Number(member.attackboss) === activeBossNumber)
+            const activeAttackMembers = Array.isArray(allMembers)
+                ? allMembers.filter((member) => Number(member.attackboss) === activeBossNumber)
                 : [];
         %>
         <section class="clan-attack-active-panel" aria-labelledby="clan-attack-active-title">
@@ -97,6 +112,58 @@
             <p id="clan-attack-active-action-status" class="settings-status" aria-live="polite"></p>
         </section>
     <% } %>
+
+    <% activeBossNumbers.filter((bossNumber) => bossNumber !== selfActiveBossNumber).forEach((bossNumber) => { %>
+        <%
+            const activeBossIndex = bossNumber - 1;
+            const activeBossName = Array.isArray(data.bossNames) && typeof data.bossNames[activeBossIndex] === 'string' && data.bossNames[activeBossIndex].trim()
+                ? data.bossNames[activeBossIndex].trim()
+                : `ボス ${bossNumber}`;
+            const activeBossHpValue = Array.isArray(data.bossHp) ? Number(data.bossHp[activeBossIndex]) : NaN;
+            const activeBossHp = Number.isFinite(activeBossHpValue) ? activeBossHpValue.toLocaleString('ja-JP') : '未設定';
+            const activeAttackMembers = Array.isArray(allMembers)
+                ? allMembers.filter((member) => Number(member.attackboss) === bossNumber)
+                : [];
+        %>
+        <section class="clan-attack-active-panel clan-attack-active-panel-other" aria-labelledby="clan-attack-active-title-<%= bossNumber %>" style="display: none;">
+            <div class="clan-attack-active-header">
+                <h2 id="clan-attack-active-title-<%= bossNumber %>">攻撃中</h2>
+                <p><strong><%= activeAttackMembers.length > 0 && Number.isInteger(Number(activeAttackMembers[0].attacklap)) ? Number(activeAttackMembers[0].attacklap) : '-' %>周目</strong>：<%= activeBossName %>、HP <%= activeBossHp %></p>
+            </div>
+
+            <div class="clan-attack-member-list">
+                <% activeAttackMembers.forEach((member) => { %>
+                    <%
+                        const damageValue = Number(member.damage);
+                        const hasDamageValue = member.damage !== null
+                            && member.damage !== undefined
+                            && Number.isFinite(damageValue);
+                        const attackMessageText = typeof member.attackmessage === 'string'
+                            ? member.attackmessage.trim()
+                            : '';
+                        const sortieIndex = Number(member.sortie) - 1;
+                        const carryTimeValue = Array.isArray(member.attacktime)
+                            ? Number(member.attacktime[sortieIndex])
+                            : NaN;
+                        const carryTimeText = Number(member.overattack) === 1 && Number.isInteger(carryTimeValue)
+                            ? ` [持:${carryTimeValue}]`
+                            : '';
+                    %>
+                    <div class="clan-attack-member-row">
+                        <strong><%= (member.name || 'Unknown') + carryTimeText %></strong>
+                        <span>
+                            ：<%= Number(member.damage || 0).toLocaleString('ja-JP') %>
+                            <% if (attackMessageText) { %>
+                                、<%= attackMessageText %>
+                            <% } else if (!hasDamageValue) { %>
+                                、メッセージなし
+                            <% } %>
+                        </span>
+                    </div>
+                <% }); %>
+            </div>
+        </section>
+    <% }); %>
 
     <input type="hidden" id="clan-refresh-token" value="<%= data.refreshToken %>" />
     <input type="hidden" id="clan-source" value="<%= data.clan && data.clan.source ? data.clan.source : '' %>" />
@@ -352,6 +419,7 @@
 
     document.addEventListener('DOMContentLoaded', () => {
         replaceBossLabelsFromClanBattleSettings();
+        initializeClanActivePanelsVisibility();
         initializeClanBosslapEditor();
         initializeClanAttackButtons();
         initializeClanActiveBossHpEditor();
@@ -359,6 +427,38 @@
         initializeClanHistoryEditor();
         initializeClanRealtimeSubscription();
     });
+
+    function initializeClanActivePanelsVisibility() {
+        const checkbox = document.getElementById('clan-show-all-active-checkbox');
+        const otherPanels = Array.from(document.querySelectorAll('.clan-attack-active-panel-other'));
+        if (!checkbox || otherPanels.length === 0) {
+            return;
+        }
+
+        const cookieKey = 'clanShowAllActive';
+        const readCookieValue = (key) => {
+            const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const match = document.cookie.match(new RegExp(`(?:^|; )${escapedKey}=([^;]*)`));
+            return match ? decodeURIComponent(match[1]) : '';
+        };
+        const writeCookieValue = (key, value) => {
+            document.cookie = `${key}=${encodeURIComponent(value)}; max-age=31536000; path=/; samesite=lax`;
+        };
+
+        const applyVisibility = () => {
+            const shouldShow = checkbox.checked;
+            otherPanels.forEach((panel) => {
+                panel.style.display = shouldShow ? '' : 'none';
+            });
+        };
+
+        checkbox.checked = readCookieValue(cookieKey) === '1';
+        checkbox.addEventListener('change', () => {
+            writeCookieValue(cookieKey, checkbox.checked ? '1' : '0');
+            applyVisibility();
+        });
+        applyVisibility();
+    }
 
     function initializeClanActiveBossHpEditor() {
         const editButton = document.getElementById('clan-active-boss-hp-edit-button');
