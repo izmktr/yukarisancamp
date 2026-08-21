@@ -1052,7 +1052,8 @@
                         if (eventType !== 'DELETE' && tryApplyActiveBossHpRealtimeUpdate(row)) {
                             return;
                         }
-                        reloadPage();
+                        //読み込めなかったものは無視
+                        //reloadPage();
                     }
                 })
                 .subscribe((status, error) => {
