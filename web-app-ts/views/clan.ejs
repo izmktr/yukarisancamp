@@ -18,7 +18,7 @@
             <div class="clan-attack-active-header">
                 <h2 id="clan-attack-active-title">攻撃中</h2>
                 <div class="clan-active-boss-hp-block">
-                    <p><strong><%= Number(data.currentMember.attacklap) %>周目</strong>：<%= activeBossName %>、HP <span id="clan-active-boss-hp-display"><%= activeBossHp %></span></p>
+                    <p><strong><%= Number(data.currentMember.attacklap) %>周目</strong>：<%= activeBossName %>、HP <span id="clan-active-boss-hp-display" data-boss-index="<%= activeBossNumber %>"><%= activeBossHp %></span></p>
                     <div class="clan-active-boss-hp-actions">
                         <button id="clan-active-boss-hp-edit-button" type="button" class="btn btn-primary">変更</button>
                         <input
@@ -975,14 +975,42 @@
             return;
         }
 
+        const tryApplyActiveBossHpRealtimeUpdate = (row) => {
+            const hpDisplay = document.getElementById('clan-active-boss-hp-display');
+            if (!hpDisplay || !row || typeof row !== 'object') {
+                return false;
+            }
+
+            const activeBossNumber = Number(hpDisplay.getAttribute('data-boss-index'));
+            const rowBossIndex = Number(row.boss_index);
+            const rowCurrentHp = Number(row.current_hp);
+            if (!Number.isInteger(activeBossNumber) || !Number.isInteger(rowBossIndex) || activeBossNumber !== rowBossIndex) {
+                return false;
+            }
+            if (!Number.isFinite(rowCurrentHp) || rowCurrentHp < 0) {
+                return false;
+            }
+
+            hpDisplay.textContent = Math.trunc(rowCurrentHp).toLocaleString('ja-JP');
+
+            const hpInput = document.getElementById('clan-active-boss-hp-input');
+            if (hpInput && hpInput.style.display === 'none') {
+                hpInput.value = String(Math.trunc(rowCurrentHp));
+            }
+
+            return true;
+        };
+
         try {
             const client = window.supabase.createClient(supabaseUrl, publishableKey);
+            const clanIdFilter = `clanid=eq.${clanId}`;
             const channel = client
                 .channel(`clan-realtime-${source}-${clanId}`)
                 .on('postgres_changes', {
                     event: '*',
                     schema: 'public',
-                    table: 'clans'
+                    table: 'clans',
+                    filter: clanIdFilter
                 }, (payload) => {
                     console.log('Supabase Realtime clans change payload:', payload);
                     const next = payload && payload.new ? payload.new : null;
@@ -996,7 +1024,8 @@
                 .on('postgres_changes', {
                     event: '*',
                     schema: 'public',
-                    table: 'clan_members'
+                    table: 'clan_members',
+                    filter: clanIdFilter
                 }, (payload) => {
                     console.log('Supabase Realtime clan_members change payload:', payload);
                     const row = payload && (payload.new || payload.old) ? (payload.new || payload.old) : null;
@@ -1010,7 +1039,8 @@
                 .on('postgres_changes', {
                     event: '*',
                     schema: 'public',
-                    table: 'clan_boss_state'
+                    table: 'clan_boss_state',
+                    filter: clanIdFilter
                 }, (payload) => {
                     console.log('Supabase Realtime clan_boss_state change payload:', payload);
                     const row = payload && (payload.new || payload.old) ? (payload.new || payload.old) : null;
@@ -1018,6 +1048,10 @@
                     const rowClanId = row && row.clanid !== undefined && row.clanid !== null ? String(row.clanid).trim() : '';
 
                     if (rowSource === source && rowClanId === clanId) {
+                        const eventType = payload && typeof payload.eventType === 'string' ? payload.eventType : '';
+                        if (eventType !== 'DELETE' && tryApplyActiveBossHpRealtimeUpdate(row)) {
+                            return;
+                        }
                         reloadPage();
                     }
                 })
