@@ -1,0 +1,1174 @@
+<div class="page-content clan-page">
+    <% const data = clanPageData || { discordServer: '', clan: null, members: [], currentMember: null, attackHistories: [], bossNames: [], bossHp: [], baseDate: '', refreshToken: 'none:0', loadError: '' }; %>
+    <h2><%= data.clan && data.clan.name ? data.clan.name : '未登録' %></h2>
+    <%
+        const allMembers = Array.isArray(data.members) ? data.members : [];
+        const activeBossNumbers = Array.from(new Set(allMembers
+            .map((member) => Number(member.attackboss))
+            .filter((attackBoss) => Number.isInteger(attackBoss) && attackBoss >= 1 && attackBoss <= 5)))
+            .sort((left, right) => left - right);
+        const selfActiveBossNumber = data.currentMember ? Number(data.currentMember.attackboss) : 0;
+        const selfIsAttacking = Number.isInteger(selfActiveBossNumber) && selfActiveBossNumber >= 1 && selfActiveBossNumber <= 5;
+    %>
+    <% if (activeBossNumbers.length > 0) { %>
+        <label class="clan-show-all-active-toggle">
+            <input id="clan-show-all-active-checkbox" type="checkbox" />
+            すべての攻撃中を表示
+        </label>
+    <% } %>
+    <% if (selfIsAttacking) { %>
+        <%
+            const activeBossNumber = selfActiveBossNumber;
+            const activeBossIndex = activeBossNumber - 1;
+            const activeBossName = Array.isArray(data.bossNames) && typeof data.bossNames[activeBossIndex] === 'string' && data.bossNames[activeBossIndex].trim()
+                ? data.bossNames[activeBossIndex].trim()
+                : `ボス ${activeBossNumber}`;
+            const activeBossHpValue = Array.isArray(data.bossHp) ? Number(data.bossHp[activeBossIndex]) : NaN;
+            const activeBossHp = Number.isFinite(activeBossHpValue) ? activeBossHpValue.toLocaleString('ja-JP') : '未設定';
+            const activeAttackMembers = Array.isArray(allMembers)
+                ? allMembers.filter((member) => Number(member.attackboss) === activeBossNumber)
+                : [];
+        %>
+        <section class="clan-attack-active-panel" aria-labelledby="clan-attack-active-title">
+            <div class="clan-attack-active-header">
+                <h2 id="clan-attack-active-title">攻撃中</h2>
+                <div class="clan-active-boss-hp-block">
+                    <p><strong><%= Number(data.currentMember.attacklap) %>周目</strong>：<%= activeBossName %>、HP <span id="clan-active-boss-hp-display" data-boss-index="<%= activeBossNumber %>"><%= activeBossHp %></span></p>
+                    <div class="clan-active-boss-hp-actions">
+                        <button id="clan-active-boss-hp-edit-button" type="button" class="btn btn-primary">変更</button>
+                        <input
+                            id="clan-active-boss-hp-input"
+                            class="clan-active-boss-hp-input"
+                            type="number"
+                            min="0"
+                            step="1"
+                            inputmode="numeric"
+                            autocomplete="off"
+                            value="<%= Number.isFinite(activeBossHpValue) ? Math.trunc(activeBossHpValue) : '' %>"
+                            style="display: none;"
+                        />
+                        <button id="clan-active-boss-hp-save-button" type="button" class="btn btn-primary" style="display: none;">確定</button>
+                        <button id="clan-active-boss-hp-cancel-button" type="button" class="btn btn-danger" style="display: none;">破棄</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="clan-attack-member-list">
+                <% activeAttackMembers.forEach((member) => { %>
+                    <%
+                        const damageValue = Number(member.damage);
+                        const hasDamageValue = member.damage !== null
+                            && member.damage !== undefined
+                            && Number.isFinite(damageValue);
+                        const attackMessageText = typeof member.attackmessage === 'string'
+                            ? member.attackmessage.trim()
+                            : '';
+                        const sortieIndex = Number(member.sortie) - 1;
+                        const carryTimeValue = Array.isArray(member.attacktime)
+                            ? Number(member.attacktime[sortieIndex])
+                            : NaN;
+                        const carryTimeText = Number(member.overattack) === 1 && Number.isInteger(carryTimeValue)
+                            ? ` [持:${carryTimeValue}]`
+                            : '';
+                    %>
+                    <div class="clan-attack-member-row">
+                        <strong><%= (member.name || 'Unknown') + carryTimeText %></strong>
+                        <span>
+                            ：<%= Number(member.damage || 0).toLocaleString('ja-JP') %>
+                            <% if (attackMessageText) { %>
+                                、<%= attackMessageText %>
+                            <% } else if (!hasDamageValue) { %>
+                                、メッセージなし
+                            <% } %>
+                        </span>
+                    </div>
+                <% }); %>
+            </div>
+
+            <label class="clan-attack-message-label" for="clan-attack-message">メッセージ</label>
+            <div class="clan-attack-message-row">
+                <input
+                    id="clan-attack-message"
+                    class="clan-attack-message-input"
+                    type="text"
+                    maxlength="200"
+                    value="<%= data.currentMember.attackmessage || '' %>"
+                />
+                <button id="clan-attack-message-send-button" type="button" class="btn btn-primary">送信</button>
+            </div>
+            <div class="clan-attack-active-actions">
+                <button id="clan-attack-complete-button" type="button" class="btn btn-primary">完了</button>
+                <div class="clan-defeat-buttons" role="group" aria-label="討伐時間の選択">
+                    <% if (Number(data.currentMember.overattack) === 1) { %>
+                        <button type="button" class="btn btn-primary clan-attack-defeat-button" data-overtime="0">討伐:0</button>
+                    <% } else { %>
+                        <% [20, 30, 40, 50, 60, 70, 80, 90].forEach((overtime) => { %>
+                            <button type="button" class="btn btn-primary clan-attack-defeat-button" data-overtime="<%= overtime %>">討伐:<%= overtime %></button>
+                        <% }); %>
+                    <% } %>
+                </div>
+                <button id="clan-attack-cancel-button" type="button" class="btn btn-danger">キャンセル</button>
+            </div>
+            <p id="clan-attack-active-action-status" class="settings-status" aria-live="polite"></p>
+        </section>
+    <% } %>
+
+    <% activeBossNumbers.filter((bossNumber) => bossNumber !== selfActiveBossNumber).forEach((bossNumber) => { %>
+        <%
+            const activeBossIndex = bossNumber - 1;
+            const activeBossName = Array.isArray(data.bossNames) && typeof data.bossNames[activeBossIndex] === 'string' && data.bossNames[activeBossIndex].trim()
+                ? data.bossNames[activeBossIndex].trim()
+                : `ボス ${bossNumber}`;
+            const activeBossHpValue = Array.isArray(data.bossHp) ? Number(data.bossHp[activeBossIndex]) : NaN;
+            const activeBossHp = Number.isFinite(activeBossHpValue) ? activeBossHpValue.toLocaleString('ja-JP') : '未設定';
+            const activeAttackMembers = Array.isArray(allMembers)
+                ? allMembers.filter((member) => Number(member.attackboss) === bossNumber)
+                : [];
+        %>
+        <section class="clan-attack-active-panel clan-attack-active-panel-other" aria-labelledby="clan-attack-active-title-<%= bossNumber %>" style="display: none;">
+            <div class="clan-attack-active-header">
+                <h2 id="clan-attack-active-title-<%= bossNumber %>">攻撃中</h2>
+                <p><strong><%= activeAttackMembers.length > 0 && Number.isInteger(Number(activeAttackMembers[0].attacklap)) ? Number(activeAttackMembers[0].attacklap) : '-' %>周目</strong>：<%= activeBossName %>、HP <%= activeBossHp %></p>
+            </div>
+
+            <div class="clan-attack-member-list">
+                <% activeAttackMembers.forEach((member) => { %>
+                    <%
+                        const damageValue = Number(member.damage);
+                        const hasDamageValue = member.damage !== null
+                            && member.damage !== undefined
+                            && Number.isFinite(damageValue);
+                        const attackMessageText = typeof member.attackmessage === 'string'
+                            ? member.attackmessage.trim()
+                            : '';
+                        const sortieIndex = Number(member.sortie) - 1;
+                        const carryTimeValue = Array.isArray(member.attacktime)
+                            ? Number(member.attacktime[sortieIndex])
+                            : NaN;
+                        const carryTimeText = Number(member.overattack) === 1 && Number.isInteger(carryTimeValue)
+                            ? ` [持:${carryTimeValue}]`
+                            : '';
+                    %>
+                    <div class="clan-attack-member-row">
+                        <strong><%= (member.name || 'Unknown') + carryTimeText %></strong>
+                        <span>
+                            ：<%= Number(member.damage || 0).toLocaleString('ja-JP') %>
+                            <% if (attackMessageText) { %>
+                                、<%= attackMessageText %>
+                            <% } else if (!hasDamageValue) { %>
+                                、メッセージなし
+                            <% } %>
+                        </span>
+                    </div>
+                <% }); %>
+            </div>
+        </section>
+    <% }); %>
+
+    <input type="hidden" id="clan-refresh-token" value="<%= data.refreshToken %>" />
+    <input type="hidden" id="clan-source" value="<%= data.clan && data.clan.source ? data.clan.source : '' %>" />
+    <input type="hidden" id="clan-id" value="<%= data.clan && data.clan.clanid ? data.clan.clanid : '' %>" />
+
+    <% if (data.loadError) { %>
+        <div class="settings-firebase-error"><%= data.loadError %></div>
+    <% } else { %>
+        <div class="settings-card clan-summary-card">
+            <% const laps = data.clan && Array.isArray(data.clan.bosslaps) ? data.clan.bosslaps : []; %>
+            <% if (laps.length !== 5) { %>
+                <p class="clan-empty">bosslaps が未設定です。</p>
+            <% } else { %>
+                <%
+                    const numericBossCounts = laps.map((value) => Number(value));
+                    const minBossCount = numericBossCounts.length > 0 ? Math.min(...numericBossCounts) : 0;
+                    const clanMembers = Array.isArray(data.members) ? data.members : [];
+                    const currentAttackHistories = Array.isArray(data.attackHistories) ? data.attackHistories : [];
+                    const maxSortie = currentAttackHistories.reduce((max, history) => {
+                        const sortie = Number(history.sortie);
+                        return Number.isFinite(sortie) ? Math.max(max, sortie) : max;
+                    }, 0);
+                    const historyCountBySortie = currentAttackHistories.reduce((counts, history) => {
+                        const sortie = Number(history.sortie);
+                        counts.set(sortie, (counts.get(sortie) || 0) + 1);
+                        return counts;
+                    }, new Map());
+                    const carryOverHistories = currentAttackHistories.filter((history) => (
+                        history.defeat === true
+                        && historyCountBySortie.get(Number(history.sortie)) === 1
+                        && Number.isInteger(Number(history.overtime))
+                        && Number(history.overtime) >= 20
+                        && Number(history.overtime) <= 90
+                    ));
+                    const canStartAttack = data.currentMember
+                        && Number(data.currentMember.attackboss) === 0
+                        && maxSortie < 3;
+                    const canStartCarryOverAttack = data.currentMember
+                        && Number(data.currentMember.attackboss) === 0;
+                %>
+                <section class="clandata-section">
+                    <div class="clan-bosscount-header">
+                        <h3>ボスカウント</h3>
+                        <div class="clan-bosscount-actions">
+                            <button id="clan-bosscount-edit-btn" type="button" class="btn btn-primary">修正</button>
+                            <button id="clan-bosscount-save-btn" type="button" class="btn btn-primary" style="display: none;">確定</button>
+                            <button id="clan-bosscount-cancel-btn" type="button" class="btn btn-danger" style="display: none;">破棄</button>
+                        </div>
+                    </div>
+                    <div class="bosscount-display">
+                        <% laps.forEach((count, idx) => { %>
+                            <%
+                                const currentCount = Number(count);
+                                let countStateClass = '';
+                                if (currentCount === minBossCount + 1) {
+                                    countStateClass = 'bosscount-near-min';
+                                } else if (currentCount >= minBossCount + 2) {
+                                    countStateClass = 'bosscount-far-min';
+                                }
+                                const isAttackDisabled = currentCount >= minBossCount + 2;
+                                const attackingMembers = clanMembers.filter((member) => {
+                                    const attackBoss = Number(member.attackboss);
+                                    return Number.isInteger(attackBoss)
+                                        && attackBoss > 0
+                                        && (attackBoss - 1) % 5 === idx;
+                                });
+                            %>
+                            <div class="bosscount-item <%= countStateClass %>">
+                                <p>
+                                    <span class="boss-name-label" data-boss-index="<%= idx %>">ボス <%= idx + 1 %></span>:
+                                    <strong class="clan-bosslap-value" data-boss-index="<%= idx %>"><%= Number(count) %></strong>
+                                    <input
+                                        type="number"
+                                        class="clan-bosslap-input"
+                                        data-boss-index="<%= idx %>"
+                                        min="1"
+                                        step="1"
+                                        value="<%= Number(count) %>"
+                                        style="display: none;"
+                                    />
+                                </p>
+                                <div class="clan-attacking-members">
+                                    <% attackingMembers.forEach((member) => { %>
+                                        <span class="clan-attacking-member-name"><%= member.name || 'Unknown' %></span>
+                                    <% }); %>
+                                </div>
+                                <% if (canStartAttack) { %>
+                                    <button
+                                        type="button"
+                                        class="btn btn-primary clan-attack-button"
+                                        data-boss="<%= idx + 1 %>"
+                                        aria-label="ボス<%= idx + 1 %>を攻撃"
+                                        <%= isAttackDisabled ? 'disabled' : '' %>
+                                    >新規攻撃</button>
+                                <% } %>
+                                <% if (canStartCarryOverAttack) { %>
+                                    <% carryOverHistories.forEach((history) => { %>
+                                        <button
+                                            type="button"
+                                            class="btn clan-attack-button clan-carryover-attack-button"
+                                            data-boss="<%= idx + 1 %>"
+                                            data-history-id="<%= Number(history.id) %>"
+                                            aria-label="<%= Number(history.overtime) %>秒の持ち越しでボス<%= idx + 1 %>を攻撃"
+                                            <%= isAttackDisabled ? 'disabled' : '' %>
+                                        ><%= Number(history.overtime) %>s攻撃</button>
+                                    <% }); %>
+                                <% } %>
+                            </div>
+                        <% }); %>
+                    </div>
+                    <p id="clan-bosslap-status" class="settings-status"></p>
+                    <p id="clan-attack-status" class="settings-status" aria-live="polite"></p>
+                </section>
+            <% } %>
+
+            <% const attackHistories = Array.isArray(data.attackHistories) ? data.attackHistories : []; %>
+            <% const bossNames = Array.isArray(data.bossNames) ? data.bossNames : []; %>
+            <section class="clandata-section clan-attack-history-section">
+                <div class="clan-bosscount-header">
+                    <h3>凸履歴</h3>
+                    <% if (attackHistories.length > 0) { %>
+                        <div class="clan-bosscount-actions">
+                            <button id="clan-history-edit-button" type="button" class="btn btn-primary">修正</button>
+                            <button id="clan-history-save-button" type="button" class="btn btn-primary" style="display: none;">確定</button>
+                            <button id="clan-history-cancel-button" type="button" class="btn btn-danger" style="display: none;">破棄</button>
+                        </div>
+                    <% } %>
+                </div>
+                <% if (attackHistories.length === 0) { %>
+                    <p class="clan-empty">本日の凸履歴はありません。</p>
+                <% } else { %>
+                    <div class="clan-attack-history-table-wrapper">
+                        <table class="clan-attack-history-table">
+                            <thead>
+                                <tr>
+                                    <th>凸数</th>
+                                    <th>周回数</th>
+                                    <th>ボス</th>
+                                    <th>状態</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% attackHistories.forEach((history) => { %>
+                                    <%
+                                        const bossNumber = Number(history.boss);
+                                        const bossIndex = bossNumber > 0 ? (bossNumber - 1) % 5 : -1;
+                                        const configuredBossName = bossIndex >= 0 && typeof bossNames[bossIndex] === 'string'
+                                            ? bossNames[bossIndex].trim()
+                                            : '';
+                                        const bossName = configuredBossName || (bossIndex >= 0 ? `ボス ${bossIndex + 1}` : 'ボス不明');
+                                        const hasSameSortieHistory = attackHistories.some((otherHistory) => (
+                                            Number(otherHistory.id) !== Number(history.id)
+                                            && Number(otherHistory.sortie) === Number(history.sortie)
+                                        ));
+                                        const hasEditableOvertime = !hasSameSortieHistory || Number(history.overtime) > 0;
+                                        const isDefeatOnly = hasSameSortieHistory && Number(history.overtime) > 0;
+                                        const isDeleteDisabled = isDefeatOnly;
+                                        const isUnusedCarryOver = !hasSameSortieHistory && Number(history.overtime) > 0;
+                                    %>
+                                    <tr
+                                        class="clan-attack-history-row <%= isUnusedCarryOver ? 'clan-attack-history-carryover-source' : '' %>"
+                                        data-history-id="<%= Number(history.id) %>"
+                                        data-original-attacklap="<%= Number.isInteger(history.attacklap) ? Number(history.attacklap) : '' %>"
+                                        data-original-boss="<%= bossNumber %>"
+                                        data-original-defeat="<%= history.defeat === true ? 'true' : 'false' %>"
+                                        data-original-overtime="<%= Number(history.overtime) %>"
+                                        data-fixed-overtime="<%= hasEditableOvertime ? '' : '0' %>"
+                                    >
+                                        <td>
+                                            <span><%= Number(history.sortie) %>凸</span>
+                                        </td>
+                                        <td>
+                                            <span class="clan-history-display"><%= Number.isInteger(history.attacklap) ? `${Number(history.attacklap)}周目` : '不明' %></span>
+                                            <input class="clan-history-input clan-history-attacklap-input" type="number" min="0" step="1" value="<%= Number.isInteger(history.attacklap) ? Number(history.attacklap) : '' %>" aria-label="周回数" />
+                                        </td>
+                                        <td>
+                                            <span class="clan-history-display"><%= bossName %></span>
+                                            <select class="clan-history-input clan-history-boss-input">
+                                                <% for (let bossOption = 1; bossOption <= 5; bossOption += 1) { %>
+                                                    <% const optionName = typeof bossNames[bossOption - 1] === 'string' && bossNames[bossOption - 1].trim() ? bossNames[bossOption - 1].trim() : `ボス ${bossOption}`; %>
+                                                    <option value="<%= bossOption %>" <%= bossOption === bossNumber ? 'selected' : '' %>><%= optionName %></option>
+                                                <% } %>
+                                            </select>
+                                        </td>
+                                        <td>
+                                            <span class="clan-history-display"><%= history.defeat === true
+                                                ? Number(history.overtime) > 0 ? `討伐:${Number(history.overtime)}秒` : '討伐'
+                                                : '未討伐' %></span>
+                                            <div class="clan-history-input clan-history-state-editor">
+                                                <select class="clan-history-defeat-input">
+                                                    <% if (!isDefeatOnly) { %>
+                                                        <option value="false" <%= history.defeat !== true ? 'selected' : '' %>>未討伐</option>
+                                                    <% } %>
+                                                    <option value="true" <%= history.defeat === true ? 'selected' : '' %>>討伐</option>
+                                                </select>
+                                                <% if (hasEditableOvertime) { %>
+                                                    <input class="clan-history-overtime-input" type="number" min="20" max="90" step="1" value="<%= Number(history.overtime) %>" aria-label="持ち越し時間" />
+                                                    <span class="clan-history-overtime-unit">秒</span>
+                                                <% } %>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <button
+                                                type="button"
+                                                class="clan-history-input clan-history-delete-button btn btn-danger"
+                                                <%= isDeleteDisabled ? 'disabled title="持ち越し使用後の討伐履歴は削除できません"' : '' %>
+                                            >削除</button>
+                                        </td>
+                                    </tr>
+                                <% }); %>
+                            </tbody>
+                        </table>
+                    </div>
+                <% } %>
+                <p id="clan-history-status" class="settings-status" aria-live="polite"></p>
+            </section>
+        </div>
+    <% } %>
+</div>
+
+<script>
+    async function replaceBossLabelsFromClanBattleSettings() {
+        const labelElements = Array.from(document.querySelectorAll('.boss-name-label[data-boss-index]'));
+        if (labelElements.length === 0) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/clanbattle-settings/current', {
+                method: 'GET',
+                cache: 'no-store'
+            });
+            if (!response.ok) {
+                return;
+            }
+
+            const payload = await response.json();
+            const state = payload && payload.state ? payload.state : null;
+            const bossNames = state && Array.isArray(state.bossname) ? state.bossname : [];
+
+            labelElements.forEach((element) => {
+                const index = Number(element.getAttribute('data-boss-index'));
+                const bossName = typeof bossNames[index] === 'string' ? bossNames[index].trim() : '';
+                if (bossName.length > 0) {
+                    element.textContent = bossName;
+                }
+            });
+        } catch (error) {
+            console.error('クラバト設定のボス名取得に失敗しました:', error);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        replaceBossLabelsFromClanBattleSettings();
+        initializeClanActivePanelsVisibility();
+        initializeClanBosslapEditor();
+        initializeClanAttackButtons();
+        initializeClanActiveBossHpEditor();
+        initializeClanActiveAttackActions();
+        initializeClanHistoryEditor();
+        initializeClanRealtimeSubscription();
+    });
+
+    function initializeClanActivePanelsVisibility() {
+        const checkbox = document.getElementById('clan-show-all-active-checkbox');
+        const otherPanels = Array.from(document.querySelectorAll('.clan-attack-active-panel-other'));
+        if (!checkbox || otherPanels.length === 0) {
+            return;
+        }
+
+        const cookieKey = 'clanShowAllActive';
+        const readCookieValue = (key) => {
+            const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const match = document.cookie.match(new RegExp(`(?:^|; )${escapedKey}=([^;]*)`));
+            return match ? decodeURIComponent(match[1]) : '';
+        };
+        const writeCookieValue = (key, value) => {
+            document.cookie = `${key}=${encodeURIComponent(value)}; max-age=31536000; path=/; samesite=lax`;
+        };
+
+        const applyVisibility = () => {
+            const shouldShow = checkbox.checked;
+            otherPanels.forEach((panel) => {
+                panel.style.display = shouldShow ? '' : 'none';
+            });
+        };
+
+        checkbox.checked = readCookieValue(cookieKey) === '1';
+        checkbox.addEventListener('change', () => {
+            writeCookieValue(cookieKey, checkbox.checked ? '1' : '0');
+            applyVisibility();
+        });
+        applyVisibility();
+    }
+
+    function initializeClanActiveBossHpEditor() {
+        const editButton = document.getElementById('clan-active-boss-hp-edit-button');
+        const saveButton = document.getElementById('clan-active-boss-hp-save-button');
+        const cancelButton = document.getElementById('clan-active-boss-hp-cancel-button');
+        const hpInput = document.getElementById('clan-active-boss-hp-input');
+        const status = document.getElementById('clan-attack-active-action-status');
+        if (!editButton || !saveButton || !cancelButton || !hpInput) {
+            return;
+        }
+
+        const originalValue = String(hpInput.value || '');
+        let isEditing = false;
+
+        const setStatus = (message, type) => {
+            if (!status) {
+                return;
+            }
+            status.textContent = message;
+            status.classList.remove('success', 'error');
+            if (type) {
+                status.classList.add(type);
+            }
+        };
+
+        const setEditing = (editing) => {
+            isEditing = editing;
+            editButton.style.display = editing ? 'none' : '';
+            hpInput.style.display = editing ? '' : 'none';
+            saveButton.style.display = editing ? '' : 'none';
+            cancelButton.style.display = editing ? '' : 'none';
+        };
+
+        editButton.addEventListener('click', () => {
+            setStatus('', '');
+            setEditing(true);
+            hpInput.focus();
+            hpInput.select();
+        });
+
+        cancelButton.addEventListener('click', () => {
+            hpInput.value = originalValue;
+            setStatus('変更を破棄しました。', 'success');
+            setEditing(false);
+        });
+
+        saveButton.addEventListener('click', async () => {
+            if (!isEditing) {
+                return;
+            }
+
+            const hp = Number(hpInput.value);
+            if (!Number.isInteger(hp) || hp < 0) {
+                setStatus('HPは0以上の整数で入力してください。', 'error');
+                return;
+            }
+
+            saveButton.disabled = true;
+            cancelButton.disabled = true;
+            setStatus('HPを保存しています...', '');
+
+            try {
+                const response = await fetch('/api/clan/active-boss-hp/save', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ hp })
+                });
+
+                if (!response.ok) {
+                    const payload = await response.json().catch(() => null);
+                    throw new Error(payload && payload.error ? payload.error : 'Failed to save active boss hp');
+                }
+
+                window.location.reload();
+            } catch (error) {
+                console.error('攻撃中ボスHPの保存に失敗しました:', error);
+                setStatus('HPの保存に失敗しました。画面を更新して再試行してください。', 'error');
+            } finally {
+                saveButton.disabled = false;
+                cancelButton.disabled = false;
+            }
+        });
+    }
+
+    function initializeClanHistoryEditor() {
+        const editButton = document.getElementById('clan-history-edit-button');
+        const saveButton = document.getElementById('clan-history-save-button');
+        const cancelButton = document.getElementById('clan-history-cancel-button');
+        const status = document.getElementById('clan-history-status');
+        const rows = Array.from(document.querySelectorAll('.clan-attack-history-row[data-history-id]'));
+        if (!editButton || !saveButton || !cancelButton || rows.length === 0) {
+            return;
+        }
+
+        const setStatus = (message, type) => {
+            if (!status) {
+                return;
+            }
+            status.textContent = message;
+            status.classList.remove('success', 'error');
+            if (type) {
+                status.classList.add(type);
+            }
+        };
+        const updateOvertimeVisibility = (row) => {
+            const defeatInput = row.querySelector('.clan-history-defeat-input');
+            const overtimeInput = row.querySelector('.clan-history-overtime-input');
+            const overtimeUnit = row.querySelector('.clan-history-overtime-unit');
+            const showOvertime = defeatInput && defeatInput.value === 'true';
+            if (overtimeInput) {
+                overtimeInput.style.display = showOvertime ? '' : 'none';
+            }
+            if (overtimeUnit) {
+                overtimeUnit.style.display = showOvertime ? '' : 'none';
+            }
+        };
+        const setEditing = (editing) => {
+            editButton.style.display = editing ? 'none' : '';
+            saveButton.style.display = editing ? '' : 'none';
+            cancelButton.style.display = editing ? '' : 'none';
+            document.querySelectorAll('.clan-history-display').forEach((element) => {
+                element.style.display = editing ? 'none' : '';
+            });
+            document.querySelectorAll('.clan-history-input').forEach((element) => {
+                element.style.display = editing
+                    ? (element.classList.contains('clan-history-state-editor') ? 'grid' : 'block')
+                    : 'none';
+            });
+            rows.forEach(updateOvertimeVisibility);
+        };
+        const restoreOriginalValues = () => {
+            rows.forEach((row) => {
+                const attacklapInput = row.querySelector('.clan-history-attacklap-input');
+                const bossInput = row.querySelector('.clan-history-boss-input');
+                const defeatInput = row.querySelector('.clan-history-defeat-input');
+                const overtimeInput = row.querySelector('.clan-history-overtime-input');
+                if (attacklapInput) attacklapInput.value = row.getAttribute('data-original-attacklap') || '';
+                if (bossInput) bossInput.value = row.getAttribute('data-original-boss') || '';
+                if (defeatInput) defeatInput.value = row.getAttribute('data-original-defeat') || 'false';
+                if (overtimeInput) overtimeInput.value = row.getAttribute('data-original-overtime') || '0';
+                updateOvertimeVisibility(row);
+            });
+        };
+
+        rows.forEach((row) => {
+            const defeatInput = row.querySelector('.clan-history-defeat-input');
+            const deleteButton = row.querySelector('.clan-history-delete-button');
+            if (defeatInput) {
+                defeatInput.addEventListener('change', () => updateOvertimeVisibility(row));
+            }
+            if (deleteButton) {
+                deleteButton.addEventListener('click', async () => {
+                    const id = Number(row.getAttribute('data-history-id'));
+                    if (!Number.isInteger(id) || !window.confirm('この凸履歴を削除しますか？')) {
+                        return;
+                    }
+                    deleteButton.disabled = true;
+                    saveButton.disabled = true;
+                    cancelButton.disabled = true;
+                    setStatus('削除中です...', '');
+                    try {
+                        const response = await fetch('/api/clan/attack-history/delete', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id })
+                        });
+                        if (!response.ok) {
+                            const payload = await response.json().catch(() => null);
+                            throw new Error(payload && payload.error ? payload.error : 'Failed to delete attack history');
+                        }
+                        window.location.reload();
+                    } catch (error) {
+                        console.error('凸履歴の削除に失敗しました:', error);
+                        setStatus('削除に失敗しました。画面を更新して再試行してください。', 'error');
+                        deleteButton.disabled = false;
+                        saveButton.disabled = false;
+                        cancelButton.disabled = false;
+                    }
+                });
+            }
+        });
+        editButton.addEventListener('click', () => {
+            setStatus('', '');
+            setEditing(true);
+        });
+        cancelButton.addEventListener('click', () => {
+            restoreOriginalValues();
+            setStatus('変更を破棄しました。', 'success');
+            setEditing(false);
+        });
+        saveButton.addEventListener('click', async () => {
+            const histories = [];
+            for (const row of rows) {
+                const id = Number(row.getAttribute('data-history-id'));
+                const attacklap = Number(row.querySelector('.clan-history-attacklap-input')?.value);
+                const boss = Number(row.querySelector('.clan-history-boss-input')?.value);
+                const defeat = row.querySelector('.clan-history-defeat-input')?.value === 'true';
+                const fixedOvertime = row.getAttribute('data-fixed-overtime');
+                const overtime = fixedOvertime === '0'
+                    ? 0
+                    : defeat ? Number(row.querySelector('.clan-history-overtime-input')?.value) : 0;
+                if (!Number.isInteger(id) || !Number.isInteger(attacklap) || attacklap < 0
+                    || !Number.isInteger(boss) || boss < 1 || boss > 5
+                    || !Number.isInteger(overtime)
+                    || (defeat && fixedOvertime !== '0' && (overtime < 20 || overtime > 90))) {
+                    setStatus('周回数は0以上、持ち越し時間は20～90の整数で入力してください。', 'error');
+                    return;
+                }
+                histories.push({ id, attacklap, boss, defeat, overtime });
+            }
+
+            saveButton.disabled = true;
+            cancelButton.disabled = true;
+            setStatus('保存中です...', '');
+            try {
+                const response = await fetch('/api/clan/attack-history/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ histories })
+                });
+                if (!response.ok) {
+                    const payload = await response.json().catch(() => null);
+                    throw new Error(payload && payload.error ? payload.error : 'Failed to update attack histories');
+                }
+                window.location.reload();
+            } catch (error) {
+                console.error('凸履歴の保存に失敗しました:', error);
+                setStatus('保存に失敗しました。画面を更新して再試行してください。', 'error');
+                saveButton.disabled = false;
+                cancelButton.disabled = false;
+            }
+        });
+
+        setEditing(false);
+    }
+
+    function initializeClanActiveAttackActions() {
+        const completeButton = document.getElementById('clan-attack-complete-button');
+        const defeatButtons = Array.from(document.querySelectorAll('.clan-attack-defeat-button'));
+        const cancelButton = document.getElementById('clan-attack-cancel-button');
+        const messageInput = document.getElementById('clan-attack-message');
+        const messageSendButton = document.getElementById('clan-attack-message-send-button');
+        const status = document.getElementById('clan-attack-active-action-status');
+
+        if (!completeButton || !cancelButton || defeatButtons.length === 0) {
+            return;
+        }
+
+        const actionButtons = [completeButton, cancelButton, ...defeatButtons];
+        const setActionDisabled = (disabled) => {
+            actionButtons.forEach((button) => {
+                button.disabled = disabled;
+            });
+        };
+        const setStatus = (message, type) => {
+            if (!status) {
+                return;
+            }
+            status.textContent = message;
+            status.classList.remove('success', 'error');
+            if (type) {
+                status.classList.add(type);
+            }
+        };
+        const parseDamageAndMessage = () => {
+            if (!messageInput) {
+                return null;
+            }
+
+            const rawText = String(messageInput.value || '');
+            const toHalfWidthDigits = (text) => text.replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xFEE0));
+            const match = rawText.match(/^\s*([0-9０-９]+)(?:\s*[+＋]\s*([0-9０-９]+))?([\s\S]*)$/);
+            if (!match) {
+                return {
+                    hasDamage: false,
+                    message: rawText.trim()
+                };
+            }
+
+            const left = Number(toHalfWidthDigits(match[1]));
+            const hasRightValue = typeof match[2] === 'string' && match[2].length > 0;
+            const right = hasRightValue ? Number(toHalfWidthDigits(match[2])) : 0;
+            if (!Number.isFinite(left) || (hasRightValue && !Number.isFinite(right))) {
+                return null;
+            }
+
+            const damage = hasRightValue
+                ? Math.trunc(left) + Math.trunc(right)
+                : Math.trunc(left);
+            const message = String(match[3] || '').trim();
+            return { hasDamage: true, damage, message };
+        };
+        const submitMessage = async () => {
+            const parsed = parseDamageAndMessage();
+            if (!parsed) {
+                setStatus('メッセージの形式が不正です。', 'error');
+                return;
+            }
+
+            if (messageSendButton) {
+                messageSendButton.disabled = true;
+            }
+            setStatus('メッセージを送信しています...', '');
+
+            try {
+                const response = await fetch('/api/clan/attack/message', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(parsed.hasDamage
+                        ? { damage: parsed.damage, message: parsed.message }
+                        : { message: parsed.message })
+                });
+
+                if (!response.ok) {
+                    const payload = await response.json().catch(() => null);
+                    throw new Error(payload && payload.error ? payload.error : 'Failed to update attack message');
+                }
+
+                setStatus('送信しました。', 'success');
+            } catch (error) {
+                console.error('攻撃中メッセージの送信に失敗しました:', error);
+                setStatus('送信に失敗しました。画面を更新して再試行してください。', 'error');
+            } finally {
+                if (messageSendButton) {
+                    messageSendButton.disabled = false;
+                }
+            }
+        };
+        const submitAction = async (action, overtime = 0) => {
+            setActionDisabled(true);
+            setStatus('更新しています...', '');
+            try {
+                const response = await fetch('/api/clan/attack/finish', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ action, overtime })
+                });
+                if (!response.ok) {
+                    const payload = await response.json().catch(() => null);
+                    throw new Error(payload && payload.error ? payload.error : 'Failed to finish attack');
+                }
+                window.location.reload();
+            } catch (error) {
+                console.error('攻撃状態の更新に失敗しました:', error);
+                setStatus('更新に失敗しました。画面を更新して再試行してください。', 'error');
+                setActionDisabled(false);
+            }
+        };
+
+        completeButton.addEventListener('click', () => submitAction('complete'));
+        cancelButton.addEventListener('click', () => submitAction('cancel'));
+
+        if (messageSendButton) {
+            messageSendButton.addEventListener('click', () => {
+                submitMessage();
+            });
+        }
+        if (messageInput) {
+            messageInput.addEventListener('keydown', (event) => {
+                if (event.key !== 'Enter' || event.isComposing) {
+                    return;
+                }
+                event.preventDefault();
+                submitMessage();
+            });
+        }
+
+        defeatButtons.forEach((button) => {
+            button.addEventListener('click', () => {
+                const overtime = Number(button.getAttribute('data-overtime'));
+                if (!Number.isInteger(overtime) || overtime < 0) {
+                    setStatus('討伐時間の指定が不正です。', 'error');
+                    return;
+                }
+                submitAction('defeat', overtime);
+            });
+        });
+    }
+
+    function initializeClanAttackButtons() {
+        const attackButtons = Array.from(document.querySelectorAll('.clan-attack-button[data-boss]'));
+        const status = document.getElementById('clan-attack-status');
+        if (attackButtons.length === 0) {
+            return;
+        }
+
+        const setStatus = (message, type) => {
+            if (!status) {
+                return;
+            }
+            status.textContent = message;
+            status.classList.remove('success', 'error');
+            if (type) {
+                status.classList.add(type);
+            }
+        };
+
+        attackButtons.forEach((button) => {
+            button.addEventListener('click', async () => {
+                const attackBoss = Number(button.getAttribute('data-boss'));
+                const historyIdText = button.getAttribute('data-history-id');
+                const historyId = historyIdText === null ? null : Number(historyIdText);
+                if (!Number.isInteger(attackBoss) || attackBoss < 1 || attackBoss > 5) {
+                    return;
+                }
+                if (historyId !== null && (!Number.isInteger(historyId) || historyId < 1)) {
+                    return;
+                }
+
+                attackButtons.forEach((item) => {
+                    item.disabled = true;
+                });
+                setStatus('攻撃開始を登録しています...', '');
+
+                try {
+                    const response = await fetch(historyId === null
+                        ? '/api/clan/attack/start'
+                        : '/api/clan/attack/carryover/start', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(historyId === null ? { attackBoss } : { attackBoss, historyId })
+                    });
+
+                    if (!response.ok) {
+                        const payload = await response.json().catch(() => null);
+                        throw new Error(payload && payload.error ? payload.error : 'Failed to start attack');
+                    }
+
+                    window.location.reload();
+                } catch (error) {
+                    console.error('攻撃開始の登録に失敗しました:', error);
+                    setStatus('攻撃開始の登録に失敗しました。画面を更新して再試行してください。', 'error');
+                    attackButtons.forEach((item) => {
+                        item.disabled = false;
+                    });
+                }
+            });
+        });
+    }
+
+    function initializeClanBosslapEditor() {
+        const editButton = document.getElementById('clan-bosscount-edit-btn');
+        const saveButton = document.getElementById('clan-bosscount-save-btn');
+        const cancelButton = document.getElementById('clan-bosscount-cancel-btn');
+        const status = document.getElementById('clan-bosslap-status');
+        const sourceInput = document.getElementById('clan-source');
+        const clanIdInput = document.getElementById('clan-id');
+        const valueElements = Array.from(document.querySelectorAll('.clan-bosslap-value'));
+        const inputElements = Array.from(document.querySelectorAll('.clan-bosslap-input'));
+
+        const source = sourceInput ? String(sourceInput.value || '').trim() : '';
+        const clanId = clanIdInput ? String(clanIdInput.value || '').trim() : '';
+
+        if (!editButton || !saveButton || !cancelButton || valueElements.length !== 5 || inputElements.length !== 5 || !source || !/^\d+$/.test(clanId)) {
+            return;
+        }
+
+        const originalValues = inputElements.map((input) => Number(input.value));
+        let isEditing = false;
+
+        const setStatus = (message, type) => {
+            if (!status) {
+                return;
+            }
+            status.textContent = message;
+            status.classList.remove('success', 'error');
+            if (type) {
+                status.classList.add(type);
+            }
+        };
+
+        const setEditingState = (editing) => {
+            isEditing = editing;
+            editButton.style.display = editing ? 'none' : '';
+            saveButton.style.display = editing ? '' : 'none';
+            cancelButton.style.display = editing ? '' : 'none';
+
+            valueElements.forEach((element) => {
+                element.style.display = editing ? 'none' : '';
+            });
+            inputElements.forEach((element) => {
+                element.style.display = editing ? 'block' : 'none';
+            });
+        };
+
+        editButton.addEventListener('click', () => {
+            setStatus('', '');
+            setEditingState(true);
+        });
+
+        cancelButton.addEventListener('click', () => {
+            inputElements.forEach((input, index) => {
+                input.value = String(originalValues[index]);
+            });
+            setStatus('変更を破棄しました。', 'success');
+            setEditingState(false);
+        });
+
+        saveButton.addEventListener('click', async () => {
+            if (!isEditing) {
+                return;
+            }
+
+            const nextValues = [];
+            for (const input of inputElements) {
+                const numeric = Number(input.value);
+                if (!Number.isFinite(numeric) || numeric < 1 || !Number.isInteger(numeric)) {
+                    setStatus('1以上の整数を入力してください。', 'error');
+                    return;
+                }
+                nextValues.push(numeric);
+            }
+
+            const minValue = Math.min(...nextValues);
+            const maxValue = Math.max(...nextValues);
+            if ((maxValue - minValue) >= 3) {
+                setStatus('最大値と最小値の差は2以下にしてください。', 'error');
+                return;
+            }
+
+            saveButton.disabled = true;
+            cancelButton.disabled = true;
+            setStatus('保存中です...', '');
+
+            try {
+                const response = await fetch('/api/clan/bosslaps/save', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        source,
+                        clanid: clanId,
+                        bosslaps: nextValues
+                    })
+                });
+
+                if (!response.ok) {
+                    let serverMessage = 'Failed to save clan bosslaps';
+                    try {
+                        const errorPayload = await response.json();
+                        if (errorPayload && typeof errorPayload.error === 'string' && errorPayload.error.trim().length > 0) {
+                            serverMessage = errorPayload.error.trim();
+                        }
+                    } catch (parseError) {
+                        // noop
+                    }
+                    throw new Error(serverMessage);
+                }
+
+                window.location.reload();
+            } catch (error) {
+                console.error('ボスカウントの保存に失敗しました:', error);
+                setStatus('保存に失敗しました。時間をおいて再試行してください。', 'error');
+            } finally {
+                saveButton.disabled = false;
+                cancelButton.disabled = false;
+            }
+        });
+    }
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+    function initializeClanRealtimeSubscription() {
+        const sourceInput = document.getElementById('clan-source');
+        const clanIdInput = document.getElementById('clan-id');
+        const source = sourceInput ? String(sourceInput.value || '').trim() : '';
+        const clanId = clanIdInput ? String(clanIdInput.value || '').trim() : '';
+        let isReloading = false;
+
+        const reloadPage = () => {
+            if (isReloading) {
+                return;
+            }
+            isReloading = true;
+            window.location.reload();
+        };
+
+        if (!source || !/^\d+$/.test(clanId) || !window.__SUPABASE_PUBLIC_CONFIG__) {
+            const configExists = !!window.__SUPABASE_PUBLIC_CONFIG__;
+            const debugInfo = {
+                source,
+                clanId,
+                hasConfig: configExists,
+                config: window.__SUPABASE_PUBLIC_CONFIG__ || null,
+                missing: {
+                    source: !source,
+                    clanId: !/^\d+$/.test(clanId),
+                    config: !configExists
+                }
+            };
+            console.warn('Supabase Realtime を開始できません: source/clanId/config が不足しています。', debugInfo);
+            return;
+        }
+
+        const config = window.__SUPABASE_PUBLIC_CONFIG__ || {};
+        const supabaseUrl = typeof config.url === 'string' ? config.url.trim() : '';
+        const publishableKey = typeof config.publishableKey === 'string' ? config.publishableKey.trim() : '';
+        if (!supabaseUrl || !publishableKey) {
+            console.warn('Supabase Realtime を開始できません: SUPABASE_URL または SUPABASE_PUBLISHABLE_KEY が不足しています。');
+            return;
+        }
+        if (!window.supabase || typeof window.supabase.createClient !== 'function') {
+            console.error('Supabase Realtime を開始できません: Supabaseクライアントの読み込みに失敗しました。');
+            return;
+        }
+
+        const tryApplyActiveBossHpRealtimeUpdate = (row) => {
+            const hpDisplay = document.getElementById('clan-active-boss-hp-display');
+            if (!hpDisplay || !row || typeof row !== 'object') {
+                return false;
+            }
+
+            const activeBossNumber = Number(hpDisplay.getAttribute('data-boss-index'));
+            const rowBossIndex = Number(row.boss_index);
+            const rowCurrentHp = Number(row.current_hp);
+            if (!Number.isInteger(activeBossNumber) || !Number.isInteger(rowBossIndex) || activeBossNumber !== rowBossIndex) {
+                return false;
+            }
+            if (!Number.isFinite(rowCurrentHp) || rowCurrentHp < 0) {
+                return false;
+            }
+
+            hpDisplay.textContent = Math.trunc(rowCurrentHp).toLocaleString('ja-JP');
+
+            const hpInput = document.getElementById('clan-active-boss-hp-input');
+            if (hpInput && hpInput.style.display === 'none') {
+                hpInput.value = String(Math.trunc(rowCurrentHp));
+            }
+
+            return true;
+        };
+
+        try {
+            const client = window.supabase.createClient(supabaseUrl, publishableKey);
+            const clanIdFilter = `clanid=eq.${clanId}`;
+            const channel = client
+                .channel(`clan-realtime-${source}-${clanId}`)
+                .on('postgres_changes', {
+                    event: '*',
+                    schema: 'public',
+                    table: 'clans',
+                    filter: clanIdFilter
+                }, (payload) => {
+                    console.log('Supabase Realtime clans change payload:', payload);
+                    const next = payload && payload.new ? payload.new : null;
+                    const nextSource = next && typeof next.source === 'string' ? next.source.trim() : '';
+                    const nextClanId = next && next.clanid !== undefined && next.clanid !== null ? String(next.clanid).trim() : '';
+
+                    if (nextSource === source && nextClanId === clanId) {
+                        reloadPage();
+                    }
+                })
+                .on('postgres_changes', {
+                    event: '*',
+                    schema: 'public',
+                    table: 'clan_members',
+                    filter: clanIdFilter
+                }, (payload) => {
+                    console.log('Supabase Realtime clan_members change payload:', payload);
+                    const row = payload && (payload.new || payload.old) ? (payload.new || payload.old) : null;
+                    const rowSource = row && typeof row.source === 'string' ? row.source.trim() : '';
+                    const rowClanId = row && row.clanid !== undefined && row.clanid !== null ? String(row.clanid).trim() : '';
+
+                    if (rowSource === source && rowClanId === clanId) {
+                        reloadPage();
+                    }
+                })
+                .on('postgres_changes', {
+                    event: '*',
+                    schema: 'public',
+                    table: 'clan_boss_state',
+                    filter: clanIdFilter
+                }, (payload) => {
+                    console.log('Supabase Realtime clan_boss_state change payload:', payload);
+                    const row = payload && (payload.new || payload.old) ? (payload.new || payload.old) : null;
+                    const rowSource = row && typeof row.source === 'string' ? row.source.trim() : '';
+                    const rowClanId = row && row.clanid !== undefined && row.clanid !== null ? String(row.clanid).trim() : '';
+
+                    if (rowSource === source && rowClanId === clanId) {
+                        const eventType = payload && typeof payload.eventType === 'string' ? payload.eventType : '';
+                        if (eventType !== 'DELETE' && tryApplyActiveBossHpRealtimeUpdate(row)) {
+                            return;
+                        }
+                        //読み込めなかったものは無視
+                        //reloadPage();
+                    }
+                })
+                .subscribe((status, error) => {
+                    console.log('Supabase Realtime subscription status:', status, error || '');
+                    if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                        console.error('Supabase Realtimeの購読に失敗しました:', status, error || '');
+                    }
+                });
+
+            window.addEventListener('beforeunload', () => {
+                client.removeChannel(channel);
+            });
+        } catch (error) {
+            console.error('Supabase Realtime の購読開始に失敗しました:', error);
+        }
+    }
+
+</script>

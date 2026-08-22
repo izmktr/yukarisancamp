@@ -36,6 +36,13 @@
             <a href="/board" class="tab <%= currentPage === 'board' ? 'active' : '' %>">掲示板</a>
             <% if (isLoggedIn) { %>
                 <a href="/settings" class="tab <%= currentPage === 'settings' ? 'active' : '' %>">設定</a>
+                <% if (hasDiscordServer) { %>
+                    <a href="/clan" class="tab <%= currentPage === 'clan' ? 'active' : '' %>">クラン</a>
+                    <a href="/clan-data" class="tab <%= currentPage === 'clan-data' ? 'active' : '' %>">クランデータ</a>
+                    <% if (clanManagementTabVisible) { %>
+                        <a href="/clan-management" class="tab <%= currentPage === 'clan-management' ? 'active' : '' %>">クラン管理</a>
+                    <% } %>
+                <% } %>
             <% } %>
             <% if (isAdmin) { %>
                 <a href="/chara-check" class="tab admin-tab <%= currentPage === 'chara-check' ? 'active' : '' %>">キャラ確認</a>
@@ -52,9 +59,11 @@
 
     <script>
         window.__FIREBASE_CONFIG__ = <%- JSON.stringify(typeof firebaseConfig !== 'undefined' ? firebaseConfig : {}) %>;
+        window.__SUPABASE_PUBLIC_CONFIG__ = <%- JSON.stringify(typeof supabasePublicConfig !== 'undefined' ? supabasePublicConfig : {}) %>;
         window.__SERVER_SESSION__ = {
             isLoggedIn: <%- JSON.stringify(!!isLoggedIn) %>,
-            isAdmin: <%- JSON.stringify(!!isAdmin) %>
+            isAdmin: <%- JSON.stringify(!!isAdmin) %>,
+            hasDiscordServer: <%- JSON.stringify(!!hasDiscordServer) %>
         };
     </script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>

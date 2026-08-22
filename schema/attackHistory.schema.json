@@ -4,21 +4,32 @@
   "description": "A history record of attack data.",
   "type": "object",
   "properties": {
+    "id": {
+      "description": "The unique identifier for the attack history record.",
+      "type": "integer"
+    },
+    "source": {
+      "description": "The source of the clan data, either from Discord or web.",
+      "type": "string",
+      "enum": ["discord", "web"]
+    },
     "clanid": {
-      "description": "The clan ID associated with the attack.",
-      "type": "integer"
+      "description": "The unique ID of the clan.",
+      "type": "string"
     },
-    "serial": {
-      "description": "The serial number of the attack record.",
-      "type": "integer"
+    "membersource": {
+      "description": "The source of the member data, either from Discord or web.",
+      "type": "string",
+      "enum": ["discord", "web"]
     },
-    "member": {
-      "description": "The member ID who performed the attack.",
-      "type": "integer"
+    "memberid": {
+      "description": "The unique ID of the user.",
+      "type": "string"
     },
     "day": {
       "description": "The day of the attack.",
-      "type": "integer"
+      "type": "string",
+      "format": "date"
     },
     "sortie": {
       "description": "The sortie information.",
@@ -26,15 +37,19 @@
     },
     "messageid": {
       "description": "The message ID related to the attack.",
-      "type": "string"
+      "type": ["string", "null"]
     },
     "boss": {
       "description": "The boss that was attacked.",
       "type": "integer"
     },
+    "attacklap": {
+      "description": "The boss lap when the attack started.",
+      "type": ["integer", "null"]
+    },
     "overtime": {
-      "description": "Whether the attack was during overtime.",
-      "type": "boolean"
+      "description": "The number of overtime seconds carried over after defeating the boss.",
+      "type": "integer"
     },
     "defeat": {
       "description": "Whether the boss was defeated.",
@@ -50,5 +65,5 @@
       "format": "date-time"
     }
   },
-  "required": ["member", "day", "sortie", "messageid", "boss", "overtime", "defeat", "sortiecount", "updatetime"]
+  "required": ["source", "clanid", "membersource", "memberid", "day", "sortie", "messageid", "boss", "overtime", "defeat", "sortiecount", "updatetime"]
 }

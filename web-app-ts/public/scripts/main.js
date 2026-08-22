@@ -957,7 +957,8 @@ function initializeFirebaseAuth() {
                                 'Authorization': `Bearer ${idToken}`
                             },
                             body: JSON.stringify({
-                                displayName: currentUserProfile.displayName
+                                displayName: currentUserProfile.displayName,
+                                discordServer: currentUserProfile.discordServer
                             })
                         });
 
@@ -1122,6 +1123,9 @@ document.addEventListener('DOMContentLoaded', function() {
             break;
         case '/clanbattle-settings':
             console.log('クラバト設定ページが読み込まれました');
+            break;
+        case '/clan':
+            console.log('クランページが読み込まれました');
             break;
         default:
             console.log('ホームページが読み込まれました');

@@ -355,6 +355,445 @@ body {
     color: #b42318;
 }
 
+.clan-summary-card h3 {
+    margin: 0 0 0.75rem 0;
+    color: #3d4666;
+    font-size: 1.05rem;
+}
+
+.clan-show-all-active-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0.35rem 0 0.85rem;
+    color: #26334d;
+    font-weight: 600;
+}
+
+.clan-attack-active-panel {
+    margin-bottom: 1rem;
+    padding: 1rem;
+    border: 1px solid #f1b84b;
+    border-left: 5px solid #d58a00;
+    border-radius: 6px;
+    background: #fff7e6;
+    color: #493616;
+}
+
+.clan-attack-active-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.clan-attack-active-header h2,
+.clan-attack-active-header p {
+    margin: 0;
+}
+
+.clan-active-boss-hp-block {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.clan-active-boss-hp-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+}
+
+.clan-active-boss-hp-input {
+    width: 12ch;
+    min-height: 38px;
+    padding: 0 0.55rem;
+    border: 1px solid #c8a85d;
+    border-radius: 6px;
+    background: #ffffff;
+    color: #26334d;
+    font: inherit;
+    text-align: right;
+}
+
+.clan-attack-active-header h2 {
+    color: #704600;
+    font-size: 1.2rem;
+}
+
+.clan-attack-member-list {
+    margin-top: 1rem;
+    border-top: 1px solid #efd49b;
+}
+
+.clan-attack-member-row {
+    display: grid;
+    grid-template-columns: minmax(100px, 0.8fr) minmax(180px, 2fr);
+    gap: 0.75rem;
+    padding: 0.65rem 0;
+    border-bottom: 1px solid #efd49b;
+    align-items: center;
+}
+
+.clan-attack-member-row span {
+    overflow-wrap: anywhere;
+}
+
+.clan-attack-message-label {
+    display: block;
+    margin-top: 1rem;
+    color: #493616;
+    font-weight: 600;
+}
+
+.clan-attack-message-row {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.35rem;
+}
+
+.clan-attack-message-input {
+    flex: 1 1 auto;
+    min-height: 40px;
+    padding: 0 0.75rem;
+    border: 1px solid #c8a85d;
+    border-radius: 6px;
+    background: #ffffff;
+    color: #26334d;
+    font: inherit;
+}
+
+.clan-attack-message-input:focus {
+    outline: 2px solid #d58a00;
+    outline-offset: 1px;
+}
+
+.clan-attack-active-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    flex-wrap: wrap;
+}
+
+#clan-attack-complete-button {
+    background: #2f9e44;
+}
+
+#clan-attack-complete-button:hover:not(:disabled) {
+    background: #2b8a3e;
+}
+
+.clan-defeat-buttons {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.clan-overtime-anchor {
+    position: relative;
+    display: flex;
+}
+
+.clan-overtime-dialog {
+    position: absolute;
+    inset: auto;
+    top: calc(100% + 0.5rem);
+    left: 50%;
+    z-index: 10;
+    width: min(280px, calc(100vw - 2rem));
+    margin: 0;
+    padding: 0;
+    transform: translateX(-50%);
+    border: 1px solid #d7dce6;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #26334d;
+    box-shadow: 0 18px 50px rgba(28, 35, 55, 0.22);
+}
+
+.clan-overtime-dialog::backdrop {
+    background: rgba(24, 30, 44, 0.52);
+}
+
+.clan-overtime-dialog-content {
+    padding: 1rem;
+}
+
+.clan-overtime-dialog-content h3 {
+    margin: 0 0 0.75rem;
+    color: #26334d;
+    font-size: 1.05rem;
+}
+
+.clan-overtime-field {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.clan-overtime-input {
+    width: 5.5ch;
+    min-height: 40px;
+    padding: 0 0.35rem;
+    border: 1px solid #aeb8ca;
+    border-radius: 6px;
+    font: inherit;
+    font-size: 1.1rem;
+    text-align: right;
+}
+
+.clan-overtime-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+@media (max-width: 640px) {
+    .clan-active-boss-hp-block {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .clan-active-boss-hp-actions {
+        width: 100%;
+    }
+
+    .clan-active-boss-hp-input {
+        flex: 1 1 140px;
+    }
+
+    .clan-attack-member-row {
+        grid-template-columns: 1fr;
+        gap: 0.2rem;
+    }
+
+    .clan-attack-message-row {
+        flex-wrap: wrap;
+    }
+
+    .clan-attack-message-row > .btn {
+        flex: 1 1 100%;
+    }
+
+    .clan-attack-active-actions > .btn {
+        flex: 1 1 100px;
+    }
+
+    .clan-defeat-buttons {
+        flex: 1 1 100%;
+    }
+
+    .clan-defeat-buttons > .btn {
+        flex: 1 1 calc(25% - 0.4rem);
+        min-width: 88px;
+    }
+
+    .clan-overtime-anchor {
+        flex: 1 1 100px;
+    }
+
+    .clan-overtime-anchor > .btn {
+        width: 100%;
+    }
+}
+
+.clan-bosscount-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.clan-bosscount-header h3 {
+    margin: 0;
+}
+
+.clan-bosscount-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.clan-empty {
+    margin: 0;
+    color: #5f6a8a;
+}
+
+.clan-attack-history-section {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #e7ebf2;
+}
+
+.clan-attack-history-table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.clan-attack-history-table {
+    width: 100%;
+    min-width: 420px;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.clan-attack-history-table th,
+.clan-attack-history-table td {
+    padding: 0.75rem;
+    border-bottom: 1px solid #e7ebf2;
+    text-align: left;
+}
+
+.clan-attack-history-table th {
+    background: #f6f8fb;
+    color: #3d4666;
+    font-weight: 600;
+}
+
+.clan-attack-history-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.clan-attack-history-carryover-source td {
+    background: #fff3bf;
+}
+
+.clan-history-input {
+    display: none;
+}
+
+.clan-attack-history-table input,
+.clan-attack-history-table select {
+    width: 100%;
+    min-height: 38px;
+    padding: 0 0.55rem;
+    border: 1px solid #aeb8ca;
+    border-radius: 6px;
+    background: #ffffff;
+    color: #26334d;
+    font: inherit;
+}
+
+.clan-history-state-editor {
+    grid-template-columns: minmax(90px, 1fr) minmax(70px, 0.7fr) auto;
+    gap: 0.4rem;
+    align-items: center;
+}
+
+.clan-history-overtime-unit {
+    white-space: nowrap;
+}
+
+.clan-history-delete-button {
+    width: auto;
+    white-space: nowrap;
+}
+
+.bosscount-display {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+}
+
+.bosscount-item {
+    background-color: #d7ebff;
+    padding: 10px;
+    border-radius: 4px;
+    text-align: center;
+    border-left: 4px solid #0b5ed7;
+    box-shadow: 0 2px 8px rgba(11, 94, 215, 0.2);
+}
+
+.bosscount-item.bosscount-near-min {
+    background-color: #ffe6e6;
+    border-left-color: #d9534f;
+}
+
+.bosscount-item.bosscount-far-min {
+    background-color: #ececec;
+    border-left-color: #8a8a8a;
+}
+
+.bosscount-item p {
+    margin: 0;
+    font-size: 14px;
+}
+
+.clan-attacking-members {
+    display: flex;
+    min-height: 1.75rem;
+    margin-top: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-content: flex-start;
+    gap: 0.25rem 0.5rem;
+}
+
+.clan-attacking-member-name {
+    color: #26334d;
+    font-size: 0.85rem;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.clan-attack-button {
+    width: 100%;
+    min-height: 38px;
+    margin-top: 0.5rem;
+}
+
+.clan-bosslap-input {
+    width: 72px;
+    margin: 0.35rem auto 0;
+    border: 1px solid #c8d0e1;
+    border-radius: 6px;
+    padding: 0.2rem 0.35rem;
+    font-size: 14px;
+    text-align: center;
+}
+
+.clan-bosslap-input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
+}
+
+.clan-lap-table-wrap {
+    overflow-x: auto;
+}
+
+.clan-lap-table {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid #e3e8f4;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.clan-lap-table th,
+.clan-lap-table td {
+    padding: 0.6rem 0.7rem;
+    border-bottom: 1px solid #edf1f8;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.clan-lap-table th {
+    background: #f7f9ff;
+    color: #3a4568;
+    font-size: 0.9rem;
+}
+
+.clan-lap-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
 .board-page-title-row {
     display: flex;
     align-items: baseline;
@@ -721,6 +1160,20 @@ body {
 }
 
 @media (max-width: 768px) {
+    .bosscount-display {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    .bosscount-item {
+        padding: 8px;
+    }
+
+    .bosscount-item p {
+        font-size: 13px;
+        line-height: 1.3;
+    }
+
     .board-page-title-row {
         align-items: center;
     }
@@ -1184,6 +1637,13 @@ body {
     background: #667eea;
     border-color: #667eea;
     color: #ffffff;
+}
+
+.post-toggle-btn:disabled {
+    background: #f1f4fb;
+    border-color: #d5ddec;
+    color: #9aa7c5;
+    cursor: not-allowed;
 }
 
 .post-difficulty-help-text {

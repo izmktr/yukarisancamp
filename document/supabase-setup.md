@@ -18,12 +18,9 @@ SUPABASE_JWKS_URL=
 ```
 
 補足:
-<<<<<<< HEAD
-- テーブル名は `setting_clanbattle`、`setting_clanbattle_events`、`setting_userprofile`、`setting_user_owned_character`、`attack_history` の固定です。
-=======
-- テーブル名は `board_posts`、`setting_clanbattle`、`setting_userprofile`、`setting_user_owned_character` の固定です。
+- テーブル名は `board_posts`、`setting_clanbattle`、`clan_boss_state`、`setting_userprofile`、`setting_user_owned_character` の固定です。
 - 掲示板用に `board_posts` も `document/supabase_createtable.sql` へ追加しています。
->>>>>>> main
+- ボスHPの現在値は `clan_boss_state` に管理し、履歴は `attack_histories` に記録します。
 - APIはサーバ側で `SUPABASE_SECRET_KEY` を使って Supabase REST API に `upsert` します。
 - テーブル作成SQLは `document/supabase_createtable.sql` に集約しています。
 
@@ -61,28 +58,26 @@ Supabaseダッシュボードから取得します。
 - 現在の保存APIは camelCase カラム名（`bossHp`, `startDate`, `endDate`）で保存します。
 - PostgreSQL で camelCase を使う場合はダブルクォートが必要です。
 
-<<<<<<< HEAD
-## 3.1 クラバト更新通知テーブル要件
+## 4. ボス状態保存テーブル要件
 
-Discord Bot 側でブラウザ更新を検知するため、保存APIは `setting_clanbattle` 更新後に `setting_clanbattle_events` へ通知行を追加します。
+ボスの現在HPは履歴から再計算せず、独立した `clan_boss_state` テーブルで管理します。
 
-- テーブル名: `setting_clanbattle_events`（固定）
-- 用途: ブラウザや管理画面からのクラバト設定更新通知
+- テーブル名: `clan_boss_state`（固定）
+- 主キー: `(source, clanid, yearmonth, boss_index)`
 - 想定カラム:
-  - `id` bigint identity primary key
-  - `yearmonth` text
-  - `event_type` text
-  - `source` text
-  - `triggered_by` text null
-  - `created_at` timestamptz
+  - `source` public.clan_source
+  - `clanid` text
+  - `yearmonth` text（例: `202606`）
+  - `boss_index` integer（1〜5）
+  - `current_hp` integer（0 以上）
+  - `max_hp` integer（0 以上）
+  - `is_defeated` boolean
+  - `updated_at` timestamptz
+  - `updated_by` text null
 
-運用:
-- web-app-ts はクラバト設定保存成功後に `event_type='upsert'`, `source='web-app-ts'` で1行追加します。
-- Python Bot はこのテーブルの最新行を監視し、新しいイベントが増えたら `setting_clanbattle` の最新1件を再取得します。
+このテーブルがその月のボス状態の正本となり、画面表示はこの値を参照します。
 
-## 4. セキュリティ注意
-=======
-## 4. 掲示板保存テーブル要件
+## 5. 掲示板保存テーブル要件
 
 掲示板の投稿本文は、まず 1 行の `board_posts` にまとめて保存する前提です。
 表示対象は `public.board_posts_current_month` か、`board_posts.yearmonth = setting_clanbattle.yearmonth` で絞った行のみです。
@@ -118,14 +113,13 @@ Discord Bot 側でブラウザ更新を検知するため、保存APIは `settin
 - 既存の `board` ルーティングは、移行後にファイルではなくこのテーブルを参照する形へ置き換えます。
 
 ## 5. セキュリティ注意
->>>>>>> main
 
 - `SUPABASE_SECRET_KEY` はサーバ専用です。ブラウザへ渡さないでください。
 - `.env.local` はコミットしないでください。
 - ログにキー全文を出さないでください。
 - 本アプリでは `ensureAdmin` を通過したユーザーのみ保存APIを実行できます。
 
-## 6. 設定画面プロフィールテーブル要件（schema準拠）
+## 7. 設定画面プロフィールテーブル要件（schema準拠）
 
 設定画面API（`GET /api/settings/profile/current`, `POST /api/settings/profile/save`）が期待するテーブル要件です。
 
@@ -162,7 +156,83 @@ Discord Bot 側でブラウザ更新を検知するため、保存APIは `settin
 6. 所持キャラ更新を保存し、`setting_user_owned_character` の対象 `googleUserId` 行が delete/insert されることを確認
 7. `/clanbattle-settings` を開いて保存し、`setting_clanbattle` の `id=0` 行が insert/update されることを確認
 
-## 8. よくある問題
+## 8. クラン画面 Realtime 更新設定（source/clanid 一致時）
+
+クラン画面（`/clan`）では、Supabase Realtime を使って `public.clans`、`public.clan_members`、`public.clan_boss_state` の更新を購読します。
+同じ `source` / `clanid` の行が更新されたら、表示中ページが自動リロードされます。
+
+### 8-1. 環境変数を確認
+
+`web-app-ts/.env.local` に以下が入っていることを確認します。
+
+```env
+SUPABASE_URL=
+SUPABASE_PUBLISHABLE_KEY=
+```
+
+補足:
+- `SUPABASE_PUBLISHABLE_KEY` はブラウザで Realtime 購読に使います。
+- 値変更後は web-app-ts サーバーを再起動してください。
+
+### 8-2. Realtime で `clans` / `clan_members` / `clan_boss_state` を配信対象に追加
+
+Supabase ダッシュボード:
+1. Database > Replication（または Realtime）
+2. `public.clans` を配信対象に追加
+3. `public.clan_members` を配信対象に追加
+4. `public.clan_boss_state` を配信対象に追加
+5. 3テーブルで `UPDATE` イベントが有効なことを確認
+
+SQLで確認する場合（任意）:
+
+```sql
+select schemaname, tablename
+from pg_publication_tables
+where pubname = 'supabase_realtime'
+  and schemaname = 'public'
+  and tablename in ('clans', 'clan_members', 'clan_boss_state');
+```
+
+### 8-3. RLS/Policy を確認（anon で購読できるようにする）
+
+RLS を有効にしている場合、`anon` ロールに `SELECT` 許可が必要です。
+
+例（必要に応じて調整）:
+
+```sql
+alter table public.clans enable row level security;
+alter table public.clan_members enable row level security;
+alter table public.clan_boss_state enable row level security;
+
+create policy "anon can read clans"
+on public.clans
+for select
+to anon
+using (true);
+
+create policy "anon can read clan_members"
+on public.clan_members
+for select
+to anon
+using (true);
+
+create policy "anon can read clan_boss_state"
+on public.clan_boss_state
+for select
+to anon
+using (true);
+```
+
+注意:
+- 本番では `using (true)` をそのまま使わず、要件に応じた条件に絞ってください。
+
+### 8-4. 動作確認
+
+1. ブラウザAで `/clan` を開く
+2. ブラウザBで同じクラン（同じ `source` / `clanid`）の `bosslaps` を保存
+3. ブラウザAが自動で更新されることを確認
+
+## 9. よくある問題
 
 ### 502 Failed to save clanbattle settings to Supabase
 - 原因例: テーブル未作成、`id` 主キー/`id=0` CHECK制約の不一致、カラム名不一致
@@ -175,3 +245,13 @@ Discord Bot 側でブラウザ更新を検知するため、保存APIは `settin
 ### 403 管理者のみ閲覧できます
 - 原因: 保存APIは `ensureAdmin` 保護
 - 対処: Firebase 側 `userRoles/{uid}.role = "admin"` を確認
+
+### クラン画面が自動更新されない
+- 原因例:
+  - `SUPABASE_PUBLISHABLE_KEY` 未設定
+  - `public.clans` が Realtime 配信対象に未追加
+  - `public.clan_members` が Realtime 配信対象に未追加
+  - `public.clan_boss_state` が Realtime 配信対象に未追加
+  - RLS で `anon` の `SELECT` が拒否されている
+- 対処:
+  - 本ドキュメントの「8. クラン画面 Realtime 更新設定」を順に確認
