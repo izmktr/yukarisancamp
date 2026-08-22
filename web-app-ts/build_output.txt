@@ -1,8 +1,0 @@
-
-> web-app-ts@1.0.0 build
-> npm run generate-types && tsc
-
-
-> web-app-ts@1.0.0 generate-types
-> cd ../schema && npx json-schema-to-typescript --input userProfile.schema.json --output ../web-app-ts/src/types.ts
-

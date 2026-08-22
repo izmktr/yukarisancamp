@@ -390,8 +390,6 @@
                         return;
                     }
 
-                    row.dataset.ubText = encodeURIComponent(nickname);
-
                     const eventImage = row.querySelector('[data-ub-event-image="true"]');
                     if (eventImage instanceof HTMLImageElement) {
                         eventImage.alt = nickname;
@@ -467,6 +465,16 @@
             }
         }
 
+        function getOfficialUbText(row) {
+            const officialName = typeof row.dataset.partyCharacterOfficialName === 'string'
+                ? row.dataset.partyCharacterOfficialName.trim()
+                : '';
+            if (officialName) {
+                return officialName;
+            }
+            return getDecodedUbText(row);
+        }
+
         function getUbEventLabel(row) {
             const eventCell = row.querySelector('.ub-event-cell');
             if (!eventCell) {
@@ -497,7 +505,7 @@
                 const autoBox = row.querySelector('.ub-auto-cell .ub-icon-box');
                 return {
                     time: getRowTimeText(row),
-                    character: getDecodedUbText(row) || getUbEventLabel(row),
+                    character: getOfficialUbText(row) || getUbEventLabel(row),
                     activeIcons: getActiveIconIndexes(row),
                     autoActive: autoBox ? isIconActive(autoBox) : false,
                     comment: commentInput instanceof HTMLTextAreaElement ? commentInput.value : '',
@@ -861,6 +869,7 @@
             copiedRow.dataset.comment = '';
             copiedRow.dataset.ubText = '';
             copiedRow.dataset.ubIsPartyChar = 'false';
+            copiedRow.dataset.partyCharacterOfficialName = '';
             copiedRow.dataset.timing = 'false';
             delete copiedRow.dataset.ubRowId;
 
@@ -1087,14 +1096,14 @@
                 timingButton.classList.toggle('is-timing-active', active);
             }
 
-            const ubCharName = getDecodedUbText(row) || getUbEventLabel(row);
+            const ubCharName = getOfficialUbText(row) || getUbEventLabel(row);
             const eventHoshi = row.querySelector('.ub-event-cell .ub-timing-hoshi');
             if (eventHoshi) {
                 eventHoshi.style.display = active ? 'block' : 'none';
             }
 
             row.querySelectorAll('.ub-party-cell .ub-icon-box').forEach((iconBox) => {
-                const slotName = iconBox.dataset.partySlotName;
+                const slotName = iconBox.dataset.partySlotOfficialName || iconBox.dataset.partySlotName;
                 const hoshi = iconBox.querySelector('.ub-timing-hoshi');
                 const isTimingTarget = active && slotName && slotName === ubCharName;
                 if (hoshi) {
@@ -1232,9 +1241,9 @@
                     return;
                 }
 
-                const rowUbText = getDecodedUbText(row);
+                const rowUbText = getOfficialUbText(row);
                 const targetIconBox = Array.from(row.querySelectorAll('.ub-party-cell .ub-icon-box')).find((iconBox) => {
-                    return iconBox.dataset.partySlotName === rowUbText;
+                    return (iconBox.dataset.partySlotOfficialName || iconBox.dataset.partySlotName) === rowUbText;
                 });
 
                 const autoBox = row.querySelector('.ub-auto-cell .ub-icon-box');

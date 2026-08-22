@@ -18,10 +18,16 @@
             const visibilityValue = visibilityLabelByValue[visibilityRaw] || visibilityRaw;
             const bossValue = article.bossname || '';
             const damageValue = article.damage || '';
+            const battleStartRow = Array.isArray(ubRows)
+                ? ubRows.find((row) => row && row.ubText === 'バトル開始' && typeof row.time === 'string')
+                : null;
+            const battleStartMatch = String(battleStartRow?.time || '').trim().match(/^(\d{1,2}):(\d{2})$/);
             const battleTimeMatch = String(article.battleTime || '').trim().match(/^(\d{1,2}):(\d{2})$/);
-            const battleTimeSeconds = battleTimeMatch
-                ? (Number(battleTimeMatch[1]) * 60) + Number(battleTimeMatch[2])
-                : 0;
+            const battleTimeSeconds = battleStartMatch
+                ? (Number(battleStartMatch[1]) * 60) + Number(battleStartMatch[2])
+                : (battleTimeMatch
+                    ? (Number(battleTimeMatch[1]) * 60) + Number(battleTimeMatch[2])
+                    : 0);
         %>
         <p>
             <a href="/board" class="btn">一覧へ戻る</a>
@@ -33,8 +39,13 @@
         <section id="board-help-panel" class="board-help-panel" hidden>
             <h3>記事詳細の使い方</h3>
             <ul>
-                <li>表示切り替えやサイズ変更で見やすく調整できます。</li>
-                <li>自身が投稿したタイムラインであれば、画面右上の「編集」「削除」を利用できます。</li>
+                <li>表示切り替えは「すべて」「操作」「操作+1つ前」から選べます。操作行だけ確認したい場合は「操作」、行動の流れも見たい場合は「操作+1つ前」が便利です。</li>
+                <li>サイズは「大 / 中 / 小」で切り替えできます。スマホで見切れる場合は「小」にすると全体を確認しやすくなります。</li>
+                <li>残り時間が90秒でない場合は、「入力時間」に秒数を入れて「変更」を押すと残り時間に合わせて時間が再計算されます。</li>
+                <li>「エクスポート」では現在の表示内容をテキスト化できます。</li>
+                <li>「差分」では別のTLとの差分確認ができます。どこでずれているかを調べる事ができます。</li>
+                <li>「カスタム」で編成キャラの表示名変更と所持チェックができます。ログインしていれば、内容を保存します。</li>
+                <li>自身の投稿であれば「編集」「削除」が使えます。削除は取り消せないため、実行前に内容を確認してください。</li>
             </ul>
         </section>
     <div class="board-detail">
@@ -139,14 +150,16 @@
                         </div>
                     </div>
                 </div>
-                <% if (canEdit) { %>
                 <div class="ub-toolbar-actions">
+                    <button type="button" id="board-export-open-button" class="btn">エクスポート</button>
+                    <button type="button" class="btn" onclick="location.href='/board/<%= id %>/diff'">差分</button>
+                    <% if (canEdit) { %>
                     <a href="/board/<%= id %>/edit" class="btn btn-primary">編集</a>
                     <form method="post" action="/board/<%= id %>/delete" onsubmit="return confirm('この記事を削除します。よろしいですか？');">
                         <button type="submit" class="btn btn-danger">削除</button>
                     </form>
+                    <% } %>
                 </div>
-                <% } %>
             </div>
             <div class="ub-table-wrapper">
                 <table class="ub-table">
@@ -238,6 +251,30 @@
     </div>
 </div>
 
+<div id="board-export-modal" class="board-export-modal" data-boss-name="<%= bossValue %>" data-damage="<%= damageValue %>" hidden>
+    <div class="board-export-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="board-export-modal-title">
+        <div class="board-export-modal-header-row">
+            <h3 id="board-export-modal-title" class="board-export-modal-title">エクスポート</h3>
+            <button type="button" id="board-export-close-button" class="btn">閉じる</button>
+        </div>
+        <div class="board-export-options" role="group" aria-label="エクスポートオプション">
+            <label class="board-export-option-item">
+                <input type="checkbox" id="board-export-option-show-onoff" />
+                <span>On/Offキャラを表示する</span>
+            </label>
+            <label class="board-export-option-item">
+                <input type="checkbox" id="board-export-option-uppercase-switch" />
+                <span>切り替えるキャラを大文字にする</span>
+            </label>
+        </div>
+        <textarea id="board-export-textarea" class="board-export-textarea" rows="12" aria-label="エクスポートテキスト"></textarea>
+        <div class="board-export-modal-actions">
+            <button type="button" id="board-export-copy-button" class="btn">クリップボードにコピー</button>
+            <button type="button" id="board-export-download-button" class="btn btn-primary">ダウンロード</button>
+        </div>
+    </div>
+</div>
+
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         const PARTY_COLUMN_COUNT = 5;
@@ -255,8 +292,22 @@
         let currentDisplayMode = DISPLAY_MODE_ALL;
         const timeAdjustInput = document.getElementById('ub-time-adjust-input');
         const timeAdjustButton = document.getElementById('ub-time-adjust-button');
+        const exportModal = document.getElementById('board-export-modal');
+        const exportOpenButton = document.getElementById('board-export-open-button');
+        const exportCloseButton = document.getElementById('board-export-close-button');
+        const exportTextarea = document.getElementById('board-export-textarea');
+        const exportCopyButton = document.getElementById('board-export-copy-button');
+        const exportDownloadButton = document.getElementById('board-export-download-button');
+        const exportShowOnOffOption = document.getElementById('board-export-option-show-onoff');
+        const exportUppercaseSwitchOption = document.getElementById('board-export-option-uppercase-switch');
+        const EXPORT_OPTION_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365;
+        const EXPORT_OPTION_SHOW_ONOFF_KEY = 'boardExportShowOnOff';
+        const EXPORT_OPTION_UPPERCASE_SWITCH_KEY = 'boardExportUppercaseSwitch';
+        const BOARD_DISPLAY_MODE_COOKIE_KEY = 'boardDetailDisplayMode';
+        const BOARD_ICON_SIZE_COOKIE_KEY = 'boardDetailIconSize';
         let currentBattleTimeSeconds = 0;
         let currentInputSeconds = 0;
+        let currentIconSize = ICON_SIZE_LARGE;
         const partyCustomizeOpenButton = document.getElementById('board-party-customize-open');
         const partyCustomizeModal = document.getElementById('board-party-customize-modal');
         const partyCustomizeList = document.getElementById('board-party-customize-list');
@@ -703,6 +754,339 @@
             }
         }
 
+        function sanitizeFileNamePart(value) {
+            return String(value || '')
+                .trim()
+                .replace(/[\\/:*?"<>|]/g, '_');
+        }
+
+        function getDamageWithoutLast4(value) {
+            const digits = String(value || '').replace(/\D/g, '');
+            if (!digits) {
+                return '0';
+            }
+            const numeric = Number(digits);
+            if (!Number.isFinite(numeric)) {
+                return '0';
+            }
+            return String(Math.floor(numeric / 10000));
+        }
+
+        function getExportFileName() {
+            if (!(exportModal instanceof HTMLElement)) {
+                return 'export.txt';
+            }
+
+            const bossNameRaw = exportModal.dataset.bossName || 'boss';
+            const damageRaw = exportModal.dataset.damage || '';
+            const bossName = sanitizeFileNamePart(bossNameRaw) || 'boss';
+            const damage = sanitizeFileNamePart(getDamageWithoutLast4(damageRaw)) || '0';
+            return `${bossName}${damage}.txt`;
+        }
+
+        function getCookieValue(name) {
+            const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const match = document.cookie.match(new RegExp(`(?:^|; )${escapedName}=([^;]*)`));
+            return match ? decodeURIComponent(match[1]) : '';
+        }
+
+        function setCookieValue(name, value) {
+            document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${EXPORT_OPTION_COOKIE_MAX_AGE_SECONDS}; samesite=lax`;
+        }
+
+        function isValidDisplayMode(mode) {
+            return mode === DISPLAY_MODE_ALL
+                || mode === DISPLAY_MODE_OPERATION
+                || mode === DISPLAY_MODE_OPERATION_PLUS_PREV;
+        }
+
+        function isValidIconSize(sizeMode) {
+            return sizeMode === ICON_SIZE_LARGE
+                || sizeMode === ICON_SIZE_MEDIUM
+                || sizeMode === ICON_SIZE_SMALL;
+        }
+
+        function setActiveDisplayMode(mode) {
+            const safeMode = isValidDisplayMode(mode) ? mode : DISPLAY_MODE_ALL;
+            currentDisplayMode = safeMode;
+            document.querySelectorAll('.ub-display-toggle-btn').forEach((item) => {
+                item.classList.toggle('is-active', item.dataset.displayMode === safeMode);
+            });
+            applyRowFilter();
+        }
+
+        function setActiveIconSize(sizeMode) {
+            const safeSizeMode = isValidIconSize(sizeMode) ? sizeMode : ICON_SIZE_LARGE;
+            currentIconSize = safeSizeMode;
+            applyIconSize(safeSizeMode);
+            updateBattleStartEndLabels(safeSizeMode);
+            document.querySelectorAll('.ub-size-toggle-btn').forEach((item) => {
+                item.classList.toggle('is-active', item.dataset.iconSize === safeSizeMode);
+            });
+        }
+
+        function initializeBoardDetailToggleStates() {
+            const savedDisplayMode = getCookieValue(BOARD_DISPLAY_MODE_COOKIE_KEY);
+            const savedIconSize = getCookieValue(BOARD_ICON_SIZE_COOKIE_KEY);
+
+            setActiveDisplayMode(isValidDisplayMode(savedDisplayMode) ? savedDisplayMode : DISPLAY_MODE_ALL);
+            setActiveIconSize(isValidIconSize(savedIconSize) ? savedIconSize : ICON_SIZE_LARGE);
+        }
+
+        function getExportOptionFlags() {
+            const showOnOffCharacters = exportShowOnOffOption instanceof HTMLInputElement ? exportShowOnOffOption.checked : false;
+            const uppercaseSwitchState = exportUppercaseSwitchOption instanceof HTMLInputElement ? exportUppercaseSwitchOption.checked : false;
+            return {
+                showOnOffCharacters,
+                uppercaseSwitchState
+            };
+        }
+
+        function initializeExportOptions() {
+            const showOnOffSaved = getCookieValue(EXPORT_OPTION_SHOW_ONOFF_KEY);
+            const uppercaseSaved = getCookieValue(EXPORT_OPTION_UPPERCASE_SWITCH_KEY);
+
+            if (exportShowOnOffOption instanceof HTMLInputElement) {
+                exportShowOnOffOption.checked = showOnOffSaved === '1';
+                exportShowOnOffOption.addEventListener('change', () => {
+                    setCookieValue(EXPORT_OPTION_SHOW_ONOFF_KEY, exportShowOnOffOption.checked ? '1' : '0');
+                    refreshExportText();
+                });
+            }
+
+            if (exportUppercaseSwitchOption instanceof HTMLInputElement) {
+                exportUppercaseSwitchOption.checked = uppercaseSaved === '1';
+                exportUppercaseSwitchOption.addEventListener('change', () => {
+                    setCookieValue(EXPORT_OPTION_UPPERCASE_SWITCH_KEY, exportUppercaseSwitchOption.checked ? '1' : '0');
+                    refreshExportText();
+                });
+            }
+        }
+
+        function formatDamageForExport(value) {
+            const digits = String(value || '').replace(/\D/g, '');
+            const numeric = digits ? Number(digits) : 0;
+            if (!Number.isFinite(numeric) || numeric <= 0) {
+                return '0億0000万';
+            }
+
+            const afterTrim = Math.floor(numeric / 10000);
+            const oku = Math.floor(afterTrim / 10000);
+            const man = afterTrim % 10000;
+            return `${oku}億${String(man).padStart(4, '0')}万`;
+        }
+
+        function getExportPartyLine() {
+            const names = Array.from(document.querySelectorAll('.board-party-grid .board-party-name[data-party-name-text="true"]'))
+                .map((element) => (element.textContent || '').trim())
+                .filter((name) => name.length > 0);
+            return names.join(' ');
+        }
+
+        function getRenderedTimeText(row) {
+            const mainTime = row.querySelector('.ub-time-cell .ub-time-main');
+            if (mainTime) {
+                return (mainTime.textContent || '').trim();
+            }
+            const timeCell = row.querySelector('.ub-time-cell');
+            return (timeCell ? timeCell.textContent : '').trim();
+        }
+
+        function getRowCommentText(row) {
+            const commentRow = row.nextElementSibling;
+            if (!(commentRow instanceof HTMLTableRowElement) || !commentRow.classList.contains('ub-comment-row') || commentRow.hidden) {
+                return '';
+            }
+
+            const commentDisplay = commentRow.querySelector('.ub-comment-display');
+            return (commentDisplay ? commentDisplay.textContent : '').trim();
+        }
+
+        function isSetIcon(iconBox) {
+            if (!(iconBox instanceof HTMLElement)) {
+                return false;
+            }
+            return iconBox.classList.contains('has-set') || iconBox.classList.contains('set-inactive');
+        }
+
+        function getAutoStateForExport(row) {
+            const autoBox = row.querySelector('.ub-auto-cell .ub-icon-box');
+            if (!(autoBox instanceof HTMLElement)) {
+                return { isActive: false, isOn: false };
+            }
+
+            const autoButton = autoBox.querySelector('.ub-auto-btn');
+            const isActive = autoBox.dataset.isActive === 'true';
+            const isOn = autoButton ? autoButton.classList.contains('ub-auto-btn-set') : false;
+            return { isActive, isOn };
+        }
+
+        function getSetStatusForExport(row, uppercaseSwitchState) {
+            const partyIcons = Array.from(row.querySelectorAll('.ub-party-cell .ub-icon-box'));
+            const setParts = partyIcons.map((iconBox) => {
+                const baseMark = isSetIcon(iconBox) ? 'o' : 'x';
+                const shouldUppercase = uppercaseSwitchState && isIconActive(iconBox);
+                return shouldUppercase ? baseMark.toUpperCase() : baseMark;
+            }).join('');
+            const autoState = getAutoStateForExport(row);
+            const autoText = autoState.isOn ? 'on' : 'off';
+            const renderedAutoText = (uppercaseSwitchState && autoState.isActive) ? autoText.toUpperCase() : autoText;
+            return `[${setParts}]${renderedAutoText}`;
+        }
+
+        function getOnOffTextForExport(row) {
+            const partyIcons = Array.from(row.querySelectorAll('.ub-party-cell .ub-icon-box'));
+            const onNames = [];
+            const offNames = [];
+
+            partyIcons.forEach((iconBox) => {
+                if (!(iconBox instanceof HTMLElement)) {
+                    return;
+                }
+                if (!isIconActive(iconBox)) {
+                    return;
+                }
+
+                const name = String(iconBox.dataset.partySlotName || '').trim();
+                if (!name) {
+                    return;
+                }
+
+                if (iconBox.classList.contains('has-set')) {
+                    onNames.push(name);
+                } else {
+                    offNames.push(name);
+                }
+            });
+
+            const onText = onNames.length > 0 ? `${onNames.join(',')}on` : '';
+            const offText = offNames.length > 0 ? `${offNames.join(',')}off` : '';
+            return { onText, offText };
+        }
+
+        function buildTimelineTextLines() {
+            const tbody = document.querySelector('.ub-table tbody');
+            if (!tbody) {
+                return [];
+            }
+
+            const lines = [];
+            const visibleRows = Array.from(tbody.querySelectorAll('tr:not(.ub-comment-row)')).filter((row) => !row.hidden);
+            const { showOnOffCharacters, uppercaseSwitchState } = getExportOptionFlags();
+
+            visibleRows.forEach((row) => {
+                const timeText = getRenderedTimeText(row);
+                const ubText = getDecodedUbText(row);
+                const commentText = getRowCommentText(row);
+                const isOperationRow = isYellowMainRow(row);
+
+                if (isOperationRow) {
+                    const { onText, offText } = showOnOffCharacters
+                        ? getOnOffTextForExport(row)
+                        : { onText: '', offText: '' };
+                    const autoState = getAutoStateForExport(row);
+                    const autoToggleText = showOnOffCharacters && autoState.isActive
+                        ? (autoState.isOn ? 'オートon' : 'オートoff')
+                        : '';
+                    const setStatus = getSetStatusForExport(row, uppercaseSwitchState);
+                    const operationParts = [timeText, ubText, onText, offText, autoToggleText, setStatus].filter((part) => part && part.trim().length > 0);
+                    lines.push(operationParts.join(' '));
+                } else {
+                    const normalParts = [timeText, ubText].filter((part) => part && part.trim().length > 0);
+                    lines.push(normalParts.join(' '));
+                }
+
+                if (commentText) {
+                    lines.push(commentText);
+                }
+            });
+
+            return lines;
+        }
+
+        function buildExportText() {
+            if (!(exportModal instanceof HTMLElement)) {
+                return '';
+            }
+
+            const bossName = String(exportModal.dataset.bossName || '').trim();
+            const damageText = formatDamageForExport(exportModal.dataset.damage || '');
+            const partyText = getExportPartyLine();
+            const timelineLines = buildTimelineTextLines();
+            const articleUrl = `${window.location.origin}${window.location.pathname}`;
+
+            const blocks = [
+                `${bossName}${damageText}`,
+                partyText,
+                '',
+                'TL',
+                ...timelineLines,
+                '',
+                articleUrl
+            ];
+
+            return blocks.join('\n').trimEnd();
+        }
+
+        function refreshExportText() {
+            if (!(exportTextarea instanceof HTMLTextAreaElement)) {
+                return;
+            }
+            exportTextarea.value = buildExportText();
+        }
+
+        function openExportModal() {
+            if (!(exportModal instanceof HTMLElement)) {
+                return;
+            }
+            refreshExportText();
+            exportModal.hidden = false;
+            document.body.classList.add('board-export-modal-open');
+            if (exportTextarea instanceof HTMLTextAreaElement) {
+                exportTextarea.focus();
+            }
+        }
+
+        function closeExportModal() {
+            if (!(exportModal instanceof HTMLElement)) {
+                return;
+            }
+            exportModal.hidden = true;
+            document.body.classList.remove('board-export-modal-open');
+        }
+
+        async function copyExportText() {
+            if (!(exportTextarea instanceof HTMLTextAreaElement)) {
+                return;
+            }
+
+            const text = exportTextarea.value;
+            try {
+                await navigator.clipboard.writeText(text);
+                alert('クリップボードにコピーしました。');
+            } catch (error) {
+                console.error('コピーに失敗しました:', error);
+                alert('コピーに失敗しました。');
+            }
+        }
+
+        function downloadExportText() {
+            if (!(exportTextarea instanceof HTMLTextAreaElement)) {
+                return;
+            }
+
+            const text = exportTextarea.value;
+            const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = getExportFileName();
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+        }
+
         function parseTimeToSeconds(timeText) {
             const raw = (timeText || '').trim();
             const match = raw.match(/^(\d{1,2}):(\d{2})$/);
@@ -1025,6 +1409,10 @@
                     commentRow.hidden = row.hidden;
                 }
             });
+
+            if (exportModal instanceof HTMLElement && !exportModal.hidden) {
+                refreshExportText();
+            }
         }
 
         function applyIconSize(sizeMode) {
@@ -1060,28 +1448,22 @@
         document.querySelectorAll('.ub-display-toggle-btn').forEach((button) => {
             button.addEventListener('click', () => {
                 const mode = button.dataset.displayMode;
-                if (!mode) {
+                if (!isValidDisplayMode(mode || '')) {
                     return;
                 }
-                currentDisplayMode = mode;
-                document.querySelectorAll('.ub-display-toggle-btn').forEach((item) => {
-                    item.classList.toggle('is-active', item === button);
-                });
-                applyRowFilter();
+                setActiveDisplayMode(mode);
+                setCookieValue(BOARD_DISPLAY_MODE_COOKIE_KEY, mode);
             });
         });
 
         document.querySelectorAll('.ub-size-toggle-btn').forEach((button) => {
             button.addEventListener('click', () => {
                 const sizeMode = button.dataset.iconSize;
-                if (![ICON_SIZE_LARGE, ICON_SIZE_MEDIUM, ICON_SIZE_SMALL].includes(sizeMode || '')) {
+                if (!isValidIconSize(sizeMode || '')) {
                     return;
                 }
-                applyIconSize(sizeMode);
-                updateBattleStartEndLabels(sizeMode);
-                document.querySelectorAll('.ub-size-toggle-btn').forEach((item) => {
-                    item.classList.toggle('is-active', item === button);
-                });
+                setActiveIconSize(sizeMode);
+                setCookieValue(BOARD_ICON_SIZE_COOKIE_KEY, sizeMode);
             });
         });
 
@@ -1105,12 +1487,50 @@
             });
         }
 
+        if (exportOpenButton) {
+            exportOpenButton.addEventListener('click', () => {
+                openExportModal();
+            });
+        }
+
+        if (exportCloseButton) {
+            exportCloseButton.addEventListener('click', () => {
+                closeExportModal();
+            });
+        }
+
+        if (exportModal) {
+            exportModal.addEventListener('click', (event) => {
+                if (event.target === exportModal) {
+                    closeExportModal();
+                }
+            });
+        }
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && exportModal instanceof HTMLElement && !exportModal.hidden) {
+                closeExportModal();
+            }
+        });
+
+        if (exportCopyButton) {
+            exportCopyButton.addEventListener('click', () => {
+                copyExportText();
+            });
+        }
+
+        if (exportDownloadButton) {
+            exportDownloadButton.addEventListener('click', () => {
+                downloadExportText();
+            });
+        }
+
         initializeTimeCells();
         initializeBattleTimeControls();
+        initializeExportOptions();
+        initializeBoardDetailToggleStates();
         updateSetBubbles();
         applyRowFilter();
-        applyIconSize(ICON_SIZE_LARGE);
-        updateBattleStartEndLabels(ICON_SIZE_LARGE);
 
         if (partyStateByOfficialName.size === 0) {
             const defaultMap = buildDefaultPartyStateMap();

@@ -58,6 +58,28 @@ async function getAuthIdToken(user) {
     return user.getIdToken();
 }
 
+async function getErrorMessageFromResponse(response, fallbackMessage) {
+    try {
+        const rawBody = await response.text();
+        if (!rawBody) {
+            return fallbackMessage;
+        }
+
+        try {
+            const payload = JSON.parse(rawBody);
+            if (payload && typeof payload.error === 'string' && payload.error.trim().length > 0) {
+                return payload.error.trim();
+            }
+        } catch (parseError) {
+            // 文字列本文のエラーでもそのまま返す
+        }
+
+        return rawBody.trim();
+    } catch (readError) {
+        return fallbackMessage;
+    }
+}
+
 async function ensureUserProfile(user) {
     const idToken = await getAuthIdToken(user);
     const response = await fetch('/api/settings/profile/current', {
@@ -68,7 +90,8 @@ async function ensureUserProfile(user) {
     });
 
     if (!response.ok) {
-        throw new Error('プロフィールの読み込みに失敗しました。');
+        const errorMessage = await getErrorMessageFromResponse(response, 'プロフィールの読み込みに失敗しました。');
+        throw new Error(`プロフィールの読み込みに失敗しました。${errorMessage ? ` ${errorMessage}` : ''}`.trim());
     }
 
     const payload = await response.json();
@@ -87,7 +110,8 @@ async function saveUserProfile(user, profilePatch) {
     });
 
     if (!response.ok) {
-        throw new Error('プロフィールの保存に失敗しました。');
+        const errorMessage = await getErrorMessageFromResponse(response, 'プロフィールの保存に失敗しました。');
+        throw new Error(`プロフィールの保存に失敗しました。${errorMessage ? ` ${errorMessage}` : ''}`.trim());
     }
 
     const payload = await response.json();
@@ -681,18 +705,18 @@ function renderClanBattleState(state) {
 }
 
 async function ensureClanBattleStateForCurrentMonth() {
-    const yearmonth = getBaseYearMonth();
-    const response = await fetch(`/api/clanbattle-settings/current?yearmonth=${encodeURIComponent(yearmonth)}`);
+    const response = await fetch('/api/clanbattle-settings/current');
     if (!response.ok) {
         throw new Error('Supabase からクラバト設定を取得できませんでした。');
     }
 
     const payload = await response.json();
     const state = payload && payload.state ? payload.state : null;
+    const yearmonth = state && typeof state.yearmonth === 'string' ? state.yearmonth : getBaseYearMonth();
     const normalizedState = normalizeClanBattleState(yearmonth, state);
     const withDefaultsCurrent = applyClanBattleDateDefaults(normalizedState);
 
-    currentClanBattleDocId = withDefaultsCurrent.yearmonth;
+    currentClanBattleDocId = '0';
     return withDefaultsCurrent;
 }
 
@@ -951,7 +975,9 @@ function initializeFirebaseAuth() {
                 }
             } catch (error) {
                 console.error('userProfile の取得または作成に失敗しました:', error);
-                currentProfileLoadErrorMessage = 'Supabaseからユーザー情報を取得できませんでした。サーバ設定またはネットワーク状態を確認してください。';
+                currentProfileLoadErrorMessage = error instanceof Error && error.message
+                    ? error.message
+                    : '設定情報を取得できませんでした。サーバ設定またはネットワーク状態を確認してください。';
                 currentUserProfile = null;
             }
         } else {
