@@ -472,10 +472,16 @@ app.post('/clan-management/members/add', ensureDiscordServerLinked, async (req, 
         return;
     }
     try {
-        const nextMemberId = await supabaseSelectNextWebClanMemberId(config, clanId);
+        const clan = await supabaseSelectClanByDiscordServer(config, discordServer);
+        const clanSource = clan && (clan.source === 'discord' || clan.source === 'web') ? clan.source : null;
+        if (!clanSource) {
+            res.status(404).send('クラン情報が見つかりません');
+            return;
+        }
+        const nextMemberId = await supabaseSelectNextWebClanMemberId(config, clanId, clanSource);
         const now = new Date().toISOString();
         await supabaseInsertClanMember(config, {
-            source: 'web',
+            source: clanSource,
             clanid: clanId,
             membersource: 'web',
             memberid: nextMemberId,
@@ -938,11 +944,11 @@ async function supabaseDeleteClanMember(config, source, clanId, membersource, me
         throw new Error(`Supabase delete clan member failed: ${response.status} ${responseText}`);
     }
 }
-async function supabaseSelectNextWebClanMemberId(config, clanId) {
+async function supabaseSelectNextWebClanMemberId(config, clanId, source) {
     const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLAN_MEMBERS_TABLE);
     const query = new URLSearchParams({
         select: 'memberid',
-        source: 'eq.web',
+        source: `eq.${source}`,
         clanid: `eq.${clanId}`,
         membersource: 'eq.web'
     });
