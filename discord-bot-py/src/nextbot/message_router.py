@@ -18,28 +18,52 @@ class MessageRouter:
             reverse=True,
         )
 
-    def _strip_leading_mention(self, content: str, bot_user: discord.ClientUser | None) -> str:
+    def _get_bot_role_ids(
+        self,
+        message: discord.Message,
+        bot_user: discord.ClientUser | None,
+    ) -> set[int]:
+        if bot_user is None or message.guild is None:
+            return set()
+
+        bot_member = message.guild.get_member(bot_user.id)
+        if bot_member is None:
+            return set()
+
+        return {role.id for role in bot_member.roles}
+
+    def _strip_bot_mention(
+        self,
+        message: discord.Message,
+        bot_user: discord.ClientUser | None,
+    ) -> str:
+        content = message.content
         if bot_user is None:
             return content
 
         for mention in (f"<@{bot_user.id}>", f"<@!{bot_user.id}>"):
-            if content.startswith(mention):
-                return content[len(mention) :].lstrip()
+            content = content.replace(mention, "")
 
-        return content
+        for role_id in self._get_bot_role_ids(message, bot_user):
+            content = content.replace(f"<@&{role_id}>", "")
 
-    def _has_leading_bot_mention(self, content: str, bot_user: discord.ClientUser | None) -> bool:
+        return content.strip()
+
+    def _has_bot_mention(self, message: discord.Message, bot_user: discord.ClientUser | None) -> bool:
         if bot_user is None:
             return False
+        if bot_user.id in message.raw_mentions:
+            return True
 
-        return any(content.startswith(mention) for mention in (f"<@{bot_user.id}>", f"<@!{bot_user.id}>") )
+        bot_role_ids = self._get_bot_role_ids(message, bot_user)
+        return bool(bot_role_ids.intersection(message.raw_role_mentions))
 
     def _is_target_message(self, message: discord.Message, bot_user: discord.ClientUser | None) -> bool:
         channel_name = getattr(message.channel, "name", None)
         if channel_name == self.input_channel_name:
             return True
 
-        return self._has_leading_bot_mention(message.content.strip(), bot_user)
+        return self._has_bot_mention(message, bot_user)
 
     def _match_handler(self, content: str) -> tuple[Handler, str] | None:
         for prefixes, handler in self._ordered_funcList:
@@ -58,9 +82,7 @@ class MessageRouter:
         if not self._is_target_message(message, bot_user):
             return False
 
-        content = message.content.strip()
-        if bot_user is not None:
-            content = self._strip_leading_mention(content, bot_user)
+        content = self._strip_bot_mention(message, bot_user)
 
         content = content.lstrip()
         if not content:
@@ -73,3 +95,49 @@ class MessageRouter:
         handler, prefix = matched
         opt = content[len(prefix) :].lstrip()
         return await handler(message, member, opt)
+
+    async def on_reaction_add(
+        self,
+        reaction: discord.Reaction,
+        user: discord.User,
+        bot_user: discord.ClientUser | None,
+    ) -> bool:
+        if not self._is_target_message(reaction.message, bot_user):
+            return False
+
+        content = self._strip_bot_mention(reaction.message, bot_user)
+
+        content = content.lstrip()
+        if not content:
+            return False
+
+        matched = self._match_handler(content)
+        if matched is None:
+            return False
+
+        handler, prefix = matched
+        opt = content[len(prefix) :].lstrip()
+        return await handler(reaction.message, user, opt)
+
+    async def on_reaction_remove(
+        self,
+        reaction: discord.Reaction,
+        user: discord.User,
+        bot_user: discord.ClientUser | None,
+    ) -> bool:
+        if not self._is_target_message(reaction.message, bot_user):
+            return False
+
+        content = self._strip_bot_mention(reaction.message, bot_user)
+
+        content = content.lstrip()
+        if not content:
+            return False
+
+        matched = self._match_handler(content)
+        if matched is None:
+            return False
+
+        handler, prefix = matched
+        opt = content[len(prefix) :].lstrip()
+        return await handler(reaction.message, user, opt)

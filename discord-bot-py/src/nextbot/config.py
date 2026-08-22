@@ -10,6 +10,8 @@ from dotenv import load_dotenv
 @dataclass(frozen=True)
 class NextBotConfig:
     token: str
+    supabase_url: str
+    supabase_secret_key: str
     input_channel_name: str = "凸報告"
     scheduled_run_at: str | None = None
 
@@ -25,6 +27,19 @@ class NextBotConfig:
                 "Discord のトークンが見つかりません。.env.local に DISCORD_TOKEN または DISCORD_BOT_TOKEN を設定してください"
             )
 
+        supabase_url = os.getenv("SUPABASE_URL", "").strip()
+        supabase_secret_key = os.getenv("SUPABASE_SECRET_KEY", "").strip()
+        if not supabase_url or not supabase_secret_key:
+            raise RuntimeError(
+                "Supabase の接続情報が見つかりません。.env.local に SUPABASE_URL と SUPABASE_SECRET_KEY を設定してください"
+            )
+
         input_channel_name = os.getenv("NEXTBOT_INPUT_CHANNEL", "").strip() or "凸報告"
         scheduled_run_at = os.getenv("NEXTBOT_RUN_AT", "").strip() or None
-        return cls(token=token, input_channel_name=input_channel_name, scheduled_run_at=scheduled_run_at)
+        return cls(
+            token=token,
+            supabase_url=supabase_url,
+            supabase_secret_key=supabase_secret_key,
+            input_channel_name=input_channel_name,
+            scheduled_run_at=scheduled_run_at,
+        )
