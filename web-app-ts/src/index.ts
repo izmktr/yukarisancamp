@@ -2122,6 +2122,26 @@ async function supabaseUpsertClanBattleState(config: SupabaseConfig, payload: Cl
   }
 }
 
+async function supabaseInsertClanBattleEvent(config: SupabaseConfig, payload: ClanBattleSettingEventPayload): Promise<void> {
+  const endpointUrl = `${config.url.replace(/\/$/, '')}/rest/v1/${encodeURIComponent(SUPABASE_CLAN_BATTLE_EVENT_TABLE)}`;
+
+  const response = await fetch(endpointUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: config.secretKey,
+      Authorization: `Bearer ${config.secretKey}`,
+      Prefer: 'return=minimal'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const responseText = await response.text();
+    throw new Error(`Supabase insert clan battle event failed: ${response.status} ${responseText}`);
+  }
+}
+
 async function ensureClanBattleStateFromSupabase(config: SupabaseConfig): Promise<ClanBattleSettingsSavePayload> {
   const currentState = await supabaseSelectClanBattleState(config);
   if (currentState) {
