@@ -9,6 +9,8 @@ MAX_SORTIE = 3
 INPUT_CHANNEL = "凸報告"
 OUTPUT_CHANNEL = "状況報告"
 
+LevelUpLap : list[int] = [0, 7, 23]
+
 # bossの値が正しいか
 def is_valid_boss(boss: int) -> bool:
     return 0 < boss <= BOSSNUMBER

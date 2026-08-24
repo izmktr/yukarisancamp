@@ -1,3 +1,4 @@
 datamodel-code-generator
 discord.py
 python-dotenv
+supabase

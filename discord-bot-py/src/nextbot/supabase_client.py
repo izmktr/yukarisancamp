@@ -33,14 +33,15 @@ class SupabaseClient:
     def register_clan_if_missing(self, clan_id: int, clan_name: str) -> bool:
         payload = json.dumps(
             {
-                "id": clan_id,
+                "source": "discord",
+                "clanid": str(clan_id),
                 "name": clan_name,
-                "bossindex": [0, 0, 0, 0, 0],
+                "bosslaps": [1, 1, 1, 1, 1],
                 "createdAt": datetime.now(timezone.utc).isoformat(),
             }
         ).encode("utf-8")
         insert_request = Request(
-            f"{self.url}/rest/v1/clan?on_conflict=id",
+            f"{self.url}/rest/v1/clans?on_conflict=source,clanid",
             data=payload,
             method="POST",
             headers={
@@ -55,3 +56,46 @@ class SupabaseClient:
             rows = json.load(response)
 
         return isinstance(rows, list) and bool(rows)
+
+    def get_clan(self, clan_id: int) -> dict[str, Any]:
+        query = urlencode(
+            {
+                "select": "*",
+                "source": "eq.discord",
+                "clanid": f"eq.{clan_id}",
+                "limit": "1",
+            }
+        )
+        request = Request(
+            f"{self.url}/rest/v1/clans?{query}",
+            headers={
+                "apikey": self.secret_key,
+                "Authorization": f"Bearer {self.secret_key}",
+            },
+        )
+
+        with urlopen(request, timeout=10) as response:
+            rows = json.load(response)
+
+        if not isinstance(rows, list) or not rows or not isinstance(rows[0], dict):
+            raise RuntimeError(f"clans の clanid={clan_id} が見つかりません")
+
+        return rows[0]
+
+    def update_clan_bosslaps(self, clan_id: int, bosslaps: list[int]) -> None:
+        query = urlencode({"source": "eq.discord", "clanid": f"eq.{clan_id}"})
+        payload = json.dumps({"bosslaps": bosslaps}).encode("utf-8")
+        request = Request(
+            f"{self.url}/rest/v1/clans?{query}",
+            data=payload,
+            method="PATCH",
+            headers={
+                "apikey": self.secret_key,
+                "Authorization": f"Bearer {self.secret_key}",
+                "Content-Type": "application/json",
+                "Prefer": "return=minimal",
+            },
+        )
+
+        with urlopen(request, timeout=10):
+            pass

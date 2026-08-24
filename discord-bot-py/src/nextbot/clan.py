@@ -2,6 +2,7 @@ from __future__ import annotations
 import asyncio
 import random
 import re
+from typing import Any, cast
 
 import discord
 
@@ -10,6 +11,7 @@ from .message_router import MessageRouter
 from . import constants
 
 from .clan_member import ClanMember
+from .supabase_client import SupabaseClient
 
 class MessageReaction():
     def __init__(self, member : ClanMember) -> None:
@@ -53,7 +55,12 @@ class Clan(MessageRouter):
     ]
     taskkillmark = u"\u2757"
 
-    def __init__(self, input_channel_name: str = "凸報告") -> None:
+    def __init__(
+        self,
+        input_channel_name: str = "凸報告",
+        supabase: SupabaseClient | None = None,
+        clan_id: int | None = None,
+    ) -> None:
         super().__init__(
             input_channel_name,
             [
@@ -61,17 +68,37 @@ class Clan(MessageRouter):
                 (["c", "持"], self.ContinuesAttack),
                 (["tl"], self.TimelineConvert),
                 (['dice', 'サイコロ', 'ダイス'], self.Dice),
+                (["defeat"], self.Defeat),
+                (["undefeat"], self.Undefeat),
                 (['yukalink'], self.Yukalink),
+                (["register", "登録"], self.RegisterClan),
             ],
         )
         self.members: dict[int, ClanMember] = {}
-        self.bosslaps: list[int] = [0] * constants.BOSSNUMBER             # ボスの進行具合
 
         self.dicehistory = [10, 30, 50, 70, 90]                 # ダイスが重複した値が出ないようにしたフラグ
 
         self.stampcheck :dict[str, int] = {}                    # スタンプの二重押し防止
         self.messagereaction : dict[int, MessageReaction] = {}
                                                                 # スタンプを押したときの反応用
+
+        self.supabase_data: dict[str, Any] | None = None
+        self.supabase_bossstate: dict[str, Any] | None = None
+        self.clanbattle_setting: dict[str, Any] | None = None
+        self.supabase = supabase
+        self.clan_id = clan_id
+
+        self.outputchannel = None
+        self.outputlock = 0                                     # メッセージ出力中のロックフラグ
+
+        # self.damagecontrol = [DamageControl(self.members, bidx) for bidx in range(5)]
+                                                                # ダメコン用
+
+
+        # self.messagereaction : Dict[int, MessageReaction] = {}
+                                                                # スタンプを押したときの反応用
+
+        # self.damagechannelid = [0] * BOSSNUMBER                 # ダメコンチャンネルID
 
 
     async def _ack(self, message: discord.Message, title: str, member: discord.Member, opt: str) -> bool:
@@ -84,6 +111,70 @@ class Clan(MessageRouter):
         except (discord.Forbidden, discord.HTTPException):
             print(response)
 
+        return True
+
+    def BossLap(self, bidx : int) -> int:
+        if not constants.is_valid_boss(bidx):
+            return 0
+
+        if self.supabase_data is None:
+            return 0
+
+        raw_bosslaps: object = self.supabase_data.get("bosslaps")
+        if not isinstance(raw_bosslaps, list):
+            return 0
+
+        bosslaps = cast(list[object], raw_bosslaps)
+        if len(bosslaps) != constants.BOSSNUMBER:
+            return 0
+
+        bosslap = bosslaps[bidx - 1]
+        return bosslap if isinstance(bosslap, int) else 0
+
+    def BossLabel(self, bidx: int) -> str:
+        if not constants.is_valid_boss(bidx) or self.clanbattle_setting is None:
+            return str(bidx)
+
+        raw_bossnames: object = self.clanbattle_setting.get("bossname")
+        if not isinstance(raw_bossnames, list):
+            return str(bidx)
+
+        bossnames = cast(list[object], raw_bossnames)
+        if len(bossnames) != constants.BOSSNUMBER:
+            return str(bidx)
+
+        bossname = bossnames[bidx - 1]
+        if not isinstance(bossname, str) or not bossname.strip():
+            return str(bidx)
+
+        return f"{bidx}:{bossname}"
+
+    async def SetBossLap(self, bidx : int, lap : int) -> bool:
+        if not constants.is_valid_boss(bidx):
+            return False
+
+        if self.supabase_data is None or self.supabase is None or self.clan_id is None:
+            return False
+
+        raw_bosslaps: object = self.supabase_data.get("bosslaps")
+        if not isinstance(raw_bosslaps, list):
+            return False
+
+        bosslaps = cast(list[object], raw_bosslaps).copy()
+        if len(bosslaps) != constants.BOSSNUMBER:
+            return False
+
+        bosslaps[bidx - 1] = lap
+        if not all(isinstance(value, int) for value in bosslaps):
+            return False
+
+        updated_bosslaps = cast(list[int], bosslaps)
+        await asyncio.to_thread(
+            self.supabase.update_clan_bosslaps,
+            self.clan_id,
+            updated_bosslaps,
+        )
+        self.supabase_data["bosslaps"] = updated_bosslaps
         return True
 
     def AddStamp(self, messageid : str):
@@ -242,8 +333,9 @@ class Clan(MessageRouter):
         if not constants.is_valid_boss(bidx):
             return False
 
-        minlap = min(self.bosslaps)
-        if minlap + 1 < self.bosslaps[bidx]:
+        bosslaps = [self.BossLap(index) for index in range(1, constants.BOSSNUMBER + 1)]
+        minlap = min(bosslaps)
+        if minlap + 1 < self.BossLap(bidx):
             return False
 
         return True
@@ -301,7 +393,7 @@ class Clan(MessageRouter):
                 self.TemporaryMessage(message.channel, '持ち越しではありません')
                 return False
 
-        boss = self.bosslaps[bidx] * constants.BOSSNUMBER + bidx
+        boss = self.BossLap(bidx) * constants.BOSSNUMBER + bidx
 
         member.Attack(boss, sortie)
         if member.attackmessage is not None:
@@ -376,11 +468,16 @@ class Clan(MessageRouter):
             return False
         text = ','.join([opt.strip(), str(message.guild.id), str(message.author.id)])
 
-        # supabaseにクラン情報を登録
-
-        # supabaseに自分自身の情報を登録
+        # supabaseのpublic.clan_membersに自分自身の情報を登録
 
         self.TemporaryMessage(message.channel, text)
+        return False
+
+    async def RegisterClan(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
+        # Implementation for registering a clan
+
+        # supabaseのpublic.clan_membersに自分自身の情報を登録
+
         return False
 
     async def OnReactionAdd(self, reaction: discord.Reaction, user: discord.User) -> bool:
@@ -422,6 +519,65 @@ class Clan(MessageRouter):
 
         return True
 
+    async def Defeat(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
+        # optのbossindexのlapを増やし、supabaseのpublic.clansのbosslapsを更新
+
+        if self.supabase_data is None or self.supabase is None or self.clan_id is None:
+            return False
+
+        try:
+            num = int(opt)
+            bidx = num if num < 10 else num // 10
+
+            if not constants.is_valid_boss(bidx):
+                raise ValueError
+        except ValueError:
+            self.TemporaryMessage(message.channel, '「defeat 5」 のように発言してください')
+            return False
+
+        if not self.IsAttackableBoss(bidx):
+            self.TemporaryMessage(message.channel, 'このボスは討伐済みに出来ません')
+            return False
+        
+        newlap = self.BossLap(bidx) + 1
+        await self.SetBossLap(bidx, newlap)
+        self.TemporaryMessage(message.channel, f'{self.BossLabel(bidx)}の周回数を{newlap}に更新しました') 
+
+        return True
+
+    async def Undefeat(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
+        # optのbossindexのlapを減らし、supabaseのpublic.clansのbosslapsを更新
+        if self.supabase_data is None or self.supabase is None or self.clan_id is None:
+            return False
+
+        try:
+            num = int(opt)
+            bidx = num if num < 10 else num // 10
+
+            if not constants.is_valid_boss(bidx):
+                raise ValueError
+        except ValueError:
+            self.TemporaryMessage(message.channel, '「undefeat 5」 のように発言してください')
+            return False
+
+        newlap = max(self.BossLap(bidx) - 1, 0)
+        maxlap = max(self.BossLap(index) for index in range(1, constants.BOSSNUMBER + 1))
+        if newlap < maxlap - 1:
+            self.TemporaryMessage(message.channel, f'{self.BossLabel(bidx)}の周回数を減らすことはできません')
+            return False
+
+        if newlap < 0:
+            self.TemporaryMessage(message.channel, f'{self.BossLabel(bidx)}の周回数を減らすことはできません')
+            return False
+        result = await self.SetBossLap(bidx, newlap)
+
+        if not result:
+            self.TemporaryMessage(message.channel, f'更新時にエラーが発生しました')
+            return False
+        self.TemporaryMessage(message.channel, f'{self.BossLabel(bidx)}の周回数を{newlap}に更新しました') 
+
+        return True
+
     async def OnReactionRemove(self, reaction: discord.Reaction, user: discord.User) -> bool:
         if user.bot:
             return False
@@ -457,3 +613,148 @@ class Clan(MessageRouter):
         await self.AddReaction(reaction.message, idx < 10)
 
         return True
+
+    def MinLap(self) -> int:
+        if self.supabase_data is None:
+            return 0
+
+        raw_bosslaps: object = self.supabase_data.get("bosslaps")
+        if not isinstance(raw_bosslaps, list):
+            return 0
+
+        bosslaps = cast(list[object], raw_bosslaps)
+        if len(bosslaps) != constants.BOSSNUMBER:
+            return 0
+
+        minlap = min((lap for lap in bosslaps if isinstance(lap, int)), default=0)
+        return minlap
+
+    def NumberMark(self, l : list[int]):
+        return [self.numbermarks[i] for i in l]
+
+    def StatusBoss(self):
+        s = ''
+        minlap = self.MinLap()
+
+        s += 'ボス情報 '
+        bossmark = self.NumberMark([i + 1 for i in range(1, constants.BOSSNUMBER) if self.BossLap(i) == minlap])
+        s += '%d周 %s' % (minlap + 1, ' '.join(bossmark))
+
+        if (minlap + 2) not in constants.LevelUpLap:
+            bossmark = self.NumberMark([i + 1 for i in range(1, constants.BOSSNUMBER) if self.BossLap(i) == minlap + 1])
+            if 0 < len(bossmark):
+                s += ' / %d周 %s' % (minlap + 2, ' '.join(bossmark))
+
+        level = self.BossLap(minlap)
+        if level < len(constants.LevelUpLap):
+            s += ' %d周から%d段階目' % (constants.LevelUpLap[level], level + 2)
+
+        return s + '\n'
+
+    def StatusAttack(self):
+        attacklist : list[list[ClanMember]] = [ [] for _i in range(constants.BOSSNUMBER) ]
+        for member in self.members.values():
+            if member.IsAttack():
+                bidx = member.AttackBoss()
+                attacklist[bidx - 1].append(member)
+
+        if sum([len(m) for m in attacklist]) == 0 : return ''
+
+        s = '攻撃中\n'
+        for at in attacklist:
+            if 0 < len(at):
+                namelist = [m.DecoName('nOTv') for m in at]
+                s += '%s %d人 %s\n' % (self.numbermarks[at[0].AttackBoss()], len(at), ' '.join(namelist))
+
+        return s
+
+    def StatusOverkill(self):
+        s = ''
+        tstr = ['フル', '長', '中', '短']
+        time = [0] * len(tstr)
+
+        for m in self.members.values():
+            for t in m.attacktime:
+                if t is not None and 0 < t:
+                    if t == 90: time[0] += 1
+                    elif 70 <= t: time[1] += 1
+                    elif 40 <= t: time[2] += 1
+                    else: time[3] += 1
+
+        if 0 < sum(time):
+            s += '持越 '
+            s += '  '.join(['%s:%d' % (tstr[i], time[i]) for i in range(len(tstr)) if 0 < time[i] ])
+            s += '\n'
+
+        return s
+
+    def StatusMemberList(self):
+        s = ''
+        
+        fulllist : list[list[ClanMember]] = [[] for _i in range(constants.MAX_SORTIE + 1) ]
+
+        for m in self.members.values():
+            if not m.DayFinish():
+                fulllist[m.SortieCount()].append(m)
+
+        for i, mem in enumerate(fulllist):
+            if 0 < len(mem):
+                s += '**残%d凸 %d人**\n' % (constants.MAX_SORTIE - i, len(mem))
+                s += '  '.join([m.DecoName('nXT') for m in mem]) + '\n'
+        
+        unfinish = sum([len(m) for m in fulllist])
+        if len(self.members) != unfinish:
+            membernum = len(self.members)
+            s += '**完凸 %d人/%d人(%d凸/%d凸)**\n' % (membernum - unfinish, membernum, self.TotalSortieCount(), membernum * constants.MAX_SORTIE)
+        
+        return s
+
+    def Status(self) -> str:
+        s = ''
+
+        s += self.StatusBoss()
+        s += self.StatusAttack()
+        s += self.StatusOverkill()
+
+        s += '\n' + self.StatusMemberList()
+
+        return s
+    
+    async def OnSupabaseUpdateClans(self, old_data: dict[str, Any], new_data: dict[str, Any]) -> None:
+        self.supabase_data = new_data
+
+    async def OnSupabaseUpdateClanMembers(self, old_data: dict[str, Any], new_data: dict[str, Any]) -> None:
+        memberid = new_data["memberid"]
+
+
+    async def OnSupabaseUpdateClanBossState(self, old_data: dict[str, Any], new_data: dict[str, Any]) -> None:
+        self.supabase_bossstate = new_data
+
+    def FindChannel(self, guild : discord.Guild, name : str) -> discord.TextChannel | None:
+        return discord.utils.get(guild.text_channels, name=name)
+
+    async def OnMessageHandled(self, guild: discord.Guild) -> None:
+        if self.outputchannel is None:
+            self.outputchannel = self.FindChannel(guild, constants.OUTPUT_CHANNEL)
+
+        if self.outputchannel is not None:
+            if self.outputlock == 1: return
+            while self.outputlock != 0:
+                await asyncio.sleep(1)
+
+            if self.lastmessage is not None:
+                self.outputlock = 1
+                try:
+                    await self.lastmessage.delete()
+                except (discord.errors.NotFound, discord.errors.Forbidden):
+                    pass
+                self.lastmessage = None
+
+            try:
+                self.outputlock = 2
+                self.lastmessage = await self.outputchannel.send(self.Status())
+            except discord.errors.Forbidden:
+                self.outputchannel = None
+            finally:
+                self.outputlock = 0
+

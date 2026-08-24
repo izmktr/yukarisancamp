@@ -18,6 +18,15 @@ class MessageRouter:
             reverse=True,
         )
 
+    async def OnMessageHandled(self, guild: discord.Guild) -> None:
+        raise NotImplementedError
+
+    async def OnReactionAdd(self, guild: discord.Guild, user: discord.User) -> None:
+        raise NotImplementedError
+
+    async def OnReactionRemove(self, guild: discord.Guild, user: discord.User) -> None:
+        raise NotImplementedError
+
     def _get_bot_role_ids(
         self,
         message: discord.Message,
@@ -94,7 +103,12 @@ class MessageRouter:
 
         handler, prefix = matched
         opt = content[len(prefix) :].lstrip()
-        return await handler(message, member, opt)
+        result = await handler(message, member, opt)
+
+        if result and message.guild is not None:
+            await self.OnMessageHandled(message.guild)
+
+        return result
 
     async def on_reaction_add(
         self,
@@ -105,19 +119,10 @@ class MessageRouter:
         if not self._is_target_message(reaction.message, bot_user):
             return False
 
-        content = self._strip_bot_mention(reaction.message, bot_user)
+        if reaction.message.guild is not None:
+            await self.OnReactionAdd(reaction.message.guild, user)
 
-        content = content.lstrip()
-        if not content:
-            return False
-
-        matched = self._match_handler(content)
-        if matched is None:
-            return False
-
-        handler, prefix = matched
-        opt = content[len(prefix) :].lstrip()
-        return await handler(reaction.message, user, opt)
+        return True
 
     async def on_reaction_remove(
         self,
@@ -128,16 +133,8 @@ class MessageRouter:
         if not self._is_target_message(reaction.message, bot_user):
             return False
 
-        content = self._strip_bot_mention(reaction.message, bot_user)
+        if reaction.message.guild is not None:
+            await self.OnReactionRemove(reaction.message.guild, user)
 
-        content = content.lstrip()
-        if not content:
-            return False
-
-        matched = self._match_handler(content)
-        if matched is None:
-            return False
-
-        handler, prefix = matched
-        opt = content[len(prefix) :].lstrip()
-        return await handler(reaction.message, user, opt)
+        return True
+    
