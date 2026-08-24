@@ -334,6 +334,88 @@ body {
     word-break: break-word;
 }
 
+.settings-discord-value {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+}
+
+.settings-link-dialog {
+    width: min(560px, calc(100vw - 2rem));
+    padding: 0;
+    border: 1px solid #cfd6e3;
+    border-radius: 8px;
+    color: #26334d;
+    background: #ffffff;
+    box-shadow: 0 20px 60px rgba(20, 28, 44, 0.24);
+}
+
+.settings-link-dialog::backdrop {
+    background: rgba(20, 28, 44, 0.58);
+}
+
+.settings-link-dialog-content {
+    padding: 1.25rem;
+}
+
+.settings-link-dialog-content h3 {
+    margin: 0 0 0.5rem;
+    font-size: 1.15rem;
+}
+
+.settings-link-dialog-content p {
+    margin: 0 0 1rem;
+    color: #4f5d75;
+}
+
+.settings-link-copy-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 40px;
+    gap: 0.5rem;
+}
+
+.settings-link-copy-row input,
+.settings-link-field input {
+    width: 100%;
+    min-width: 0;
+    height: 40px;
+    padding: 0 0.75rem;
+    border: 1px solid #aeb8ca;
+    border-radius: 6px;
+    font: inherit;
+}
+
+.settings-link-copy-row input {
+    background: #f4f6fa;
+}
+
+.settings-icon-button {
+    width: 40px;
+    height: 40px;
+    border: 1px solid #aeb8ca;
+    border-radius: 6px;
+    background: #ffffff;
+    color: #26334d;
+    font-size: 1.25rem;
+    cursor: pointer;
+}
+
+.settings-link-field {
+    display: grid;
+    gap: 0.4rem;
+    margin-top: 1rem;
+    color: #3d4666;
+    font-weight: 600;
+}
+
+.settings-link-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
 .settings-actions {
     margin-top: 1rem;
     display: flex;

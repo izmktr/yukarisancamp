@@ -21,7 +21,11 @@
 
         <div class="settings-row readonly">
             <label>Discord Server</label>
-            <span id="settings-discord-server"></span>
+            <div class="settings-discord-value">
+                <span id="settings-discord-server"></span>
+                <button id="settings-discord-link-button" class="btn btn-primary" type="button" hidden>連携</button>
+                <button id="settings-discord-unlink-button" class="btn" type="button" hidden>連携解除</button>
+            </div>
         </div>
 
         <div class="settings-row readonly">
@@ -34,4 +38,27 @@
             <span id="settings-status" class="settings-status"></span>
         </div>
     </div>
+
+    <dialog id="settings-discord-link-dialog" class="settings-link-dialog">
+        <form method="dialog" class="settings-link-dialog-content">
+            <h3>Discord連携</h3>
+            <p>以下の文字を「凸報告」に入力し、返ってきた返信キーを入力してください。</p>
+
+            <div class="settings-link-copy-row">
+                <input id="settings-discord-link-command" type="text" readonly aria-label="Discordに入力する文字" />
+                <button id="settings-discord-link-copy" class="settings-icon-button" type="button" title="コピー" aria-label="コピー">&#x2398;</button>
+            </div>
+
+            <label class="settings-link-field" for="settings-discord-reply-key">
+                <span>返信キーを入力</span>
+                <input id="settings-discord-reply-key" type="text" autocomplete="off" />
+            </label>
+
+            <div id="settings-discord-link-status" class="settings-status" aria-live="polite"></div>
+            <div class="settings-link-actions">
+                <button id="settings-discord-link-submit" class="btn btn-primary" type="button">連携</button>
+                <button class="btn" type="submit">閉じる</button>
+            </div>
+        </form>
+    </dialog>
 </div>

@@ -18,7 +18,9 @@ import multer from 'multer';
 import { cert, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
+import { randomInt } from 'crypto';
 import { getBaseDate } from './utils/baseDate';
+import { decrypt, encrypt } from './utils/encrypt';
 
 // Firebase Admin SDK 初期化
 let adminDb: Firestore | null = null;
@@ -568,6 +570,7 @@ type UserProfileSettingsPayload = {
 };
 
 type UserProfileResponsePayload = UserProfileSettingsPayload & {
+  discordServerName: string | null;
   ownedCharacters: UserOwnedCharacter[];
 };
 
@@ -837,6 +840,39 @@ async function supabaseSelectClanByDiscordServer(config: SupabaseConfig, discord
   }
 
   return normalizeClanInfoRow(rows[0]);
+}
+
+async function supabaseSelectDiscordClanName(config: SupabaseConfig, discordServer: string | null): Promise<string | null> {
+  const clanId = normalizeDiscordServerToClanId(discordServer || '');
+  if (!clanId) {
+    return null;
+  }
+
+  const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLANS_TABLE);
+  const query = new URLSearchParams({
+    select: 'name',
+    source: 'eq.discord',
+    clanid: `eq.${clanId}`,
+    limit: '1'
+  });
+  const response = await fetch(`${endpointUrl}?${query.toString()}`, {
+    method: 'GET',
+    headers: {
+      apikey: config.secretKey,
+      Authorization: `Bearer ${config.secretKey}`
+    }
+  });
+  if (!response.ok) {
+    const responseText = await response.text();
+    throw new Error(`Supabase select Discord clan name failed: ${response.status} ${responseText}`);
+  }
+
+  const rows = await response.json() as unknown;
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return null;
+  }
+  const row = rows[0] as Record<string, unknown>;
+  return typeof row.name === 'string' && row.name.trim() ? row.name.trim() : null;
 }
 
 async function supabaseSelectClanMembersByDiscordServer(config: SupabaseConfig, discordServer: string): Promise<ClanMemberRow[]> {
@@ -1780,9 +1816,14 @@ function toUserOwnedCharacterRecords(googleUserId: string, characters: UserOwned
   }));
 }
 
-function buildUserProfileResponsePayload(profile: UserProfileSettingsPayload, ownedCharacters: UserOwnedCharacter[]): UserProfileResponsePayload {
+function buildUserProfileResponsePayload(
+  profile: UserProfileSettingsPayload,
+  ownedCharacters: UserOwnedCharacter[],
+  discordServerName: string | null
+): UserProfileResponsePayload {
   return {
     ...profile,
+    discordServerName,
     ownedCharacters
   };
 }
@@ -3154,9 +3195,12 @@ app.get('/api/settings/profile/current', async (req, res) => {
       googleUserId: verified.uid,
       displayName: verified.displayName
     });
-    const ownedCharacters = await supabaseSelectUserOwnedCharactersByGoogleUserId(config, verified.uid);
+    const [ownedCharacters, discordServerName] = await Promise.all([
+      supabaseSelectUserOwnedCharactersByGoogleUserId(config, verified.uid),
+      supabaseSelectDiscordClanName(config, profile.discordServer)
+    ]);
 
-    return res.json({ profile: buildUserProfileResponsePayload(profile, ownedCharacters) });
+    return res.json({ profile: buildUserProfileResponsePayload(profile, ownedCharacters, discordServerName) });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     if (errorMessage.includes('Authorization header') || errorMessage.includes('Invalid') || errorMessage.includes('token')) {
@@ -3204,12 +3248,6 @@ app.post('/api/settings/profile/save', express.json(), async (req, res) => {
     if (Object.prototype.hasOwnProperty.call(body, 'displayName')) {
       patch.displayName = body.displayName;
     }
-    if (Object.prototype.hasOwnProperty.call(body, 'discordId')) {
-      patch.discordId = body.discordId;
-    }
-    if (Object.prototype.hasOwnProperty.call(body, 'discordServer')) {
-      patch.discordServer = body.discordServer;
-    }
 
     const normalized = normalizeUserProfileSettingsPayload(patch, {
       googleUserId: verified.uid,
@@ -3229,10 +3267,11 @@ app.post('/api/settings/profile/save', express.json(), async (req, res) => {
     const ownedCharacters = hasOwnedCharactersPatch
       ? normalizedOwnedCharactersPatch
       : await supabaseSelectUserOwnedCharactersByGoogleUserId(config, verified.uid);
+    const discordServerName = await supabaseSelectDiscordClanName(config, normalized.discordServer);
 
     return res.json({
       success: true,
-      profile: buildUserProfileResponsePayload(normalized, ownedCharacters)
+      profile: buildUserProfileResponsePayload(normalized, ownedCharacters, discordServerName)
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -3246,6 +3285,148 @@ app.post('/api/settings/profile/save', express.json(), async (req, res) => {
 
     console.error('Failed to save settings profile to Supabase:', error);
     return res.status(502).json({ error: errorMessage || 'Failed to save settings profile to Supabase' });
+  }
+});
+
+app.post('/api/settings/discord-link/start', async (req, res) => {
+  const commonKey = process.env.YUKALINK_COMMON_KEY?.trim();
+  if (!commonKey) {
+    return res.status(503).json({ error: 'Discord連携用の共通鍵が設定されていません。' });
+  }
+
+  try {
+    const verified = await verifyFirebaseIdTokenFromRequest(req);
+    const randomValue = randomInt(100_000_000, 1_000_000_000).toString();
+
+    req.session.discordLinkChallenge = {
+      googleUserId: verified.uid,
+      randomValue,
+      createdAt: Date.now()
+    };
+
+    await new Promise<void>((resolve, reject) => {
+      req.session.save((error) => error ? reject(error) : resolve());
+    });
+
+    return res.json({ command: `yukalink ${encrypt(randomValue, commonKey)}` });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('Authorization header') || errorMessage.includes('Invalid') || errorMessage.includes('token')) {
+      return res.status(401).json({ error: errorMessage });
+    }
+    console.error('Failed to start Discord linking:', error);
+    return res.status(502).json({ error: 'Discord連携の開始に失敗しました。' });
+  }
+});
+
+app.post('/api/settings/discord-link/complete', express.json(), async (req, res) => {
+  const config = getSupabaseConfig();
+  const commonKey = process.env.YUKALINK_COMMON_KEY?.trim();
+  if (!config || !commonKey) {
+    return res.status(503).json({ error: 'Discord連携に必要なサーバー設定がありません。' });
+  }
+
+  try {
+    const verified = await verifyFirebaseIdTokenFromRequest(req);
+    const challenge = req.session.discordLinkChallenge;
+    if (
+      !challenge
+      || challenge.googleUserId !== verified.uid
+      || Date.now() - challenge.createdAt > 10 * 60 * 1000
+    ) {
+      return res.status(400).json({ error: '連携情報の有効期限が切れています。もう一度やり直してください。' });
+    }
+
+    const body = req.body && typeof req.body === 'object' ? req.body as Record<string, unknown> : {};
+    const replyKey = typeof body.replyKey === 'string' ? body.replyKey.trim() : '';
+    if (!replyKey) {
+      return res.status(400).json({ error: '返信キーを入力してください。' });
+    }
+
+    const [randomValue, discordServer, discordId, ...extraValues] = decrypt(replyKey, commonKey).trimEnd().split(',');
+    if (
+      extraValues.length > 0
+      || randomValue !== challenge.randomValue
+      || !/^\d+$/.test(discordServer || '')
+      || !/^\d+$/.test(discordId || '')
+    ) {
+      return res.status(400).json({ error: '返信キーが正しくありません。' });
+    }
+
+    const currentProfile = await ensureUserProfileSettingsFromSupabase(config, {
+      googleUserId: verified.uid,
+      displayName: verified.displayName
+    });
+    const linkedProfile: UserProfileSettingsPayload = {
+      ...currentProfile,
+      discordServer,
+      discordId
+    };
+    await supabaseUpsertUserProfile(config, linkedProfile);
+    delete req.session.discordLinkChallenge;
+    if (req.session.user?.googleUserId === verified.uid) {
+      req.session.user.discordServer = discordServer;
+    }
+    await new Promise<void>((resolve, reject) => {
+      req.session.save((error) => error ? reject(error) : resolve());
+    });
+
+    const [ownedCharacters, discordServerName] = await Promise.all([
+      supabaseSelectUserOwnedCharactersByGoogleUserId(config, verified.uid),
+      supabaseSelectDiscordClanName(config, linkedProfile.discordServer)
+    ]);
+    return res.json({
+      success: true,
+      profile: buildUserProfileResponsePayload(linkedProfile, ownedCharacters, discordServerName)
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('Authorization header') || errorMessage.includes('Invalid') || errorMessage.includes('token')) {
+      return res.status(401).json({ error: errorMessage });
+    }
+    console.error('Failed to complete Discord linking:', error);
+    return res.status(400).json({ error: '返信キーを確認できませんでした。' });
+  }
+});
+
+app.post('/api/settings/discord-link/unlink', async (req, res) => {
+  const config = getSupabaseConfig();
+  if (!config) {
+    return res.status(503).json({ error: 'Supabase is not configured' });
+  }
+
+  try {
+    const verified = await verifyFirebaseIdTokenFromRequest(req);
+    const currentProfile = await ensureUserProfileSettingsFromSupabase(config, {
+      googleUserId: verified.uid,
+      displayName: verified.displayName
+    });
+    const unlinkedProfile: UserProfileSettingsPayload = {
+      ...currentProfile,
+      discordServer: null,
+      discordId: null
+    };
+    await supabaseUpsertUserProfile(config, unlinkedProfile);
+    delete req.session.discordLinkChallenge;
+    if (req.session.user?.googleUserId === verified.uid) {
+      delete req.session.user.discordServer;
+    }
+    await new Promise<void>((resolve, reject) => {
+      req.session.save((error) => error ? reject(error) : resolve());
+    });
+
+    const ownedCharacters = await supabaseSelectUserOwnedCharactersByGoogleUserId(config, verified.uid);
+    return res.json({
+      success: true,
+      profile: buildUserProfileResponsePayload(unlinkedProfile, ownedCharacters, null)
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('Authorization header') || errorMessage.includes('Invalid') || errorMessage.includes('token')) {
+      return res.status(401).json({ error: errorMessage });
+    }
+    console.error('Failed to unlink Discord:', error);
+    return res.status(502).json({ error: 'Discord連携の解除に失敗しました。' });
   }
 });
 

@@ -46,6 +46,7 @@ function normalizeUserProfile(user, rawProfile) {
             : getDefaultDisplayName(user),
         discordId: safeProfile.discordId ?? null,
         discordServer: safeProfile.discordServer ?? null,
+        discordServerName: typeof safeProfile.discordServerName === 'string' ? safeProfile.discordServerName : null,
         createdAt: typeof safeProfile.createdAt === 'number' ? safeProfile.createdAt : Date.now(),
         ownedCharacters
     };
@@ -156,6 +157,19 @@ function renderSettingsStatus(message, type) {
     }
 }
 
+function renderDiscordLinkStatus(message, type) {
+    const status = document.getElementById('settings-discord-link-status');
+    if (!status) {
+        return;
+    }
+
+    status.textContent = message;
+    status.classList.remove('success', 'error');
+    if (type) {
+        status.classList.add(type);
+    }
+}
+
 function renderSettings(user, profile) {
     const loginRequired = document.getElementById('settings-login-required');
     const firebaseError = document.getElementById('settings-firebase-error');
@@ -163,6 +177,8 @@ function renderSettings(user, profile) {
     const displayNameInput = document.getElementById('settings-display-name');
     const emailValue = document.getElementById('settings-email');
     const discordServerValue = document.getElementById('settings-discord-server');
+    const discordLinkButton = document.getElementById('settings-discord-link-button');
+    const discordUnlinkButton = document.getElementById('settings-discord-unlink-button');
     const createdAtValue = document.getElementById('settings-created-at');
 
     if (!loginRequired || !firebaseError || !profileSection || !displayNameInput || !discordServerValue || !createdAtValue) {
@@ -193,10 +209,148 @@ function renderSettings(user, profile) {
     if (emailValue) {
         emailValue.textContent = user.email || '（未設定）';
     }
-    discordServerValue.textContent = getLinkedDisplayValue(profile.discordServer);
+    discordServerValue.textContent = getLinkedDisplayValue(profile.discordServerName || profile.discordServer);
+    if (discordLinkButton) {
+        discordLinkButton.hidden = Boolean(profile.discordServer);
+        discordLinkButton.disabled = false;
+    }
+    if (discordUnlinkButton) {
+        discordUnlinkButton.hidden = !profile.discordServer;
+        discordUnlinkButton.disabled = false;
+    }
     createdAtValue.textContent = new Date(profile.createdAt).toLocaleString('ja-JP');
     renderSettingsStatus('', '');
     updateSettingsSaveButtonState();
+}
+
+async function openDiscordLinkDialog() {
+    const dialog = document.getElementById('settings-discord-link-dialog');
+    const commandInput = document.getElementById('settings-discord-link-command');
+    const replyKeyInput = document.getElementById('settings-discord-reply-key');
+    const submitButton = document.getElementById('settings-discord-link-submit');
+    if (!dialog || !commandInput || !replyKeyInput || !submitButton || !currentAuthUser) {
+        return;
+    }
+
+    commandInput.value = '';
+    replyKeyInput.value = '';
+    submitButton.disabled = true;
+    renderDiscordLinkStatus('連携用コードを生成しています。', '');
+    dialog.showModal();
+
+    try {
+        const idToken = await getAuthIdToken(currentAuthUser);
+        const response = await fetch('/api/settings/discord-link/start', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${idToken}` }
+        });
+        if (!response.ok) {
+            throw new Error(await getErrorMessageFromResponse(response, '連携用コードの生成に失敗しました。'));
+        }
+
+        const payload = await response.json();
+        commandInput.value = typeof payload.command === 'string' ? payload.command : '';
+        submitButton.disabled = commandInput.value.length === 0;
+        renderDiscordLinkStatus('', '');
+    } catch (error) {
+        console.error('Discord連携の開始に失敗しました:', error);
+        renderDiscordLinkStatus(error instanceof Error ? error.message : '連携用コードの生成に失敗しました。', 'error');
+    }
+}
+
+async function copyDiscordLinkCommand() {
+    const commandInput = document.getElementById('settings-discord-link-command');
+    if (!commandInput || !commandInput.value) {
+        return;
+    }
+
+    try {
+        await navigator.clipboard.writeText(commandInput.value);
+        renderDiscordLinkStatus('コピーしました。', 'success');
+    } catch (error) {
+        commandInput.select();
+        const copied = document.execCommand('copy');
+        renderDiscordLinkStatus(copied ? 'コピーしました。' : 'コピーできませんでした。', copied ? 'success' : 'error');
+    }
+}
+
+async function completeDiscordLink() {
+    const dialog = document.getElementById('settings-discord-link-dialog');
+    const replyKeyInput = document.getElementById('settings-discord-reply-key');
+    const submitButton = document.getElementById('settings-discord-link-submit');
+    if (!dialog || !replyKeyInput || !submitButton || !currentAuthUser) {
+        return;
+    }
+
+    const replyKey = replyKeyInput.value.trim();
+    if (!replyKey) {
+        renderDiscordLinkStatus('返信キーを入力してください。', 'error');
+        return;
+    }
+
+    try {
+        submitButton.disabled = true;
+        renderDiscordLinkStatus('返信キーを確認しています。', '');
+        const idToken = await getAuthIdToken(currentAuthUser);
+        const response = await fetch('/api/settings/discord-link/complete', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${idToken}`
+            },
+            body: JSON.stringify({ replyKey })
+        });
+        if (!response.ok) {
+            throw new Error(await getErrorMessageFromResponse(response, 'Discord連携に失敗しました。'));
+        }
+
+        const payload = await response.json();
+        currentUserProfile = normalizeUserProfile(currentAuthUser, payload.profile);
+        renderAuthState(currentAuthUser, currentUserProfile);
+        renderSettings(currentAuthUser, currentUserProfile);
+        dialog.close();
+        renderSettingsStatus('Discordと連携しました。', 'success');
+    } catch (error) {
+        console.error('Discord連携に失敗しました:', error);
+        renderDiscordLinkStatus(error instanceof Error ? error.message : 'Discord連携に失敗しました。', 'error');
+        submitButton.disabled = false;
+    }
+}
+
+async function unlinkDiscord() {
+    if (!currentAuthUser || !currentUserProfile?.discordServer) {
+        return;
+    }
+    if (!window.confirm('Discord連携を解除しますか？')) {
+        return;
+    }
+
+    const unlinkButton = document.getElementById('settings-discord-unlink-button');
+    try {
+        if (unlinkButton) {
+            unlinkButton.disabled = true;
+        }
+        const idToken = await getAuthIdToken(currentAuthUser);
+        const response = await fetch('/api/settings/discord-link/unlink', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${idToken}` }
+        });
+        if (!response.ok) {
+            throw new Error(await getErrorMessageFromResponse(response, 'Discord連携の解除に失敗しました。'));
+        }
+
+        const payload = await response.json();
+        currentUserProfile = normalizeUserProfile(currentAuthUser, payload.profile);
+        renderAuthState(currentAuthUser, currentUserProfile);
+        renderSettings(currentAuthUser, currentUserProfile);
+        renderSettingsStatus('Discord連携を解除しました。', 'success');
+    } catch (error) {
+        console.error('Discord連携の解除に失敗しました:', error);
+        renderSettingsStatus(error instanceof Error ? error.message : 'Discord連携の解除に失敗しました。', 'error');
+        if (unlinkButton) {
+            unlinkButton.disabled = false;
+        }
+    }
 }
 
 async function saveSettingsDisplayName() {
@@ -232,6 +386,10 @@ async function saveSettingsDisplayName() {
 function initializeSettingsPage() {
     const displayNameInput = document.getElementById('settings-display-name');
     const saveButton = document.getElementById('settings-save-button');
+    const discordLinkButton = document.getElementById('settings-discord-link-button');
+    const discordUnlinkButton = document.getElementById('settings-discord-unlink-button');
+    const copyButton = document.getElementById('settings-discord-link-copy');
+    const discordLinkSubmit = document.getElementById('settings-discord-link-submit');
 
     if (!displayNameInput || !saveButton) {
         return;
@@ -245,6 +403,11 @@ function initializeSettingsPage() {
     saveButton.addEventListener('click', async () => {
         await saveSettingsDisplayName();
     });
+
+    discordLinkButton?.addEventListener('click', openDiscordLinkDialog);
+    discordUnlinkButton?.addEventListener('click', unlinkDiscord);
+    copyButton?.addEventListener('click', copyDiscordLinkCommand);
+    discordLinkSubmit?.addEventListener('click', completeDiscordLink);
 
     renderSettings(currentAuthUser, currentUserProfile);
 }

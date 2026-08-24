@@ -8,7 +8,7 @@ import discord
 
 from .message_router import MessageRouter
 # 推奨: モジュールごと import
-from . import constants
+from . import constants, encrypt
 
 from .clan_member import ClanMember
 from .supabase_client import SupabaseClient
@@ -60,6 +60,7 @@ class Clan(MessageRouter):
         input_channel_name: str = "凸報告",
         supabase: SupabaseClient | None = None,
         clan_id: int | None = None,
+        yukalink_common_key: str = "",
     ) -> None:
         super().__init__(
             input_channel_name,
@@ -71,6 +72,7 @@ class Clan(MessageRouter):
                 (["defeat"], self.Defeat),
                 (["undefeat"], self.Undefeat),
                 (['yukalink'], self.Yukalink),
+                (['en'], self.Encrypt),
                 (["register", "登録"], self.RegisterClan),
             ],
         )
@@ -87,6 +89,7 @@ class Clan(MessageRouter):
         self.clanbattle_setting: dict[str, Any] | None = None
         self.supabase = supabase
         self.clan_id = clan_id
+        self.yukalink_common_key = yukalink_common_key
 
         self.outputchannel = None
         self.outputlock = 0                                     # メッセージ出力中のロックフラグ
@@ -463,12 +466,36 @@ class Clan(MessageRouter):
         return True
 
     async def Yukalink(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
-
         if message.guild is None:
             return False
-        text = ','.join([opt.strip(), str(message.guild.id), str(message.author.id)])
+
+        try:
+            random_value = encrypt.decrypt(opt, self.yukalink_common_key).strip()
+        except ValueError:
+            self.TemporaryMessage(message.channel, '連携コードが正しくありません。Web画面から再生成してください')
+            return False
+
+        reply_key = encrypt.encrypt(
+            ','.join([random_value, str(message.guild.id), str(message.author.id)]),
+            self.yukalink_common_key,
+        )
+        text = f"以下のコードをWebに入力して下さい\n```\n{reply_key}\n```"
 
         # supabaseのpublic.clan_membersに自分自身の情報を登録
+        
+        
+
+        self.TemporaryMessage(message.channel, text)
+        return False
+
+    async def Encrypt(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
+        # Implementation for the Encrypt command
+        print(f"Encrypt command received from {member.display_name}: [{opt}] [{self.yukalink_common_key}]")
+        reply_key = encrypt.encrypt(opt, self.yukalink_common_key)
+
+        reverse = encrypt.decrypt(reply_key, self.yukalink_common_key)
+        text = f"```\n{reply_key}\n{reverse}\n```"
+
 
         self.TemporaryMessage(message.channel, text)
         return False

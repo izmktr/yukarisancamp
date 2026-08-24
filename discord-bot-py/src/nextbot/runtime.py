@@ -18,6 +18,7 @@ class NextBotApp:
         token: str,
         supabase_url: str,
         supabase_secret_key: str,
+        yukalink_common_key: str,
         input_channel_name: str = "凸報告",
         scheduled_run_at: str | None = None,
     ) -> None:
@@ -27,6 +28,7 @@ class NextBotApp:
         self.client = discord.Client(intents=intents)
         self.token = token
         self.supabase = SupabaseClient(supabase_url, supabase_secret_key)
+        self.yukalink_common_key = yukalink_common_key
         self.clanbattle_setting: dict[str, Any] | None = None
         self.input_channel_name = input_channel_name
         self.scheduled_run_at = scheduled_run_at
@@ -39,7 +41,12 @@ class NextBotApp:
     def _get_clan(self, guild: discord.Guild) -> Clan:
         clan = self._clans.get(guild.id)
         if clan is None:
-            clan = Clan(self.input_channel_name, self.supabase, guild.id)
+            clan = Clan(
+                self.input_channel_name,
+                self.supabase,
+                guild.id,
+                self.yukalink_common_key,
+            )
             self._clans[guild.id] = clan
         clan.clanbattle_setting = self.clanbattle_setting
         return clan
