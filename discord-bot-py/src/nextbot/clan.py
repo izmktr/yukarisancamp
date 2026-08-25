@@ -71,6 +71,7 @@ class Clan(MessageRouter):
                 (['dice', 'サイコロ', 'ダイス'], self.Dice),
                 (["defeat"], self.Defeat),
                 (["undefeat"], self.Undefeat),
+                (['setboss'], self.SetBoss),
                 (['yukalink'], self.Yukalink),
                 (['en'], self.Encrypt),
                 (["register", "登録"], self.RegisterClan),
@@ -602,6 +603,38 @@ class Clan(MessageRouter):
             self.TemporaryMessage(message.channel, f'更新時にエラーが発生しました')
             return False
         self.TemporaryMessage(message.channel, f'{self.BossLabel(bidx)}の周回数を{newlap}に更新しました') 
+
+        return True
+
+    async def SetBoss(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
+        if self.supabase_data is None or self.supabase is None or self.clan_id is None:
+            return False
+
+        try:
+            sp = opt.split(' ')
+            if len(sp) != constants.BOSSNUMBER:
+                raise ValueError
+
+            data = [int(s) - 1 for s in sp]
+            minlap = min([m for m in data if 0 <= m])
+            overlap = minlap + 1 if minlap + 2 in constants.LevelUpLap else minlap + 2
+
+            if len([m for m in data if overlap < m]):
+                self.TemporaryMessage(message.channel, '周回数がおかしいデータがあります')
+                return False
+
+            bosslaps = [m if 0 <= m else overlap for m in data]
+
+            await asyncio.to_thread(
+                self.supabase.update_clan_bosslaps,
+                self.clan_id,
+                bosslaps,
+            )
+            self.supabase_data["bosslaps"] = bosslaps
+
+            self.TemporaryMessage(message.channel, 'ボスを設定しました')
+        except ValueError:
+            self.TemporaryMessage(message.channel, 'setboss [ボス周回数] × 5 でボスの周回数を設定します(0は未出現)\n例)setboss 5 4 0 0 4')
 
         return True
 
