@@ -11,6 +11,7 @@ from .message_router import MessageRouter
 from . import constants, encrypt
 
 from .clan_member import ClanMember
+from .damage_control import DamageControl
 from .supabase_client import SupabaseClient
 
 class MessageReaction():
@@ -73,15 +74,21 @@ class Clan(MessageRouter):
                 (["undefeat"], self.Undefeat),
                 (['setboss'], self.SetBoss),
                 (['yukalink'], self.Yukalink),
-                (['en'], self.Encrypt),
                 (["register", "登録"], self.RegisterClan),
+                (['memberdelete'], self.MemberDelete),
+                (['reset'], self.MemberReset),
+                (['dailyreset'], self.DailyReset),
+                (['monthlyreset'], self.MonthlyReset),
+                (['settingreload'], self.SettingReload),
+                (['damagechannel'], self.DamageChannel),
+                (['taskkill', 'タスキル'], self.TaskKill),
             ],
         )
         self.members: dict[int, ClanMember] = {}
 
         self.dicehistory = [10, 30, 50, 70, 90]                 # ダイスが重複した値が出ないようにしたフラグ
 
-        self.stampcheck :dict[str, int] = {}                    # スタンプの二重押し防止
+        self.stampcheck :dict[int, int] = {}                    # スタンプの二重押し防止
         self.messagereaction : dict[int, MessageReaction] = {}
                                                                 # スタンプを押したときの反応用
 
@@ -95,7 +102,7 @@ class Clan(MessageRouter):
         self.outputchannel = None
         self.outputlock = 0                                     # メッセージ出力中のロックフラグ
 
-        # self.damagecontrol = [DamageControl(self.members, bidx) for bidx in range(5)]
+        self.damagecontrol = [DamageControl(self.members, bidx) for bidx in range(constants.BOSSNUMBER)]
                                                                 # ダメコン用
 
 
@@ -181,19 +188,19 @@ class Clan(MessageRouter):
         self.supabase_data["bosslaps"] = updated_bosslaps
         return True
 
-    def AddStamp(self, messageid : str):
+    def AddStamp(self, messageid : int):
         if messageid in self.stampcheck:
             self.stampcheck[messageid] += 1
         else:
             self.stampcheck[messageid] = 1
         return self.stampcheck[messageid]
 
-    def RemoveStamp(self, messageid : str):
+    def RemoveStamp(self, messageid : int):
         if messageid in self.stampcheck:
-            self.stampcheck['messageid'] -= 1
+            self.stampcheck[messageid] -= 1
         else:
-            self.stampcheck['messageid'] = 0
-        return self.stampcheck['messageid']
+            self.stampcheck[messageid] = 0
+        return self.stampcheck[messageid]
 
     def emojiindex(self, emojistr : str) -> int | None:
         for idx, emoji in enumerate(self.emojis):
@@ -205,7 +212,7 @@ class Clan(MessageRouter):
         return None
 
 
-    def CreateAttackReaction(self, atmember : ClanMember, message, boss : int, sortie : int, overtime : int):
+    def CreateAttackReaction(self, atmember : ClanMember, message : discord.Message, boss : int, sortie : int, overtime : int):
         react = MessageReaction(atmember)
         async def addreaction(member : ClanMember, payload : discord.RawReactionActionEvent) -> bool:
             if member != atmember:
@@ -217,19 +224,13 @@ class Clan(MessageRouter):
 
             v = self.AddStamp(payload.message_id)
             if v != 1:
-                Outlog(ERRFILE, "self.AddStamp" + " " + v)
                 return False
 
             if idx == 0:
-                if self.checkStampWarning(boss):
-                    self.TemporaryMessage(self.inputchannel, '%s ボス未討伐の報告で間違いないですか？' % member.mention)
+                member.Finish(payload.message_id, False, 1 if member.IsOverkill() else 2)
 
-                member.Finish(payload.message_id, False, 0.5 if member.IsOverkill() else 1.0)
-                reboss = RESERVELAP * BOSSNUMBER + boss % BOSSNUMBER
-                self.RemoveReserve(lambda m: m.member == member and m.boss in [boss, reboss])
-
-                await self.damagecontrol[boss % BOSSNUMBER].Injure(member)
-                await self.damagecontrol[boss % BOSSNUMBER].SendResult()
+                await self.damagecontrol[boss - 1].Injure(member)
+                await self.damagecontrol[boss - 1].SendResult()
             
             if 1 <= idx and idx <= 8:
                 if 0 < overtime:
@@ -325,10 +326,11 @@ class Clan(MessageRouter):
             
         return False
 
-    def CheckNotAdministrator(self, message : discord.Message):
-        if message.author.guild_permissions.administrator:
-            return False
-        return True
+    def CheckNotAdministrator(self, message: discord.Message) -> bool:
+        return not (
+            isinstance(message.author, discord.Member)
+            and message.author.guild_permissions.administrator
+        )
 
     def CheckNotMasterAdministrator(self, clan : ClanMember, message : discord.Message):
         return False
@@ -359,57 +361,72 @@ class Clan(MessageRouter):
 
         return False
 
-    def GetMember(self, user : discord.User) -> ClanMember:
-        if user.id not in self.members:
-            self.members[user.id] = ClanMember(user.id)
-            self.members[user.id].name = user.name
-            self.members[user.id].mention = user.mention
+    def GetMember(self, user : int) -> ClanMember | None:
+        if user not in self.members:
+            return None
 
-        return self.members[user.id]
+        return self.members[user]
 
     async def Attack(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
-        cmember = self.GetMember(message.author)
+        cmember = self.GetMember(message.author.id)
+        if cmember is None:
+            self.TemporaryMessage(message.channel, '登録されていません 登録するにはregisterと入力してください')
+            return False
+
+        if cmember.IsAttack():
+            self.TemporaryMessage(message.channel, 'すでに凸があります 前の凸を無効にするにはcancelと入力してください')
+            return False
 
         try:
             num = int(opt)
-            bidx = num if num < 10 else num // 10
+            boss = (num if num < 10 else num // 10) + 1
             sortie = 0 if num < 10 else num % 10
 
-            if not constants.is_valid_boss(bidx) or not constants.is_valid_sortie(sortie):
+            if not constants.is_valid_boss(boss) or not constants.is_valid_sortie(sortie):
                 raise ValueError
         except ValueError:
             self.TemporaryMessage(message.channel, '「凸5」 のように発言してください')
             return False
 
-        error = await self.AttackCheck(message, cmember, bidx)
-        if error:
-            return False
-
-        if sortie == -1:
+        overattack = 0
+        if sortie == 0:
             if cmember.FirstSoriteNum() == 0:
                 self.TemporaryMessage(message.channel, '新規凸がありません')
                 return False
-            sortie = cmember.SortieCount()
-            overtime = 0
+            
+            sortie = cmember.SortieCount() + 1
         else:
-            overtime = cmember.attacktime[sortie]
-            if overtime is None or overtime == 0:
-                self.TemporaryMessage(message.channel, '持ち越しではありません')
+            if cmember.attacktime[sortie] is None or cmember.attacktime[sortie] == 0:
+                self.TemporaryMessage(message.channel, '持ち越し凸がありません')
                 return False
+            overattack = 1
 
-        boss = self.BossLap(bidx) * constants.BOSSNUMBER + bidx
+        error = await self.AttackCheck(message, cmember, boss)
+        if error:
+            return False
 
-        member.Attack(boss, sortie)
-        if member.attackmessage is not None:
-            self.messagereaction.pop(member.attackmessage.id, None)
-        member.attackmessage = message
+        if self.supabase is not None and self.clan_id is not None:
+            await asyncio.to_thread(
+                self.supabase.update_discord_clan_member_attack,
+                self.clan_id,
+                member.id,
+                boss,
+                self.BossLap(boss),
+                sortie,
+                overattack,
+            )
 
-        self.messagereaction[message.id] = self.CreateAttackReaction(member, message, boss, sortie, overtime)
+        cmember.Attack(boss, sortie)
+        if cmember.attackmessage is not None:
+            self.messagereaction.pop(cmember.attackmessage.id, None)
+        cmember.attackmessage = message
 
-        if member.taskkill != 0:
+        self.messagereaction[message.id] = self.CreateAttackReaction(cmember, message, boss, sortie, overtime)
+
+        if cmember.taskkill != 0:
             await message.add_reaction(self.taskkillmark)
 
-        await self.AddReaction(message, 0 < overtime)
+        await self.AddReaction(message, 0 < overtime, cmember)
 
         return True
 
@@ -467,7 +484,7 @@ class Clan(MessageRouter):
         return True
 
     async def Yukalink(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
-        if message.guild is None:
+        if message.guild is None or self.supabase is None or self.clan_id is None:
             return False
 
         try:
@@ -481,10 +498,17 @@ class Clan(MessageRouter):
             self.yukalink_common_key,
         )
         text = f"以下のコードをWebに入力して下さい\n```\n{reply_key}\n```"
+        admin = not self.CheckNotAdministrator(message)
 
         # supabaseのpublic.clan_membersに自分自身の情報を登録
-        
-        
+        await asyncio.to_thread(
+            self.supabase.insert_discord_clan_member_if_missing,
+            self.clan_id,
+            member.id,
+            member.display_name,
+            member.mention,
+            "leader" if admin else "member",
+        )
 
         self.TemporaryMessage(message.channel, text)
         return False
@@ -502,11 +526,48 @@ class Clan(MessageRouter):
         return False
 
     async def RegisterClan(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
-        # Implementation for registering a clan
+        if self.supabase_data is None or self.supabase is None or self.clan_id is None:
+            return False
+
+        admin = not self.CheckNotAdministrator(message)
 
         # supabaseのpublic.clan_membersに自分自身の情報を登録
+        await asyncio.to_thread(
+            self.supabase.insert_discord_clan_member_if_missing,
+            self.clan_id,
+            member.id,
+            member.display_name,
+            member.mention,
+            "leader" if admin else "member",
+        )
 
         return False
+
+    async def MemberDelete(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
+        if self.CheckNotAdministrator(message):
+            return False
+
+        result = self.DeleteMember(opt)
+        if result is not None:
+            self.TemporaryMessage(message.channel, '%s を消しました' % result.name)
+            return True
+        else:
+            self.TemporaryMessage(message.channel, 'メンバーがいません')
+            return False
+
+    async def MemberReset(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
+        
+        return True
+    async def DailyReset(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
+        return True
+    async def MonthlyReset(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
+        return True
+    async def SettingReload(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
+        return True
+    async def DamageChannel(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
+        return True
+    async def TaskKill(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
+        return True
 
     async def OnReactionAdd(self, reaction: discord.Reaction, user: discord.User) -> bool:
         if user.bot:

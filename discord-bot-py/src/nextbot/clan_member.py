@@ -21,11 +21,6 @@ class ClanMember():
         self.lastactive = datetime.datetime.now() + datetime.timedelta(days = -1)
                                                         # 最後に発言した時刻
 
-    def CreateHistory(self, messageid, sortie, boss, overtime, defeat, sotiecount):
-        h = AttackHistory(self, self.id, messageid, sortie, boss, overtime, defeat, sotiecount, serial = len(self.history) + 1)
-        h.TimeStamping()
-        self.history.append(h)
-
     def Attack(self, bossindex : int, sortie : int):
         self.sortie = sortie
         self.reportlimit = datetime.datetime.now() + datetime.timedelta(minutes = 30)
@@ -45,14 +40,7 @@ class ClanMember():
 
     #指定したLapで凸した回数
     def LapCount(self, lap : int) -> float:
-        count : float = 0.0
-
-        for h in self.history:
-            if 0 <= h.boss and h.boss < (lap + 1) *  constants.BOSSNUMBER:
-                count += h.sortiecount
-        if constants.MAX_SORTIE < count:
-            return constants.MAX_SORTIE
-        return count
+        return len([m for m in self.attacktime if m is not None and m // 10 == lap])
 
     def DecoName(self, opt : str) -> str:
         s: str = ''
@@ -82,7 +70,7 @@ class ClanMember():
 
     #便宜上凸数
     def SortieCount(self):
-        return MAX_SORITE - self.FirstSoriteNum()
+        return constants.MAX_SORTIE - self.FirstSoriteNum()
     
     def AttackCharactor(self, at : Optional[int], short : bool):
         if at is None : return '' if short else 'o'
@@ -92,7 +80,7 @@ class ClanMember():
     def AttackTag(self, short : bool):
         return ''.join([self.AttackCharactor(m, short) for m in self.attacktime])
     
-    def Finish(self, messageid, defeat = False, sortiecount = 1.0):
+    def Finish(self, messageid : int, defeat : bool = False, sortiecount : int = 2):
         if self.sortie < 0: return
         self.CreateHistory(messageid, self.sortie, self.boss, 0, defeat, sortiecount)
         self.attacktime[self.sortie] = 0
@@ -103,9 +91,9 @@ class ClanMember():
         self.sortie = -1
         self.reportlimit = None
 
-    def Overkill(self, messageid, overtime):
+    def Overkill(self, messageid : int, overtime : int):
         if self.sortie < 0: return
-        self.CreateHistory(messageid, self.sortie, self.boss, overtime, True, 0.5)
+        self.CreateHistory(messageid, self.sortie, self.boss, overtime, True, 1)
         self.attacktime[self.sortie] = overtime
         self.sortie = -1
         self.reportlimit = None
@@ -196,5 +184,7 @@ class ClanMember():
                         result.append(h)
 
         return [h.boss % BOSSNUMBER for h in result if VERY_HARD_LAP <= h.boss]
+    
+    
 
 

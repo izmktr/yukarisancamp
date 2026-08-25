@@ -99,3 +99,84 @@ class SupabaseClient:
 
         with urlopen(request, timeout=10):
             pass
+
+    def insert_discord_clan_member_if_missing(
+        self,
+        clan_id: int,
+        member_id: int,
+        name: str,
+        mention: str,
+        role: str | None = None,
+    ) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        member_data = {
+            "source": "discord",
+            "clanid": str(clan_id),
+            "membersource": "discord",
+            "memberid": str(member_id),
+            "name": name,
+            "mention": mention,
+            "lastactive": now,
+            "updated_at": now,
+        }
+        if role is not None:
+            member_data["role"] = role
+
+        payload = json.dumps(member_data).encode("utf-8")
+        request = Request(
+            f"{self.url}/rest/v1/clan_members?on_conflict=source,clanid,membersource,memberid",
+            data=payload,
+            method="POST",
+            headers={
+                "apikey": self.secret_key,
+                "Authorization": f"Bearer {self.secret_key}",
+                "Content-Type": "application/json",
+                "Prefer": "resolution=ignore-duplicates,return=minimal",
+            },
+        )
+
+        with urlopen(request, timeout=10):
+            pass
+
+    def update_discord_clan_member_attack(
+        self,
+        clan_id: int,
+        member_id: int,
+        boss: int,
+        boss_lap: int,
+        sortie: int,
+        overattack: int,
+    ) -> None:
+        query = urlencode(
+            {
+                "source": "eq.discord",
+                "clanid": f"eq.{clan_id}",
+                "membersource": "eq.discord",
+                "memberid": f"eq.{member_id}",
+            }
+        )
+        payload = json.dumps(
+            {
+                "attackboss": boss,
+                "attacklap": boss_lap,
+                "overattack": overattack,
+                "damage": 0,
+                "attackmessage": "",
+                "sortie": sortie,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ).encode("utf-8")
+        request = Request(
+            f"{self.url}/rest/v1/clan_members?{query}",
+            data=payload,
+            method="PATCH",
+            headers={
+                "apikey": self.secret_key,
+                "Authorization": f"Bearer {self.secret_key}",
+                "Content-Type": "application/json",
+                "Prefer": "return=minimal",
+            },
+        )
+
+        with urlopen(request, timeout=10):
+            pass
