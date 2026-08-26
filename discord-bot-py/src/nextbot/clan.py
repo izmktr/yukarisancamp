@@ -1,8 +1,9 @@
 from __future__ import annotations
 import asyncio
+import datetime
 import random
 import re
-from typing import Any, cast
+from typing import Any, cast, Callable, Awaitable
 
 import discord
 
@@ -15,11 +16,17 @@ from .damage_control import DamageControl
 from .supabase_client import SupabaseClient
 
 class MessageReaction():
-    def __init__(self, member : ClanMember) -> None:
+    def __init__(
+        self,
+        member: ClanMember,
+        addreaction: Callable[[discord.Message, bool], Awaitable[None]],
+        removereaction: Callable[[ClanMember, discord.RawReactionActionEvent], Awaitable[bool]],
+        deletereaction: Callable[[discord.RawReactionActionEvent], Awaitable[bool]],
+    ) -> None:
+        self.addreaction = addreaction
+        self.removereaction = removereaction
+        self.deletereaction = deletereaction
         self.member = member
-        self.addreaction = None
-        self.removereaction = None
-        self.deletereaction = None
 
 
 class Clan(MessageRouter):
@@ -211,9 +218,17 @@ class Clan(MessageRouter):
                 return idx
         return None
 
+    async def AddReaction(self, message : discord.Message, overkill: bool):
+        reactemojis = self.emojis if not overkill else self.emojisoverkill
+
+        for emoji in reactemojis:
+            try:
+                await message.add_reaction(emoji)
+                await asyncio.sleep(0.1)
+            except (discord.errors.NotFound, discord.errors.Forbidden):
+                break
 
     def CreateAttackReaction(self, atmember : ClanMember, message : discord.Message, boss : int, sortie : int, overtime : int):
-        react = MessageReaction(atmember)
         async def addreaction(member : ClanMember, payload : discord.RawReactionActionEvent) -> bool:
             if member != atmember:
                 return False
@@ -234,22 +249,14 @@ class Clan(MessageRouter):
             
             if 1 <= idx and idx <= 8:
                 if 0 < overtime:
-                    member.Finish(payload.message_id, True, 0.5)
+                    member.Finish(payload.message_id, True, 1)
                 else:
                     member.Overkill(payload.message_id, (idx + 1) * 10)
 
-                bidx = boss % BOSSNUMBER
-                await self.DamageControlDefeat(boss)
+                # await self.DamageControlDefeat(boss)
 
-                reboss = RESERVELAP * BOSSNUMBER + bidx
-                self.RemoveReserve(lambda m: m.member == member and m.boss == reboss)
-
-                newlap = self.DefeatBoss(bidx)
-
-                mention = self.CreateNotice(newlap, bidx)
-
-                if mention is not None:
-                    await message.channel.send(mention)
+                newlap = self.BossLap(boss) + 1
+                await self.SetBossLap(boss, newlap)
 
                 for m in self.members.values():
                     if m.IsAttack() and m.boss == boss:
@@ -257,15 +264,13 @@ class Clan(MessageRouter):
             
             if idx == 9:
                 member.Cancel()
-                await self.damagecontrol[boss % BOSSNUMBER].Remove(member)
-                await self.damagecontrol[boss % BOSSNUMBER].SendResult()
+                await self.damagecontrol[boss - 1].Remove(member)
+                await self.damagecontrol[boss - 1].SendResult()
 
             await self.RemoveReaction(message, 0 < overtime, message.guild.me)
             return True
 
-        react.addreaction = addreaction
-
-        async def removereaction(member : ClanMember, payload):
+        async def removereaction(member : ClanMember, payload : discord.RawReactionActionEvent) -> bool:
             if member != atmember:
                 return False
 
@@ -296,7 +301,6 @@ class Clan(MessageRouter):
                     self.TemporaryMessage(self.inputchannel, '巻き戻しに失敗しました')
                 return True
 
-        react.removereaction = removereaction
 
         async def deletereaction(payload):
             atmember.Revert(payload.message_id)
@@ -304,9 +308,20 @@ class Clan(MessageRouter):
                 atmember.Cancel()
             return True
 
-        react.deletereaction = deletereaction
-
+        react = MessageReaction(atmember, addreaction, removereaction, deletereaction)
         return react
+
+
+
+    async def RemoveReaction(self, message : discord.Message, overkill : bool, me : discord.Member):
+        reactemojis = self.emojis if not overkill else self.emojisoverkill
+
+        for emoji in reactemojis:
+            try:
+                await message.remove_reaction(emoji, me)
+            except (discord.errors.NotFound, discord.errors.Forbidden):
+                break
+
 
     @staticmethod
     async def SendMessage(channel : discord.abc.Messageable, message : str):
@@ -426,7 +441,7 @@ class Clan(MessageRouter):
         if cmember.taskkill != 0:
             await message.add_reaction(self.taskkillmark)
 
-        await self.AddReaction(message, 0 < overtime, cmember)
+        await self.AddReaction(message, overattack, cmember)
 
         return True
 
