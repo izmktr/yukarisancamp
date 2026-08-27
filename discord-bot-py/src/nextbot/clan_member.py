@@ -62,8 +62,10 @@ class ClanMember():
                 if 0 < len(atag):
                     s += '[%s]' % atag
             elif c == 'v':
-                if self.IsAttack() and self.IsOverkill():
-                    s += '[v%d]' % (self.Overtime(self.sortie) // 10)
+                if self.IsAttack():
+                    overtime = self.Overtime(self.sortie)
+                    if overtime is not None and 0 < overtime:
+                        s += '[v%d]' % (overtime // 10)
             else: s += c
 
         return s
@@ -82,7 +84,6 @@ class ClanMember():
     
     def Finish(self, messageid : int, defeat : bool = False, sortiecount : int = 2):
         if self.sortie < 0: return
-        self.CreateHistory(messageid, self.sortie, self.boss, 0, defeat, sortiecount)
         self.attacktime[self.sortie] = 0
         self.sortie = -1
         self.reportlimit = None
@@ -93,7 +94,6 @@ class ClanMember():
 
     def Overkill(self, messageid : int, overtime : int):
         if self.sortie < 0: return
-        self.CreateHistory(messageid, self.sortie, self.boss, overtime, True, 1)
         self.attacktime[self.sortie] = overtime
         self.sortie = -1
         self.reportlimit = None
@@ -101,61 +101,14 @@ class ClanMember():
     def Overtime(self, sortie):
         return self.attacktime[sortie]
 
-    def MessageChcck(self, messageid):
-        for h in self.history:
-            if h.messageid == messageid:
-                return True
-        return False
-
     def Reset(self):
         self.sortie = -1
         self.reportlimit = None
         self.taskkill = 0
-        self.history.clear()
-        self.attacktime = [None] * MAX_SORTIE
-
-    selializemember = [
-        'name', 
-        'taskkill', 
-        'attacktime',
-        'plan',
-        ]
-
-    def Serialize(self):
-        ret = {}
-
-        for key, value in self.__dict__.items():
-            if key in self.selializemember:
-                ret[key] = value
-        
-        ret['history'] = [m.Serialize() for m in self.history]
-        return ret
-
-    def Deserialize(self, dic):
-        for key, value in dic.items():
-            if key == 'history':
-                self.__dict__[key] = [AttackHistory.Desrialize(m) for m in value]
-            else:
-                self.__dict__[key] = value
+        self.attacktime = [None] * constants.MAX_SORTIE
 
     def Revert(self, messageid):
-        if len(self.history) == 0: return None
-
-        ret = [m for m in self.history if m.messageid == messageid]
-        if 0 < len(ret):
-            self.history.remove(ret[0])
-            self.Attack(ret[0].boss, ret[0].sortie)
-            self.CreateAttackTime()
-            return ret[0]
         return None
-
-    def CalcAttackTime(self, sortie : int):
-        history = [m for m in self.history if m.sortie == sortie]
-        if len(history) == 0: return None
-        return min([h.overtime for h in history])
-
-    def CreateAttackTime(self):
-        self.attacktime = [self.CalcAttackTime(i) for i in range(MAX_SORITE)]
 
     def DayFinish(self):
         for t in self.attacktime:
@@ -166,24 +119,24 @@ class ClanMember():
     def UpdateActive(self):
         self.lastactive = datetime.datetime.now()
 
-    def PlanFromHistory(self):
-        result : List[AttackHistory] = []
-        reserve = set()
-        for h in self.history:
-            # フル凸 or 60秒以上の戦闘
-            if 1 <= h.sortiecount:
-                result.append(h)
-            else:
-                if 0 < h.overtime:
-                    if h.overtime <= 50:
-                        result.append(h)
-                    else:
-                        reserve.add(h.sortie)
-                else:
-                    if h.sortie in reserve:
-                        result.append(h)
 
-        return [h.boss % BOSSNUMBER for h in result if VERY_HARD_LAP <= h.boss]
+    # def PlanFromHistory(self):
+    #     result : list[AttackHistory] = []
+    #     reserve = set()
+    #     for h in self.history:
+    #         # フル凸 or 60秒以上の戦闘
+    #         if 1 <= h.sortiecount:
+    #             result.append(h)
+    #         else:
+    #             if 0 < h.overtime:
+    #                 if h.overtime <= 50:
+    #                     result.append(h)
+    #                 else:
+    #                     reserve.add(h.sortie)
+    #             else:
+    #                 if h.sortie in reserve:
+    #                     result.append(h)
+    #     return [h.boss % constants.BOSSNUMBER for h in result if constants.VERY_HARD_LAP <= h.boss]
     
     
 

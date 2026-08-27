@@ -9,6 +9,8 @@ MAX_SORTIE = 3
 INPUT_CHANNEL = "凸報告"
 OUTPUT_CHANNEL = "状況報告"
 
+VERY_HARD_LAP = 23
+
 LevelUpLap : list[int] = [0, 7, 23]
 
 # bossの値が正しいか
