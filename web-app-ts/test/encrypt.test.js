@@ -5,9 +5,16 @@ const test = require('node:test');
 const { decrypt, encrypt, generateKey } = require('../src/utils/encrypt');
 
 test('encrypt produces known ciphertext values', () => {
-  assert.equal(encrypt('123', 'A'), 'Ej');
-  assert.equal(encrypt('123456', 'ABC'), 'EkTW');
-  assert.equal(encrypt('0, ', '/+'), 'Bp');
+  assert.equal(encrypt('123', 'A'), 'En');
+  assert.equal(encrypt('123456', 'ABC'), 'Eo2n');
+  assert.equal(encrypt('0, ', '/+'), 'Br');
+});
+
+test('encrypt changes the mapping when the previous character changes', () => {
+  const ciphertext = encrypt('123123', 'A');
+
+  assert.equal(ciphertext, 'Ennn');
+  assert.notEqual(ciphertext.slice(0, 2), ciphertext.slice(2));
 });
 
 test('decrypt restores plaintext for supported characters', () => {

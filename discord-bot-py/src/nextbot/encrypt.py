@@ -48,12 +48,14 @@ def encrypt(plaintext: str, key: str) -> str:
         raise ValueError("key must not be empty")
 
     encoded = _base16_to_64(plaintext)
-    return "".join(
-        BASE64_CHARSET[
-            (BASE64_CHARSET.index(character) + BASE64_CHARSET.index(key[index % len(key)])) % 64
-        ]
-        for index, character in enumerate(encoded)
-    )
+    output: list[str] = []
+    previous_index = 0
+    for index, character in enumerate(encoded):
+        character_index = BASE64_CHARSET.index(character)
+        key_index = BASE64_CHARSET.index(key[index % len(key)])
+        output.append(BASE64_CHARSET[(character_index + key_index + previous_index) % 64])
+        previous_index = character_index
+    return "".join(output)
 
 
 def decrypt(ciphertext: str, key: str) -> str:
@@ -62,13 +64,15 @@ def decrypt(ciphertext: str, key: str) -> str:
     if ciphertext and not key:
         raise ValueError("key must not be empty")
 
-    decoded = "".join(
-        BASE64_CHARSET[
-            (BASE64_CHARSET.index(character) - BASE64_CHARSET.index(key[index % len(key)]) + 64) % 64
-        ]
-        for index, character in enumerate(ciphertext)
-    )
-    return _base64_to_16(decoded)
+    decoded: list[str] = []
+    previous_index = 0
+    for index, character in enumerate(ciphertext):
+        character_index = BASE64_CHARSET.index(character)
+        key_index = BASE64_CHARSET.index(key[index % len(key)])
+        decoded_index = (character_index - key_index - previous_index) % 64
+        decoded.append(BASE64_CHARSET[decoded_index])
+        previous_index = decoded_index
+    return _base64_to_16("".join(decoded))
 
 
 def generate_key(length: int) -> str:

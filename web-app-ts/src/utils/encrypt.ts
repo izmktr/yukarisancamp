@@ -40,10 +40,13 @@ function base64to16(input: string): string {
 export function encrypt(plaintext : string, key: string): string {
   const keyBase64 = base16to64(plaintext);
   let output = '';
+  let previousIndex = 0;
   for (let i = 0; i < keyBase64.length; i++) {
     const keyChar = key[i % key.length];
     const keyIndex = BASE64_CHARSET.indexOf(keyChar);
-    output += BASE64_CHARSET[(BASE64_CHARSET.indexOf(keyBase64[i]) + keyIndex) % 64];
+    const characterIndex = BASE64_CHARSET.indexOf(keyBase64[i]);
+    output += BASE64_CHARSET[(characterIndex + keyIndex + previousIndex) % 64];
+    previousIndex = characterIndex;
   }
 
   return output;
@@ -51,10 +54,13 @@ export function encrypt(plaintext : string, key: string): string {
 
 export function decrypt(ciphertext: string, key: string): string {
   let output = '';
+  let previousIndex = 0;
   for (let i = 0; i < ciphertext.length; i++) {
     const keyChar = key[i % key.length];
     const keyIndex = BASE64_CHARSET.indexOf(keyChar);
-    output += BASE64_CHARSET[(BASE64_CHARSET.indexOf(ciphertext[i]) - keyIndex + 64) % 64];
+    const characterIndex = (BASE64_CHARSET.indexOf(ciphertext[i]) - keyIndex - previousIndex + 64 * 2) % 64;
+    output += BASE64_CHARSET[characterIndex];
+    previousIndex = characterIndex;
   }
 
   return base64to16(output);
