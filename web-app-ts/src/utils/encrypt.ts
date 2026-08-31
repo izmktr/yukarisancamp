@@ -57,7 +57,8 @@ export function encrypt(plaintext : string, key: string): string {
 export function decrypt(ciphertext: string, key: string): string {
   let output = '';
   let previousIndex = BASE64_CHARSET.indexOf(ciphertext[0]);
-  for (let i = 1; i < ciphertext.length; i++) {
+  ciphertext = ciphertext.substring(1);
+  for (let i = 0; i < ciphertext.length; i++) {
     const keyChar = key[i % key.length];
     const keyIndex = BASE64_CHARSET.indexOf(keyChar);
     const characterIndex = (BASE64_CHARSET.indexOf(ciphertext[i]) - keyIndex - previousIndex + 64 * 2) % 64;
