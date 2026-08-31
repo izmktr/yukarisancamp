@@ -387,27 +387,21 @@
 </div>
 
 <script>
-  async function replaceBossCountLabelsFromClanBattleSettings() {
+  async function replaceBossLabelsFromClanBattleSettings() {
     const labelElements = Array.from(document.querySelectorAll('.boss-name-label[data-boss-index]'));
-    if (labelElements.length === 0 || !window.firebase) {
+    if (labelElements.length === 0) {
       return;
     }
 
     try {
-      const yearmonth = getBaseYearMonth();
-
-      const app = window.firebase.apps && window.firebase.apps.length > 0
-        ? window.firebase.app()
-        : window.firebase.initializeApp(window.__FIREBASE_CONFIG__ || {});
-      const firestore = app.firestore();
-      const snap = await firestore.collection('clanBattles').doc(yearmonth).get();
-
-      if (!snap.exists) {
-        return;
+      const response = await fetch('/api/clanbattle-settings/current');
+      if (!response.ok) {
+        throw new Error(`クラバト設定の取得に失敗しました: ${response.status}`);
       }
 
-      const data = snap.data() || {};
-      const bossNames = Array.isArray(data.bossname) ? data.bossname : [];
+      const payload = await response.json();
+      const state = payload && payload.state ? payload.state : {};
+      const bossNames = Array.isArray(state.bossname) ? state.bossname : [];
 
       labelElements.forEach((element) => {
         const index = Number(element.getAttribute('data-boss-index'));
@@ -559,7 +553,7 @@
   }
 
   document.addEventListener('DOMContentLoaded', async () => {
-    await replaceBossCountLabelsFromClanBattleSettings();
+    await replaceBossLabelsFromClanBattleSettings();
     initBossHistoryLoopToggle();
     initBossHistoryMobileFilter();
     initMemberHistoryToggle();
