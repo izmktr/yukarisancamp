@@ -47,9 +47,12 @@ def encrypt(plaintext: str, key: str) -> str:
     if plaintext and not key:
         raise ValueError("key must not be empty")
 
+    random_prefix = generate_key(1)
+
     encoded = _base16_to_64(plaintext)
     output: list[str] = []
-    previous_index = 0
+    previous_index = BASE64_CHARSET.index(random_prefix)
+    output.append(random_prefix)
     for index, character in enumerate(encoded):
         character_index = BASE64_CHARSET.index(character)
         key_index = BASE64_CHARSET.index(key[index % len(key)])
@@ -65,7 +68,8 @@ def decrypt(ciphertext: str, key: str) -> str:
         raise ValueError("key must not be empty")
 
     decoded: list[str] = []
-    previous_index = 0
+    previous_index = BASE64_CHARSET.index(ciphertext[0])
+    ciphertext = ciphertext[1:]  # Remove the random prefix
     for index, character in enumerate(ciphertext):
         character_index = BASE64_CHARSET.index(character)
         key_index = BASE64_CHARSET.index(key[index % len(key)])
