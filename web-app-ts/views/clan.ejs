@@ -912,15 +912,13 @@
         const saveButton = document.getElementById('clan-bosscount-save-btn');
         const cancelButton = document.getElementById('clan-bosscount-cancel-btn');
         const status = document.getElementById('clan-bosslap-status');
-        const sourceInput = document.getElementById('clan-source');
         const clanIdInput = document.getElementById('clan-id');
         const valueElements = Array.from(document.querySelectorAll('.clan-bosslap-value'));
         const inputElements = Array.from(document.querySelectorAll('.clan-bosslap-input'));
 
-        const source = sourceInput ? String(sourceInput.value || '').trim() : '';
         const clanId = clanIdInput ? String(clanIdInput.value || '').trim() : '';
 
-        if (!editButton || !saveButton || !cancelButton || valueElements.length !== 5 || inputElements.length !== 5 || !source || !/^\d+$/.test(clanId)) {
+        if (!editButton || !saveButton || !cancelButton || valueElements.length !== 5 || inputElements.length !== 5 || !/^(?:\d+|w\d{8})$/.test(clanId)) {
             return;
         }
 
@@ -998,7 +996,6 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        source,
                         clanid: clanId,
                         bosslaps: nextValues
                     })
@@ -1046,7 +1043,7 @@
             window.location.reload();
         };
 
-        if (!source || !/^\d+$/.test(clanId) || !window.__SUPABASE_PUBLIC_CONFIG__) {
+        if (!source || !/^(?:\d+|w\d{8})$/.test(clanId) || !window.__SUPABASE_PUBLIC_CONFIG__) {
             const configExists = !!window.__SUPABASE_PUBLIC_CONFIG__;
             const debugInfo = {
                 source,
@@ -1055,7 +1052,7 @@
                 config: window.__SUPABASE_PUBLIC_CONFIG__ || null,
                 missing: {
                     source: !source,
-                    clanId: !/^\d+$/.test(clanId),
+                    clanId: !/^(?:\d+|w\d{8})$/.test(clanId),
                     config: !configExists
                 }
             };
@@ -1114,10 +1111,9 @@
                 }, (payload) => {
                     console.log('Supabase Realtime clans change payload:', payload);
                     const next = payload && payload.new ? payload.new : null;
-                    const nextSource = next && typeof next.source === 'string' ? next.source.trim() : '';
                     const nextClanId = next && next.clanid !== undefined && next.clanid !== null ? String(next.clanid).trim() : '';
 
-                    if (nextSource === source && nextClanId === clanId) {
+                    if (nextClanId === clanId) {
                         reloadPage();
                     }
                 })
@@ -1129,10 +1125,9 @@
                 }, (payload) => {
                     console.log('Supabase Realtime clan_members change payload:', payload);
                     const row = payload && (payload.new || payload.old) ? (payload.new || payload.old) : null;
-                    const rowSource = row && typeof row.source === 'string' ? row.source.trim() : '';
                     const rowClanId = row && row.clanid !== undefined && row.clanid !== null ? String(row.clanid).trim() : '';
 
-                    if (rowSource === source && rowClanId === clanId) {
+                    if (rowClanId === clanId) {
                         reloadPage();
                     }
                 })
@@ -1144,10 +1139,9 @@
                 }, (payload) => {
                     console.log('Supabase Realtime clan_boss_state change payload:', payload);
                     const row = payload && (payload.new || payload.old) ? (payload.new || payload.old) : null;
-                    const rowSource = row && typeof row.source === 'string' ? row.source.trim() : '';
                     const rowClanId = row && row.clanid !== undefined && row.clanid !== null ? String(row.clanid).trim() : '';
 
-                    if (rowSource === source && rowClanId === clanId) {
+                    if (rowClanId === clanId) {
                         const eventType = payload && typeof payload.eventType === 'string' ? payload.eventType : '';
                         if (eventType !== 'DELETE' && tryApplyActiveBossHpRealtimeUpdate(row)) {
                             return;

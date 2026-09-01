@@ -4,17 +4,21 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const { decrypt, encrypt, generateKey } = require('../src/utils/encrypt');
 
-test('encrypt produces known ciphertext values', () => {
-  assert.equal(encrypt('123', 'A'), 'En');
-  assert.equal(encrypt('123456', 'ABC'), 'Eo2n');
-  assert.equal(encrypt('0, ', '/+'), 'Br');
+test('encrypt produces known ciphertext values', (context) => {
+  context.mock.method(Math, 'random', () => 0);
+
+  assert.equal(encrypt('123', 'A'), 'AEn');
+  assert.equal(encrypt('123456', 'ABC'), 'AEo2n');
+  assert.equal(encrypt('0, ', '/+'), 'ABr');
 });
 
-test('encrypt changes the mapping when the previous character changes', () => {
+test('encrypt changes the mapping when the previous character changes', (context) => {
+  context.mock.method(Math, 'random', () => 0);
   const ciphertext = encrypt('123123', 'A');
+  const encryptedPayload = ciphertext.slice(1);
 
-  assert.equal(ciphertext, 'Ennn');
-  assert.notEqual(ciphertext.slice(0, 2), ciphertext.slice(2));
+  assert.equal(ciphertext, 'AEnnn');
+  assert.notEqual(encryptedPayload.slice(0, 2), encryptedPayload.slice(2));
 });
 
 test('decrypt restores plaintext for supported characters', () => {
@@ -29,8 +33,11 @@ test('decrypt preserves the space padding added to partial blocks', () => {
   assert.equal(decrypt(encrypt('12', 'key'), 'key'), '12 ');
 });
 
-test('encrypt and decrypt accept empty input', () => {
-  assert.equal(encrypt('', 'key'), '');
+test('encrypt and decrypt accept empty input', (context) => {
+  context.mock.method(Math, 'random', () => 0);
+
+  assert.equal(encrypt('', 'key'), 'A');
+  assert.equal(decrypt(encrypt('', 'key'), 'key'), '');
   assert.equal(decrypt('', 'key'), '');
 });
 

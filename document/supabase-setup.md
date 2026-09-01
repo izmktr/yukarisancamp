@@ -63,7 +63,7 @@ Supabaseダッシュボードから取得します。
 ボスの現在HPは履歴から再計算せず、独立した `clan_boss_state` テーブルで管理します。
 
 - テーブル名: `clan_boss_state`（固定）
-- 主キー: `(source, clanid, yearmonth, boss_index)`
+- 主キー: `(clanid, yearmonth, boss_index)`
 - 想定カラム:
   - `source` public.clan_source
   - `clanid` text
@@ -156,10 +156,10 @@ Supabaseダッシュボードから取得します。
 6. 所持キャラ更新を保存し、`setting_user_owned_character` の対象 `googleUserId` 行が delete/insert されることを確認
 7. `/clanbattle-settings` を開いて保存し、`setting_clanbattle` の `id=0` 行が insert/update されることを確認
 
-## 8. クラン画面 Realtime 更新設定（source/clanid 一致時）
+## 8. クラン画面 Realtime 更新設定（clanid 一致時）
 
 クラン画面（`/clan`）では、Supabase Realtime を使って `public.clans`、`public.clan_members`、`public.clan_boss_state` の更新を購読します。
-同じ `source` / `clanid` の行が更新されたら、表示中ページが自動リロードされます。
+同じ `clanid` の行が更新されたら、表示中ページが自動リロードされます。
 
 ### 8-1. 環境変数を確認
 
@@ -229,7 +229,7 @@ using (true);
 ### 8-4. 動作確認
 
 1. ブラウザAで `/clan` を開く
-2. ブラウザBで同じクラン（同じ `source` / `clanid`）の `bosslaps` を保存
+2. ブラウザBで同じクラン（同じ `clanid`）の `bosslaps` を保存
 3. ブラウザAが自動で更新されることを確認
 
 ## 9. よくある問題

@@ -1,11 +1,15 @@
 from __future__ import annotations
 import asyncio
+from typing import TYPE_CHECKING
 
 import discord
-from .clan import Clan, ClanMember
+from .clan_member import ClanMember
+
+if TYPE_CHECKING:
+    from .clan import Clan
 
 class DamageControlMember:
-    def __init__(self, member : ClanMember, damage : int, message : str = '', mark = 0) -> None:
+    def __init__(self, member : ClanMember, damage : int, message : str = '', mark : int = 0) -> None:
         self.member : ClanMember = member
         self.damage : int = damage
         self.status : int = 0

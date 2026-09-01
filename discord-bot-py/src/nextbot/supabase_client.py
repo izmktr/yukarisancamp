@@ -41,7 +41,7 @@ class SupabaseClient:
             }
         ).encode("utf-8")
         insert_request = Request(
-            f"{self.url}/rest/v1/clans?on_conflict=source,clanid",
+            f"{self.url}/rest/v1/clans?on_conflict=clanid",
             data=payload,
             method="POST",
             headers={
@@ -61,7 +61,6 @@ class SupabaseClient:
         query = urlencode(
             {
                 "select": "*",
-                "source": "eq.discord",
                 "clanid": f"eq.{clan_id}",
                 "limit": "1",
             }
@@ -83,7 +82,7 @@ class SupabaseClient:
         return rows[0]
 
     def update_clan_bosslaps(self, clan_id: int, bosslaps: list[int]) -> None:
-        query = urlencode({"source": "eq.discord", "clanid": f"eq.{clan_id}"})
+        query = urlencode({"clanid": f"eq.{clan_id}"})
         payload = json.dumps({"bosslaps": bosslaps}).encode("utf-8")
         request = Request(
             f"{self.url}/rest/v1/clans?{query}",
@@ -124,7 +123,7 @@ class SupabaseClient:
 
         payload = json.dumps(member_data).encode("utf-8")
         request = Request(
-            f"{self.url}/rest/v1/clan_members?on_conflict=source,clanid,membersource,memberid",
+            f"{self.url}/rest/v1/clan_members?on_conflict=memberid",
             data=payload,
             method="POST",
             headers={
@@ -149,9 +148,6 @@ class SupabaseClient:
     ) -> None:
         query = urlencode(
             {
-                "source": "eq.discord",
-                "clanid": f"eq.{clan_id}",
-                "membersource": "eq.discord",
                 "memberid": f"eq.{member_id}",
             }
         )

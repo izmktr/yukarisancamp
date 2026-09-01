@@ -464,18 +464,16 @@ app.post('/clan-management/members/delete', ensureDiscordServerLinked, async (re
   const discordServer = profile && isNonEmptyTrimmedString(profile.discordServer) ? profile.discordServer : getSessionDiscordServer(req);
   const clanId = normalizeDiscordServerToClanId(discordServer);
   const body = req.body && typeof req.body === 'object' ? req.body as Record<string, unknown> : {};
-  const source = body.source === 'discord' || body.source === 'web' ? body.source : '';
-  const membersource = body.membersource === 'discord' || body.membersource === 'web' ? body.membersource : '';
   const memberid = typeof body.memberid === 'string' ? body.memberid.trim() : '';
   const bodyClanId = typeof body.clanid === 'string' ? body.clanid.trim() : '';
 
-  if (!clanId || bodyClanId !== clanId || !source || !membersource || !/^[0-9]+$/.test(memberid)) {
+  if (!clanId || bodyClanId !== clanId || !isEntityId(memberid)) {
     res.status(400).send('不正な削除リクエストです');
     return;
   }
 
   try {
-    await supabaseDeleteClanMember(config, source, clanId, membersource, memberid);
+    await supabaseDeleteClanMember(config, clanId, memberid);
     res.redirect(`/clan-management?updatedAt=${Date.now()}`);
   } catch (error) {
     console.error('Failed to delete clan member:', error);
@@ -516,7 +514,7 @@ app.post('/clan-management/members/add', ensureDiscordServerLinked, async (req, 
       return;
     }
 
-    const nextMemberId = await supabaseSelectNextWebClanMemberId(config, clanId, clanSource);
+    const nextMemberId = await supabaseGenerateWebId(config);
     const now = new Date().toISOString();
     await supabaseInsertClanMember(config, {
       source: clanSource,
@@ -694,6 +692,10 @@ function normalizeDiscordServerToClanId(value: string): string {
   return /^\d+$/.test(trimmed) ? trimmed : '';
 }
 
+function isEntityId(value: string): boolean {
+  return /^(?:\d+|w\d{8})$/.test(value);
+}
+
 function canAttackClanBoss(bosslaps: number[], attackBoss: number): boolean {
   return bosslaps.length === 5
     && Number.isInteger(attackBoss)
@@ -717,7 +719,7 @@ function normalizeClanInfoRow(raw: unknown): ClanInfoRow | null {
     : typeof source.clanid === 'number' && Number.isFinite(source.clanid)
       ? String(Math.trunc(source.clanid))
       : '';
-  if (!/^\d+$/.test(clanIdText)) {
+  if (!isEntityId(clanIdText)) {
     return null;
   }
 
@@ -754,7 +756,7 @@ function normalizeClanMemberRow(raw: unknown): ClanMemberRow | null {
     : typeof source.memberid === 'number' && Number.isFinite(source.memberid)
       ? String(Math.trunc(source.memberid))
       : '';
-  if (!/^\d+$/.test(clanIdText) || !/^\d+$/.test(memberIdText)) {
+  if (!isEntityId(clanIdText) || !isEntityId(memberIdText)) {
     return null;
   }
 
@@ -851,7 +853,6 @@ async function supabaseSelectDiscordClanName(config: SupabaseConfig, discordServ
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLANS_TABLE);
   const query = new URLSearchParams({
     select: 'name',
-    source: 'eq.discord',
     clanid: `eq.${clanId}`,
     limit: '1'
   });
@@ -884,7 +885,6 @@ async function supabaseSelectClanMembersByDiscordServer(config: SupabaseConfig, 
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLAN_MEMBERS_TABLE);
   const query = new URLSearchParams({
     select: '*',
-    or: '(source.eq.discord,source.eq.web)',
     clanid: `eq.${clanId}`,
     order: 'updated_at.desc'
   });
@@ -987,14 +987,12 @@ function normalizeClanBossStateRow(raw: unknown): ClanBossStateRow | null {
 
 async function supabaseSelectClanBossStates(
   config: SupabaseConfig,
-  source: string,
   clanid: string,
   yearmonth: string
 ): Promise<ClanBossStateRow[]> {
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLAN_BOSS_STATE_TABLE);
   const query = new URLSearchParams({
     select: 'source,clanid,yearmonth,boss_index,current_hp,max_hp,is_defeated,updated_at,updated_by',
-    source: `eq.${source}`,
     clanid: `eq.${clanid}`,
     yearmonth: `eq.${yearmonth}`,
     order: 'boss_index.asc'
@@ -1035,7 +1033,7 @@ async function supabaseUpsertClanBossStateCurrentHp(
 ): Promise<void> {
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLAN_BOSS_STATE_TABLE);
   const query = new URLSearchParams({
-    on_conflict: 'source,clanid,yearmonth,boss_index'
+    on_conflict: 'clanid,yearmonth,boss_index'
   });
 
   const response = await fetch(`${endpointUrl}?${query.toString()}`, {
@@ -1075,7 +1073,7 @@ async function resolveClanBossHpForDisplay(
     return fallbackBossHp;
   }
 
-  const bossStates = await supabaseSelectClanBossStates(config, clan.source, clan.clanid, clanBattleState.yearmonth);
+  const bossStates = await supabaseSelectClanBossStates(config, clan.clanid, clanBattleState.yearmonth);
   if (bossStates.length === 0) {
     return fallbackBossHp;
   }
@@ -1099,9 +1097,6 @@ async function supabaseSelectAttackHistories(
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_ATTACK_HISTORIES_TABLE);
   const query = new URLSearchParams({
     select: 'id,day,source,clanid,membersource,memberid,sortie,boss,attacklap,overtime,defeat',
-    source: `eq.${member.source}`,
-    clanid: `eq.${member.clanid}`,
-    membersource: `eq.${member.membersource}`,
     memberid: `eq.${member.memberid}`,
     day: `eq.${day}`,
     order: 'sortie.asc,overtime.desc'
@@ -1155,7 +1150,6 @@ async function supabaseSelectClanAttackHistories(
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_ATTACK_HISTORIES_TABLE);
   const query = new URLSearchParams({
     select: 'id,day,source,clanid,membersource,memberid,sortie,sortiecount,boss,attacklap,overtime,defeat',
-    source: 'eq.discord',
     clanid: `eq.${clanId}`,
     order: 'day.asc,sortie.asc,overtime.asc'
   });
@@ -1203,16 +1197,12 @@ async function supabaseSelectClanAttackHistories(
 
 async function supabaseDeleteClanMember(
   config: SupabaseConfig,
-  source: 'discord' | 'web',
   clanId: string,
-  membersource: 'discord' | 'web',
   memberid: string
 ): Promise<void> {
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLAN_MEMBERS_TABLE);
   const query = new URLSearchParams({
-    source: `eq.${source}`,
     clanid: `eq.${clanId}`,
-    membersource: `eq.${membersource}`,
     memberid: `eq.${memberid}`
   });
 
@@ -1231,48 +1221,28 @@ async function supabaseDeleteClanMember(
   }
 }
 
-async function supabaseSelectNextWebClanMemberId(
-  config: SupabaseConfig,
-  clanId: string,
-  source: 'discord' | 'web'
-): Promise<string> {
-  const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLAN_MEMBERS_TABLE);
-  const query = new URLSearchParams({
-    select: 'memberid',
-    source: `eq.${source}`,
-    clanid: `eq.${clanId}`,
-    membersource: 'eq.web'
-  });
-
-  const response = await fetch(`${endpointUrl}?${query.toString()}`, {
-    method: 'GET',
+async function supabaseGenerateWebId(config: SupabaseConfig): Promise<string> {
+  const endpointUrl = `${config.url.replace(/\/$/, '')}/rest/v1/rpc/generate_web_id`;
+  const response = await fetch(endpointUrl, {
+    method: 'POST',
     headers: {
+      'Content-Type': 'application/json',
       apikey: config.secretKey,
       Authorization: `Bearer ${config.secretKey}`
-    }
+    },
+    body: '{}'
   });
 
   if (!response.ok) {
     const responseText = await response.text();
-    throw new Error(`Supabase select next clan member id failed: ${response.status} ${responseText}`);
+    throw new Error(`Supabase generate web id failed: ${response.status} ${responseText}`);
   }
 
-  const rows = await response.json() as unknown;
-  const memberIds = Array.isArray(rows)
-    ? rows
-        .map((row) => {
-          if (!row || typeof row !== 'object') {
-            return null;
-          }
-          const value = (row as Record<string, unknown>).memberid;
-          const numeric = Number(value);
-          return Number.isFinite(numeric) ? Math.trunc(numeric) : null;
-        })
-        .filter((value): value is number => value !== null)
-    : [];
-
-  const nextMemberId = memberIds.length > 0 ? Math.max(...memberIds) + 1 : 1;
-  return String(nextMemberId);
+  const webId = await response.json() as unknown;
+  if (typeof webId !== 'string' || !/^w\d{8}$/.test(webId)) {
+    throw new Error('Supabase generated an invalid web id');
+  }
+  return webId;
 }
 
 async function supabaseInsertClanMember(config: SupabaseConfig, member: ClanMemberRow): Promise<void> {
@@ -1320,7 +1290,7 @@ async function loadClanPagePayload(
   ]);
   const bossHp = await resolveClanBossHpForDisplay(config, clan, clanBattleState);
   const currentMember = members.find((member) => (
-    member.membersource === 'discord' && member.memberid === currentDiscordId
+    member.memberid === currentDiscordId
   ));
   const baseDate = getBaseDate();
   const attackHistories = currentMember
@@ -1410,7 +1380,6 @@ function normalizeClanBosslapsPayload(rawValue: unknown): number[] | null {
 }
 
 type ClanBosslapsSavePayload = {
-  source: 'discord' | 'web';
   clanid: string;
   bosslaps: number[];
 };
@@ -1426,39 +1395,28 @@ function normalizeClanBosslapsSavePayload(rawValue: unknown): ClanBosslapsSavePa
     return null;
   }
 
-  const rawSource = typeof source.source === 'string' ? source.source.trim() : '';
-  if (rawSource !== 'discord' && rawSource !== 'web') {
-    return null;
-  }
-
   const clanId = typeof source.clanid === 'string'
     ? source.clanid.trim()
     : typeof source.clanid === 'number' && Number.isFinite(source.clanid)
       ? String(Math.trunc(source.clanid))
       : '';
-  if (!/^\d+$/.test(clanId)) {
+  if (!isEntityId(clanId)) {
     return null;
   }
 
   return {
-    source: rawSource,
     clanid: clanId,
     bosslaps: normalizedBosslaps
   };
 }
 
-async function supabaseUpdateClanBosslaps(config: SupabaseConfig, source: string, clanId: string, bosslaps: number[]): Promise<void> {
-  const normalizedSource = typeof source === 'string' ? source.trim() : '';
-  if (!normalizedSource) {
-    throw new Error('Invalid clan source');
-  }
-  if (!/^\d+$/.test(clanId)) {
+async function supabaseUpdateClanBosslaps(config: SupabaseConfig, clanId: string, bosslaps: number[]): Promise<void> {
+  if (!isEntityId(clanId)) {
     throw new Error('Invalid clan id');
   }
 
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLANS_TABLE);
   const query = new URLSearchParams({
-    source: `eq.${normalizedSource}`,
     clanid: `eq.${clanId}`
   });
 
@@ -1497,9 +1455,6 @@ async function supabaseStartClanMemberAttack(
 ): Promise<void> {
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLAN_MEMBERS_TABLE);
   const query = new URLSearchParams({
-    source: `eq.${member.source}`,
-    clanid: `eq.${member.clanid}`,
-    membersource: `eq.${member.membersource}`,
     memberid: `eq.${member.memberid}`,
     attackboss: 'eq.0'
   });
@@ -1562,9 +1517,6 @@ async function supabaseFinishClanMemberAttack(
       Authorization: `Bearer ${config.secretKey}`
     },
     body: JSON.stringify({
-      p_source: member.source,
-      p_clanid: member.clanid,
-      p_membersource: member.membersource,
       p_memberid: member.memberid,
       p_action: action,
       p_overtime: overtime
@@ -1585,9 +1537,6 @@ async function supabaseUpdateClanMemberAttackMessage(
 ): Promise<void> {
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLAN_MEMBERS_TABLE);
   const query = new URLSearchParams({
-    source: `eq.${member.source}`,
-    clanid: `eq.${member.clanid}`,
-    membersource: `eq.${member.membersource}`,
     memberid: `eq.${member.memberid}`
   });
 
@@ -1661,9 +1610,6 @@ async function supabaseUpdateAttackHistory(
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_ATTACK_HISTORIES_TABLE);
   const query = new URLSearchParams({
     id: `eq.${input.id}`,
-    source: `eq.${member.source}`,
-    clanid: `eq.${member.clanid}`,
-    membersource: `eq.${member.membersource}`,
     memberid: `eq.${member.memberid}`,
     day: `eq.${day}`
   });
@@ -1711,9 +1657,6 @@ async function supabaseDeleteAttackHistory(
       Authorization: `Bearer ${config.secretKey}`
     },
     body: JSON.stringify({
-      p_source: member.source,
-      p_clanid: member.clanid,
-      p_membersource: member.membersource,
       p_memberid: member.memberid,
       p_day: day,
       p_history_id: historyId
@@ -2276,7 +2219,7 @@ app.post('/api/clan/bosslaps/save', ensureDiscordServerLinked, express.json(), a
   }
 
   try {
-    await supabaseUpdateClanBosslaps(config, payload.source, sessionClanId, payload.bosslaps);
+    await supabaseUpdateClanBosslaps(config, sessionClanId, payload.bosslaps);
     return res.json({ success: true });
   } catch (error) {
     console.error('Failed to save clan bosslaps:', error);
@@ -2322,7 +2265,7 @@ app.post('/api/clan/attack/start', ensureDiscordServerLinked, express.json(), as
     }
 
     const currentMember = members.find((member) => (
-      member.membersource === 'discord' && member.memberid === discordId
+      member.memberid === discordId
     ));
     if (!currentMember) {
       return res.status(404).json({ error: 'Clan member was not found' });
@@ -2389,7 +2332,7 @@ app.post('/api/clan/attack/carryover/start', ensureDiscordServerLinked, express.
     }
 
     const currentMember = members.find((member) => (
-      member.membersource === 'discord' && member.memberid === discordId
+      member.memberid === discordId
     ));
     if (!currentMember) {
       return res.status(404).json({ error: 'Clan member was not found' });
@@ -2456,7 +2399,7 @@ app.post('/api/clan/attack/finish', ensureDiscordServerLinked, express.json(), a
 
     const members = await supabaseSelectClanMembersByDiscordServer(config, getSessionDiscordServer(req));
     const currentMember = members.find((member) => (
-      member.membersource === 'discord' && member.memberid === discordId
+      member.memberid === discordId
     ));
     if (!currentMember) {
       return res.status(404).json({ error: 'Clan member was not found' });
@@ -2518,7 +2461,7 @@ app.post('/api/clan/attack/message', ensureDiscordServerLinked, express.json(), 
 
     const members = await supabaseSelectClanMembersByDiscordServer(config, getSessionDiscordServer(req));
     const currentMember = members.find((member) => (
-      member.membersource === 'discord' && member.memberid === discordId
+      member.memberid === discordId
     ));
     if (!currentMember) {
       return res.status(404).json({ error: 'Clan member was not found' });
@@ -2568,7 +2511,7 @@ app.post('/api/clan/active-boss-hp/save', ensureDiscordServerLinked, express.jso
 
     const members = await supabaseSelectClanMembersByDiscordServer(config, discordServer);
     const currentMember = members.find((member) => (
-      member.membersource === 'discord' && member.memberid === discordId
+      member.memberid === discordId
     ));
     if (!currentMember) {
       return res.status(404).json({ error: 'Clan member was not found' });
@@ -2579,7 +2522,7 @@ app.post('/api/clan/active-boss-hp/save', ensureDiscordServerLinked, express.jso
 
     const clanBattleState = await ensureClanBattleStateFromSupabase(config);
     const bossIndex = currentMember.attackboss;
-    const bossStates = await supabaseSelectClanBossStates(config, clan.source, clan.clanid, clanBattleState.yearmonth);
+    const bossStates = await supabaseSelectClanBossStates(config, clan.clanid, clanBattleState.yearmonth);
     const targetState = bossStates.find((row) => row.boss_index === bossIndex) || null;
     const settingMaxHp = Number(clanBattleState.bossHp[bossIndex - 1]);
     const resolvedMaxHp = targetState
@@ -2634,7 +2577,7 @@ app.post('/api/clan/attack-history/save', ensureDiscordServerLinked, express.jso
 
     const members = await supabaseSelectClanMembersByDiscordServer(config, getSessionDiscordServer(req));
     const currentMember = members.find((member) => (
-      member.membersource === 'discord' && member.memberid === discordId
+      member.memberid === discordId
     ));
     if (!currentMember) {
       return res.status(404).json({ error: 'Clan member was not found' });
@@ -2700,7 +2643,7 @@ app.post('/api/clan/attack-history/delete', ensureDiscordServerLinked, express.j
 
     const members = await supabaseSelectClanMembersByDiscordServer(config, getSessionDiscordServer(req));
     const currentMember = members.find((member) => (
-      member.membersource === 'discord' && member.memberid === discordId
+      member.memberid === discordId
     ));
     if (!currentMember) {
       return res.status(404).json({ error: 'Clan member was not found' });
