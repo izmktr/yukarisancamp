@@ -25,7 +25,7 @@
   <% const membersAttackSummary = members.map((member) => { const memberKey = String(member.memberid || ''); const memberRows = getMemberHistoryRows(member); const totalSortiecount = memberRows.reduce((sum, history) => sum + Number(history.sortiecount ?? (history.defeat === true ? 1 : 2)), 0); return { member, attackCount: totalSortiecount, uniqueSortieCount: new Set(memberRows.map((history) => Number(history.sortie))).size }; }); %>
   <% const totalMemberCount = members.length; %>
   <% const fullAttackMemberCount = membersAttackSummary.filter((entry) => entry.attackCount >= 6).length; %>
-  <% const totalAttackCount = membersAttackSummary.reduce((sum, entry) => sum + entry.attackCount, 0); %>
+  <% const totalAttackCount = membersAttackSummary.reduce((sum, entry) => sum + entry.attackCount, 0) / 2; %>
   <% const maxAttackCount = totalMemberCount * 3; %>
   <% const sortedMembers = membersAttackSummary.slice().sort((left, right) => { const diff = left.attackCount - right.attackCount; if (diff !== 0) return diff; return String(left.member.name || '').localeCompare(String(right.member.name || ''), 'ja'); }); %>
   <% const rowToAttackCount = (member) => { const memberKey = String(member.memberid || ''); const totalSortieCount = todayHistoryRows.filter((history) => String(history.memberid || '') === memberKey).reduce((sum, history) => sum + Number(history.sortiecount ?? (history.defeat === true ? 1 : 2)), 0); return totalSortieCount / 2; }; %>

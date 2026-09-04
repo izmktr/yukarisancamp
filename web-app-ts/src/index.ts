@@ -1249,17 +1249,6 @@ async function supabaseGenerateWebId(config: SupabaseConfig): Promise<string> {
 
 async function supabaseInsertClanMember(config: SupabaseConfig, member: ClanMemberRow): Promise<void> {
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLAN_MEMBERS_TABLE);
-  const {
-    sortie,
-    attacklap,
-    attackboss,
-    overattack,
-    attacktime,
-    day,
-    damage,
-    attackmessage,
-    ...memberData
-  } = member;
   const response = await fetch(endpointUrl, {
     method: 'POST',
     headers: {
@@ -1269,8 +1258,16 @@ async function supabaseInsertClanMember(config: SupabaseConfig, member: ClanMemb
       Prefer: 'return=minimal'
     },
     body: JSON.stringify([{
-      ...memberData,
-      attackdata: toClanMemberAttackData(member)
+      clanid: member.clanid,
+      memberid: member.memberid,
+      name: member.name,
+      mention: member.mention,
+      role: member.role,
+      taskkill: member.taskkill,
+      attackdata: toClanMemberAttackData(member),
+      lastactive: member.lastactive,
+      created_at: member.created_at,
+      updated_at: member.updated_at
     }])
   });
 
@@ -1294,6 +1291,20 @@ function toRefreshToken(clan: ClanInfoRow | null, members: ClanMemberRow[]): str
   return `${latest}:${members.length}`;
 }
 
+function withoutClanMemberAttackData(member: ClanMemberRow): ClanMemberRow {
+  return {
+    ...member,
+    day: '',
+    sortie: 0,
+    attacklap: 0,
+    attackboss: 0,
+    overattack: null,
+    attacktime: [],
+    damage: null,
+    attackmessage: null
+  };
+}
+
 async function loadClanPagePayload(
   config: SupabaseConfig,
   discordServer: string,
@@ -1305,17 +1316,22 @@ async function loadClanPagePayload(
     ensureClanBattleStateFromSupabase(config)
   ]);
   const bossHp = await resolveClanBossHpForDisplay(config, clan, clanBattleState);
+  const baseDate = getBaseDate();
   const currentMember = members.find((member) => (
     member.memberid === currentDiscordId
   ));
-  const baseDate = getBaseDate();
+  const displayMembers = members.map((member) => (
+    member.memberid !== currentDiscordId && member.day !== baseDate
+      ? withoutClanMemberAttackData(member)
+      : member
+  ));
   const attackHistories = currentMember
     ? await supabaseSelectAttackHistories(config, currentMember, baseDate)
     : [];
   return {
     discordServer,
     clan,
-    members,
+    members: displayMembers,
     currentMember: currentMember || null,
     attackHistories,
     bossNames: clanBattleState?.bossname || [],
