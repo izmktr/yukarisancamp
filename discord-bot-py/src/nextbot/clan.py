@@ -118,11 +118,11 @@ class Clan(MessageRouter):
 
         # self.damagechannelid = [0] * BOSSNUMBER                 # ダメコンチャンネルID
 
-    def CurrentYearmonth(self) -> str:
-        if self.clanbattle_setting is None:
-            return ""
-        yearmonth = self.clanbattle_setting.get("yearmonth")
-        return yearmonth if isinstance(yearmonth, str) else ""
+    def CurrentBaseDate(self) -> str:
+        japan_time = datetime.datetime.now(
+            datetime.timezone(datetime.timedelta(hours=9))
+        )
+        return (japan_time - datetime.timedelta(hours=5)).date().isoformat()
 
     def ApplySupabaseMember(self, row: dict[str, Any]) -> None:
         raw_memberid = row.get("memberid")
@@ -461,7 +461,7 @@ class Clan(MessageRouter):
                 self.BossLap(boss),
                 sortie,
                 overattack,
-                self.CurrentYearmonth(),
+                self.CurrentBaseDate(),
             )
 
         cmember.Attack(boss, sortie)
@@ -555,7 +555,7 @@ class Clan(MessageRouter):
             member.id,
             member.display_name,
             member.mention,
-            self.CurrentYearmonth(),
+            self.CurrentBaseDate(),
             "leader" if admin else "member",
         )
         await self.ReloadSupabaseMembers()
@@ -588,7 +588,7 @@ class Clan(MessageRouter):
             member.id,
             member.display_name,
             member.mention,
-            self.CurrentYearmonth(),
+            self.CurrentBaseDate(),
             "leader" if admin else "member",
         )
         await self.ReloadSupabaseMembers()

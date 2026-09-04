@@ -18,7 +18,7 @@ begin
     execute $migration$
       update public.clan_members
       set attackdata = coalesce(attackdata, '{}'::jsonb) || jsonb_build_object(
-        'yearmonth', yearmonth,
+        'day', yearmonth,
         'sortie', sortie,
         'attacklap', attacklap,
         'attackboss', attackboss,
@@ -45,12 +45,23 @@ end
 $$;
 
 update public.clan_members
-set attackdata = '{"yearmonth":"","sortie":0,"attacklap":0,"attackboss":0,"overattack":null,"attacktime":[],"damage":null,"attackmessage":null}'::jsonb
+set attackdata = '{"day":"","sortie":0,"attacklap":0,"attackboss":0,"overattack":null,"attacktime":[],"damage":null,"attackmessage":null}'::jsonb
 where attackdata is null;
 
 alter table public.clan_members
-  alter column attackdata set default '{"yearmonth":"","sortie":0,"attacklap":0,"attackboss":0,"overattack":null,"attacktime":[],"damage":null,"attackmessage":null}'::jsonb,
+  alter column attackdata set default '{"day":"","sortie":0,"attacklap":0,"attackboss":0,"overattack":null,"attacktime":[],"damage":null,"attackmessage":null}'::jsonb,
   alter column attackdata set not null;
+
+update public.clan_members
+set attackdata = (attackdata - 'yearmonth') || jsonb_build_object(
+  'day', coalesce(attackdata->>'day', attackdata->>'yearmonth', '')
+)
+where attackdata ? 'yearmonth'
+  or not (attackdata ? 'day');
+
+alter table public.attack_histories
+  drop constraint if exists attack_histories_yearmonth_check,
+  drop column if exists yearmonth;
 
 do $$
 begin

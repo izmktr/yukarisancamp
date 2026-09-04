@@ -113,7 +113,7 @@ create table if not exists public.clan_members (
   mention text not null,
   role public.clan_member_role not null default 'member',
   taskkill integer not null default 0,
-  attackdata jsonb not null default '{"yearmonth":"","sortie":0,"attacklap":0,"attackboss":0,"overattack":null,"attacktime":[],"damage":null,"attackmessage":null}'::jsonb,
+  attackdata jsonb not null default '{"day":"","sortie":0,"attacklap":0,"attackboss":0,"overattack":null,"attacktime":[],"damage":null,"attackmessage":null}'::jsonb,
   lastactive timestamptz not null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),

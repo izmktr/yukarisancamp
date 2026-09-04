@@ -55,5 +55,5 @@
       "format": "date-time"
     }
   },
-  "required": ["source", "clanid", "membersource", "memberid", "day", "sortie", "messageid", "boss", "overtime", "defeat", "sortiecount", "updatetime"]
+  "required": ["clanid", "memberid", "day", "sortie", "messageid", "boss", "overtime", "defeat", "sortiecount", "updatetime"]
 }

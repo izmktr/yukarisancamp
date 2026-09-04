@@ -1,4 +1,4 @@
-<div class="page-content clan-page">
+<div class="page-content clan-page" id="clan-page" data-base-date="<%= clanPageData && clanPageData.baseDate ? clanPageData.baseDate : '' %>">
     <% const data = clanPageData || { discordServer: '', clan: null, members: [], currentMember: null, attackHistories: [], bossNames: [], bossHp: [], baseDate: '', refreshToken: 'none:0', loadError: '' }; %>
     <h2><%= data.clan && data.clan.name ? data.clan.name : '未登録' %></h2>
     <%
@@ -846,9 +846,19 @@
     function initializeClanAttackButtons() {
         const attackButtons = Array.from(document.querySelectorAll('.clan-attack-button[data-boss]'));
         const status = document.getElementById('clan-attack-status');
+        const clanPage = document.getElementById('clan-page');
+        const pageBaseDate = clanPage ? String(clanPage.getAttribute('data-base-date') || '') : '';
         if (attackButtons.length === 0) {
             return;
         }
+
+        const getCurrentBaseDate = () => {
+            const shiftedTime = new Date(Date.now() + 4 * 60 * 60 * 1000);
+            const year = shiftedTime.getUTCFullYear();
+            const month = String(shiftedTime.getUTCMonth() + 1).padStart(2, '0');
+            const day = String(shiftedTime.getUTCDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
 
         const setStatus = (message, type) => {
             if (!status) {
@@ -872,6 +882,10 @@
                 if (historyId !== null && (!Number.isInteger(historyId) || historyId < 1)) {
                     return;
                 }
+                if (!pageBaseDate || pageBaseDate !== getCurrentBaseDate()) {
+                    setStatus('基準日が変わりました。画面を更新してください。', 'error');
+                    return;
+                }
 
                 attackButtons.forEach((item) => {
                     item.disabled = true;
@@ -886,7 +900,9 @@
                         headers: {
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify(historyId === null ? { attackBoss } : { attackBoss, historyId })
+                        body: JSON.stringify(historyId === null
+                            ? { attackBoss, pageBaseDate }
+                            : { attackBoss, historyId, pageBaseDate })
                     });
 
                     if (!response.ok) {

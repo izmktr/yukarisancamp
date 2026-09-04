@@ -118,7 +118,7 @@ class SupabaseClient:
         member_id: int,
         name: str,
         mention: str,
-        yearmonth: str,
+        day: str,
         role: str | None = None,
     ) -> None:
         now = datetime.now(timezone.utc).isoformat()
@@ -127,7 +127,7 @@ class SupabaseClient:
             "memberid": str(member_id),
             "name": name,
             "mention": mention,
-            "attackdata": self.normalize_attackdata({"yearmonth": yearmonth}),
+            "attackdata": self.normalize_attackdata({"day": day}),
             "lastactive": now,
             "updated_at": now,
         }
@@ -153,6 +153,9 @@ class SupabaseClient:
     @staticmethod
     def normalize_attackdata(raw: object) -> dict[str, Any]:
         source = cast(dict[str, object], raw) if isinstance(raw, dict) else {}
+        raw_day = source.get("day")
+        if not isinstance(raw_day, str):
+            raw_day = source.get("yearmonth")
         raw_attacktime = source.get("attacktime")
         attacktime: list[int | None] = []
         if isinstance(raw_attacktime, list):
@@ -162,7 +165,7 @@ class SupabaseClient:
             ]
 
         return {
-            "yearmonth": source.get("yearmonth") if isinstance(source.get("yearmonth"), str) else "",
+            "day": raw_day if isinstance(raw_day, str) else "",
             "sortie": source.get("sortie") if isinstance(source.get("sortie"), int) else 0,
             "attacklap": source.get("attacklap") if isinstance(source.get("attacklap"), int) else 0,
             "attackboss": source.get("attackboss") if isinstance(source.get("attackboss"), int) else 0,
@@ -205,7 +208,7 @@ class SupabaseClient:
         boss_lap: int,
         sortie: int,
         overattack: int,
-        yearmonth: str,
+        day: str,
     ) -> None:
         query = urlencode(
             {
@@ -231,7 +234,7 @@ class SupabaseClient:
 
         attackdata.update(
             {
-                "yearmonth": yearmonth,
+                "day": day,
                 "attackboss": boss,
                 "attacklap": boss_lap,
                 "overattack": overattack,

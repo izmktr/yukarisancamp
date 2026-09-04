@@ -523,7 +523,7 @@ app.post('/clan-management/members/add', ensureDiscordServerLinked, async (req, 
       role: 'member',
       taskkill: 0,
       plan: [],
-      yearmonth: '',
+      day: '',
       attacktime: [],
       sortie: 0,
       attackboss: 0,
@@ -590,7 +590,7 @@ type ClanMemberRow = {
   role: 'member' | 'officer' | 'leader';
   taskkill: number;
   plan: number[];
-  yearmonth: string;
+  day: string;
   attacktime: Array<number | null>;
   sortie: number;
   attackboss: number;
@@ -789,7 +789,7 @@ function normalizeClanMemberRow(raw: unknown): ClanMemberRow | null {
     role: source.role === 'officer' || source.role === 'leader' ? source.role : 'member',
     taskkill: Number.isFinite(Number(source.taskkill)) ? Math.trunc(Number(source.taskkill)) : 0,
     plan,
-    yearmonth: typeof attackData.yearmonth === 'string' ? attackData.yearmonth : '',
+    day: typeof attackData.day === 'string' ? attackData.day : '',
     attacktime,
     sortie: Number.isFinite(Number(attackData.sortie)) ? Math.trunc(Number(attackData.sortie)) : 0,
     attackboss: Number.isFinite(Number(attackData.attackboss)) ? Math.trunc(Number(attackData.attackboss)) : 0,
@@ -805,7 +805,7 @@ function normalizeClanMemberRow(raw: unknown): ClanMemberRow | null {
 
 function toClanMemberAttackData(member: ClanMemberRow): Record<string, unknown> {
   return {
-    yearmonth: member.yearmonth,
+    day: member.day,
     sortie: member.sortie,
     attacklap: member.attacklap,
     attackboss: member.attackboss,
@@ -1255,7 +1255,7 @@ async function supabaseInsertClanMember(config: SupabaseConfig, member: ClanMemb
     attackboss,
     overattack,
     attacktime,
-    yearmonth,
+    day,
     damage,
     attackmessage,
     ...memberData
@@ -1467,6 +1467,7 @@ async function supabaseStartClanMemberAttack(
   attackBoss: number,
   attackLap: number,
   sortie: number,
+  day: string,
   carryOvertime: number | null = null
 ): Promise<void> {
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLAN_MEMBERS_TABLE);
@@ -1485,6 +1486,7 @@ async function supabaseStartClanMemberAttack(
 
   const attackdata: Record<string, unknown> = {
     ...toClanMemberAttackData(member),
+    day,
     attackboss: attackBoss,
     attacklap: attackLap,
     sortie,
@@ -2254,8 +2256,12 @@ app.post('/api/clan/bosslaps/save', ensureDiscordServerLinked, express.json(), a
 
 app.post('/api/clan/attack/start', ensureDiscordServerLinked, express.json(), async (req, res) => {
   const attackBoss = Number(req.body?.attackBoss);
+  const pageBaseDate = typeof req.body?.pageBaseDate === 'string' ? req.body.pageBaseDate : '';
   if (!Number.isInteger(attackBoss) || attackBoss < 1 || attackBoss > 5) {
     return res.status(400).json({ error: 'Invalid attack boss' });
+  }
+  if (!pageBaseDate || pageBaseDate !== getBaseDate()) {
+    return res.status(409).json({ error: 'Base date has changed; reload the page' });
   }
 
   const config = getSupabaseConfig();
@@ -2298,7 +2304,7 @@ app.post('/api/clan/attack/start', ensureDiscordServerLinked, express.json(), as
       return res.status(409).json({ error: 'Attack has already started' });
     }
 
-    const attackHistories = await supabaseSelectAttackHistories(config, currentMember, getBaseDate());
+    const attackHistories = await supabaseSelectAttackHistories(config, currentMember, pageBaseDate);
     const maxSortie = attackHistories.length === 0
       ? 0
       : Math.max(...attackHistories.map((history) => history.sortie));
@@ -2308,7 +2314,14 @@ app.post('/api/clan/attack/start', ensureDiscordServerLinked, express.json(), as
     const sortie = maxSortie + 1;
     const attackLap = clan.bosslaps[attackBoss - 1];
 
-    await supabaseStartClanMemberAttack(config, currentMember, attackBoss, attackLap, sortie);
+    await supabaseStartClanMemberAttack(
+      config,
+      currentMember,
+      attackBoss,
+      attackLap,
+      sortie,
+      pageBaseDate
+    );
     return res.json({ success: true });
   } catch (error) {
     console.error('Failed to start clan member attack:', error);
@@ -2320,9 +2333,13 @@ app.post('/api/clan/attack/start', ensureDiscordServerLinked, express.json(), as
 app.post('/api/clan/attack/carryover/start', ensureDiscordServerLinked, express.json(), async (req, res) => {
   const attackBoss = Number(req.body?.attackBoss);
   const historyId = Number(req.body?.historyId);
+  const pageBaseDate = typeof req.body?.pageBaseDate === 'string' ? req.body.pageBaseDate : '';
   if (!Number.isInteger(attackBoss) || attackBoss < 1 || attackBoss > 5
     || !Number.isInteger(historyId) || historyId < 1) {
     return res.status(400).json({ error: 'Invalid carry-over attack' });
+  }
+  if (!pageBaseDate || pageBaseDate !== getBaseDate()) {
+    return res.status(409).json({ error: 'Base date has changed; reload the page' });
   }
 
   const config = getSupabaseConfig();
@@ -2365,7 +2382,7 @@ app.post('/api/clan/attack/carryover/start', ensureDiscordServerLinked, express.
       return res.status(409).json({ error: 'Attack has already started' });
     }
 
-    const attackHistories = await supabaseSelectAttackHistories(config, currentMember, getBaseDate());
+    const attackHistories = await supabaseSelectAttackHistories(config, currentMember, pageBaseDate);
     const carryHistory = attackHistories.find((history) => history.id === historyId);
     const sameSortieCount = carryHistory
       ? attackHistories.filter((history) => history.sortie === carryHistory.sortie).length
@@ -2382,6 +2399,7 @@ app.post('/api/clan/attack/carryover/start', ensureDiscordServerLinked, express.
       attackBoss,
       attackLap,
       carryHistory.sortie,
+      pageBaseDate,
       carryHistory.overtime
     );
     return res.json({ success: true });
