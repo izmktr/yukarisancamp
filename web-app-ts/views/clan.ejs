@@ -664,8 +664,8 @@
                 if (!Number.isInteger(id) || !Number.isInteger(attacklap) || attacklap < 0
                     || !Number.isInteger(boss) || boss < 1 || boss > 5
                     || !Number.isInteger(overtime)
-                    || (defeat && fixedOvertime !== '0' && (overtime < 20 || overtime > 90))) {
-                    setStatus('周回数は0以上、持ち越し時間は20～90の整数で入力してください。', 'error');
+                    || (defeat && fixedOvertime !== '0' && overtime !== 0 && (overtime < 20 || overtime > 90))) {
+                    setStatus('周回数は0以上、持ち越し時間は0または20～90の整数で入力してください。', 'error');
                     return;
                 }
                 histories.push({ id, attacklap, boss, defeat, overtime });

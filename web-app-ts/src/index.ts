@@ -2618,8 +2618,9 @@ app.post('/api/clan/attack-history/save', ensureDiscordServerLinked, express.jso
       ));
       const isZeroOvertimeFixed = hasSameSortieHistory && currentHistory.overtime === 0;
       if (history.defeat && !isZeroOvertimeFixed
+        && history.overtime !== 0
         && (history.overtime < 20 || history.overtime > 90)) {
-        return res.status(400).json({ error: 'Overtime must be between 20 and 90' });
+        return res.status(400).json({ error: 'Overtime must be zero or between 20 and 90' });
       }
       if (hasSameSortieHistory && currentHistory.overtime > 0
         && (!history.defeat || history.overtime < 20 || history.overtime > 90)) {
