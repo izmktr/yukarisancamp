@@ -8,19 +8,9 @@
       "description": "The unique identifier for the attack history record.",
       "type": "integer"
     },
-    "source": {
-      "description": "The source of the clan data, either from Discord or web.",
-      "type": "string",
-      "enum": ["discord", "web"]
-    },
     "clanid": {
       "description": "The unique ID of the clan.",
       "type": "string"
-    },
-    "membersource": {
-      "description": "The source of the member data, either from Discord or web.",
-      "type": "string",
-      "enum": ["discord", "web"]
     },
     "memberid": {
       "description": "The unique ID of the user.",

@@ -58,8 +58,10 @@ class NextBotApp:
             guild.name,
         )
         supabase_data = await asyncio.to_thread(self.supabase.get_clan, guild.id)
+        member_rows = await asyncio.to_thread(self.supabase.get_clan_members, guild.id)
         clan = self._get_clan(guild)
         clan.supabase_data = supabase_data
+        clan.LoadSupabaseMembers(member_rows)
         if registered:
             print(f"Supabaseにクランを登録しました: {guild.name} ({guild.id})")
 
@@ -79,10 +81,6 @@ class NextBotApp:
         new_data = cast(dict[str, Any], raw_record)
         raw_old_record: object = data.get("old_record")
         old_data = cast(dict[str, Any], raw_old_record) if isinstance(raw_old_record, dict) else {}
-
-        source = new_data.get("source", old_data.get("source"))
-        if source != "discord":
-            return None
 
         clan_id = new_data.get("clanid", old_data.get("clanid"))
         if not isinstance(clan_id, (int, str)):

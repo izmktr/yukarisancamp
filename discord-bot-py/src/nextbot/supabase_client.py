@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -23,17 +23,30 @@ class SupabaseClient:
         )
 
         with urlopen(request, timeout=10) as response:
-            rows = json.load(response)
+            raw_rows: object = json.load(response)
 
-        if not isinstance(rows, list) or not rows or not isinstance(rows[0], dict):
+        if not isinstance(raw_rows, list) or not raw_rows or not isinstance(raw_rows[0], dict):
             raise RuntimeError("setting_clanbattle の id=0 が見つかりません")
 
-        return rows[0]
+        return cast(dict[str, Any], raw_rows[0])
 
     def register_clan_if_missing(self, clan_id: int, clan_name: str) -> bool:
+        query = urlencode({"select": "clanid", "clanid": f"eq.{clan_id}", "limit": "1"})
+        select_request = Request(
+            f"{self.url}/rest/v1/clans?{query}",
+            headers={
+                "apikey": self.secret_key,
+                "Authorization": f"Bearer {self.secret_key}",
+            },
+        )
+        with urlopen(select_request, timeout=10) as response:
+            existing_rows: object = json.load(response)
+
+        if isinstance(existing_rows, list) and existing_rows:
+            return False
+
         payload = json.dumps(
             {
-                "source": "discord",
                 "clanid": str(clan_id),
                 "name": clan_name,
                 "bosslaps": [1, 1, 1, 1, 1],
@@ -41,21 +54,21 @@ class SupabaseClient:
             }
         ).encode("utf-8")
         insert_request = Request(
-            f"{self.url}/rest/v1/clans?on_conflict=clanid",
+            f"{self.url}/rest/v1/clans",
             data=payload,
             method="POST",
             headers={
                 "apikey": self.secret_key,
                 "Authorization": f"Bearer {self.secret_key}",
                 "Content-Type": "application/json",
-                "Prefer": "resolution=ignore-duplicates,return=representation",
+                "Prefer": "return=representation",
             },
         )
 
         with urlopen(insert_request, timeout=10) as response:
-            rows = json.load(response)
+            raw_rows: object = json.load(response)
 
-        return isinstance(rows, list) and bool(rows)
+        return isinstance(raw_rows, list) and bool(cast(list[object], raw_rows))
 
     def get_clan(self, clan_id: int) -> dict[str, Any]:
         query = urlencode(
@@ -74,12 +87,12 @@ class SupabaseClient:
         )
 
         with urlopen(request, timeout=10) as response:
-            rows = json.load(response)
+            raw_rows: object = json.load(response)
 
-        if not isinstance(rows, list) or not rows or not isinstance(rows[0], dict):
+        if not isinstance(raw_rows, list) or not raw_rows or not isinstance(raw_rows[0], dict):
             raise RuntimeError(f"clans の clanid={clan_id} が見つかりません")
 
-        return rows[0]
+        return cast(dict[str, Any], raw_rows[0])
 
     def update_clan_bosslaps(self, clan_id: int, bosslaps: list[int]) -> None:
         query = urlencode({"clanid": f"eq.{clan_id}"})
@@ -105,16 +118,16 @@ class SupabaseClient:
         member_id: int,
         name: str,
         mention: str,
+        yearmonth: str,
         role: str | None = None,
     ) -> None:
         now = datetime.now(timezone.utc).isoformat()
-        member_data = {
-            "source": "discord",
+        member_data: dict[str, Any] = {
             "clanid": str(clan_id),
-            "membersource": "discord",
             "memberid": str(member_id),
             "name": name,
             "mention": mention,
+            "attackdata": self.normalize_attackdata({"yearmonth": yearmonth}),
             "lastactive": now,
             "updated_at": now,
         }
@@ -137,6 +150,53 @@ class SupabaseClient:
         with urlopen(request, timeout=10):
             pass
 
+    @staticmethod
+    def normalize_attackdata(raw: object) -> dict[str, Any]:
+        source = cast(dict[str, object], raw) if isinstance(raw, dict) else {}
+        raw_attacktime = source.get("attacktime")
+        attacktime: list[int | None] = []
+        if isinstance(raw_attacktime, list):
+            attacktime = [
+                value if isinstance(value, int) else None
+                for value in cast(list[object], raw_attacktime)[:3]
+            ]
+
+        return {
+            "yearmonth": source.get("yearmonth") if isinstance(source.get("yearmonth"), str) else "",
+            "sortie": source.get("sortie") if isinstance(source.get("sortie"), int) else 0,
+            "attacklap": source.get("attacklap") if isinstance(source.get("attacklap"), int) else 0,
+            "attackboss": source.get("attackboss") if isinstance(source.get("attackboss"), int) else 0,
+            "overattack": source.get("overattack") if isinstance(source.get("overattack"), int) else None,
+            "attacktime": attacktime,
+            "damage": source.get("damage") if isinstance(source.get("damage"), int) else None,
+            "attackmessage": source.get("attackmessage") if isinstance(source.get("attackmessage"), str) else None,
+        }
+
+    def get_clan_members(self, clan_id: int) -> list[dict[str, Any]]:
+        query = urlencode({"select": "*", "clanid": f"eq.{clan_id}"})
+        request = Request(
+            f"{self.url}/rest/v1/clan_members?{query}",
+            headers={
+                "apikey": self.secret_key,
+                "Authorization": f"Bearer {self.secret_key}",
+            },
+        )
+
+        with urlopen(request, timeout=10) as response:
+            raw_rows: object = json.load(response)
+
+        if not isinstance(raw_rows, list):
+            return []
+
+        members: list[dict[str, Any]] = []
+        for raw_row in cast(list[object], raw_rows):
+            if not isinstance(raw_row, dict):
+                continue
+            row = cast(dict[str, Any], raw_row.copy())
+            row["attackdata"] = self.normalize_attackdata(row.get("attackdata"))
+            members.append(row)
+        return members
+
     def update_discord_clan_member_attack(
         self,
         clan_id: int,
@@ -145,6 +205,7 @@ class SupabaseClient:
         boss_lap: int,
         sortie: int,
         overattack: int,
+        yearmonth: str,
     ) -> None:
         query = urlencode(
             {
@@ -163,14 +224,14 @@ class SupabaseClient:
         with urlopen(get_request, timeout=10) as response:
             rows = json.load(response)
 
-        attackdata: dict[str, Any] = {}
+        attackdata = self.normalize_attackdata(None)
         if isinstance(rows, list) and rows and isinstance(rows[0], dict):
-            stored_attackdata = rows[0].get("attackdata")
-            if isinstance(stored_attackdata, dict):
-                attackdata.update(stored_attackdata)
+            row = cast(dict[str, object], rows[0])
+            attackdata = self.normalize_attackdata(row.get("attackdata"))
 
         attackdata.update(
             {
+                "yearmonth": yearmonth,
                 "attackboss": boss,
                 "attacklap": boss_lap,
                 "overattack": overattack,

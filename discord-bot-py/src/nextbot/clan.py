@@ -118,6 +118,38 @@ class Clan(MessageRouter):
 
         # self.damagechannelid = [0] * BOSSNUMBER                 # ダメコンチャンネルID
 
+    def CurrentYearmonth(self) -> str:
+        if self.clanbattle_setting is None:
+            return ""
+        yearmonth = self.clanbattle_setting.get("yearmonth")
+        return yearmonth if isinstance(yearmonth, str) else ""
+
+    def ApplySupabaseMember(self, row: dict[str, Any]) -> None:
+        raw_memberid = row.get("memberid")
+        if not isinstance(raw_memberid, (int, str)):
+            return
+        try:
+            memberid = int(raw_memberid)
+        except (TypeError, ValueError):
+            return
+
+        member = self.members.get(memberid)
+        if member is None:
+            member = ClanMember(memberid)
+            self.members[memberid] = member
+        member.ApplyDatabaseRow(row)
+
+    def LoadSupabaseMembers(self, rows: list[dict[str, Any]]) -> None:
+        self.members.clear()
+        for row in rows:
+            self.ApplySupabaseMember(row)
+
+    async def ReloadSupabaseMembers(self) -> None:
+        if self.supabase is None or self.clan_id is None:
+            return
+        rows = await asyncio.to_thread(self.supabase.get_clan_members, self.clan_id)
+        self.LoadSupabaseMembers(rows)
+
 
     async def _ack(self, message: discord.Message, title: str, member: discord.Member, opt: str) -> bool:
         response = f"{member.display_name} の {title} を受け付けました"
@@ -411,7 +443,7 @@ class Clan(MessageRouter):
             
             sortie = cmember.SortieCount() + 1
         else:
-            if cmember.attacktime[sortie] is None or cmember.attacktime[sortie] == 0:
+            if cmember.attacktime[sortie - 1] is None or cmember.attacktime[sortie - 1] == 0:
                 self.TemporaryMessage(message.channel, '持ち越し凸がありません')
                 return False
             overattack = 1
@@ -429,6 +461,7 @@ class Clan(MessageRouter):
                 self.BossLap(boss),
                 sortie,
                 overattack,
+                self.CurrentYearmonth(),
             )
 
         cmember.Attack(boss, sortie)
@@ -522,8 +555,10 @@ class Clan(MessageRouter):
             member.id,
             member.display_name,
             member.mention,
+            self.CurrentYearmonth(),
             "leader" if admin else "member",
         )
+        await self.ReloadSupabaseMembers()
 
         self.TemporaryMessage(message.channel, text)
         return False
@@ -553,8 +588,10 @@ class Clan(MessageRouter):
             member.id,
             member.display_name,
             member.mention,
+            self.CurrentYearmonth(),
             "leader" if admin else "member",
         )
+        await self.ReloadSupabaseMembers()
 
         return False
 
@@ -591,7 +628,9 @@ class Clan(MessageRouter):
         if reaction.message.id not in self.messagereaction:
             return False
 
-        member = self.GetMember(user)
+        member = self.GetMember(user.id)
+        if member is None:
+            return False
         if member.attackmessage is None or member.attackmessage.id != reaction.message.id:
             return False
 
@@ -607,9 +646,9 @@ class Clan(MessageRouter):
         if idx == 0:
             idx = 10
 
-        boss = member.attackboss
-        sortie = member.attacksortie
-        overtime = member.attacktime[sortie]
+        boss = member.boss
+        sortie = member.sortie
+        overtime = member.attacktime[sortie - 1]
 
         if idx == 10 and overtime == 0:
             await reaction.message.remove_reaction(reaction.emoji, user)
@@ -721,7 +760,9 @@ class Clan(MessageRouter):
         if reaction.message.id not in self.messagereaction:
             return False
 
-        member = self.GetMember(user)
+        member = self.GetMember(user.id)
+        if member is None:
+            return False
         if member.attackmessage is None or member.attackmessage.id != reaction.message.id:
             return False
 
@@ -736,9 +777,9 @@ class Clan(MessageRouter):
         if idx == 0:
             idx = 10
 
-        boss = member.attackboss
-        sortie = member.attacksortie
-        overtime = member.attacktime[sortie]
+        boss = member.boss
+        sortie = member.sortie
+        overtime = member.attacktime[sortie - 1]
 
         if idx == 10 and overtime == 0:
             return True
@@ -860,7 +901,7 @@ class Clan(MessageRouter):
         self.supabase_data = new_data
 
     async def OnSupabaseUpdateClanMembers(self, old_data: dict[str, Any], new_data: dict[str, Any]) -> None:
-        memberid = new_data["memberid"]
+        self.ApplySupabaseMember(new_data)
 
 
     async def OnSupabaseUpdateClanBossState(self, old_data: dict[str, Any], new_data: dict[str, Any]) -> None:

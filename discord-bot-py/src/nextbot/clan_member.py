@@ -1,5 +1,5 @@
 import datetime
-from typing import Optional
+from typing import Any, Optional, cast
 import discord
 
 from . import constants
@@ -26,12 +26,40 @@ class ClanMember():
         self.reportlimit = datetime.datetime.now() + datetime.timedelta(minutes = 30)
         self.boss = bossindex
 
+    def ApplyDatabaseRow(self, row: dict[str, Any]) -> None:
+        name = row.get("name")
+        mention = row.get("mention")
+        taskkill = row.get("taskkill")
+        self.name = name if isinstance(name, str) else ""
+        self.mention = mention if isinstance(mention, str) else ""
+        self.taskkill = taskkill if isinstance(taskkill, int) else 0
+
+        raw_attackdata = row.get("attackdata")
+        attackdata = cast(dict[str, object], raw_attackdata) if isinstance(raw_attackdata, dict) else {}
+        raw_attacktime = attackdata.get("attacktime")
+        attacktime = cast(list[object], raw_attacktime) if isinstance(raw_attacktime, list) else []
+        self.attacktime = [
+            value if isinstance(value, int) else None
+            for value in attacktime[:constants.MAX_SORTIE]
+        ]
+        self.attacktime.extend([None] * (constants.MAX_SORTIE - len(self.attacktime)))
+
+        attackboss = attackdata.get("attackboss")
+        sortie = attackdata.get("sortie")
+        if isinstance(attackboss, int) and constants.is_valid_boss(attackboss) \
+                and isinstance(sortie, int) and constants.is_valid_sortie(sortie):
+            self.boss = attackboss
+            self.sortie = sortie
+        else:
+            self.boss = 0
+            self.sortie = -1
+
     def IsAttack(self):
         return self.sortie != -1
 
     def IsOverkill(self) -> bool:
         if not self.IsAttack(): return False
-        time = self.attacktime[self.sortie]
+        time = self.attacktime[self.sortie - 1]
         return time is not None and 0 < time
 
     #未凸数
@@ -84,7 +112,7 @@ class ClanMember():
     
     def Finish(self, messageid : int, defeat : bool = False, sortiecount : int = 2):
         if self.sortie < 0: return
-        self.attacktime[self.sortie] = 0
+        self.attacktime[self.sortie - 1] = 0
         self.sortie = -1
         self.reportlimit = None
     
@@ -94,12 +122,12 @@ class ClanMember():
 
     def Overkill(self, messageid : int, overtime : int):
         if self.sortie < 0: return
-        self.attacktime[self.sortie] = overtime
+        self.attacktime[self.sortie - 1] = overtime
         self.sortie = -1
         self.reportlimit = None
 
-    def Overtime(self, sortie):
-        return self.attacktime[sortie]
+    def Overtime(self, sortie: int) -> Optional[int]:
+        return self.attacktime[sortie - 1]
 
     def Reset(self):
         self.sortie = -1
