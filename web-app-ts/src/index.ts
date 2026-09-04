@@ -508,8 +508,7 @@ app.post('/clan-management/members/add', ensureDiscordServerLinked, async (req, 
 
   try {
     const clan = await supabaseSelectClanByDiscordServer(config, discordServer);
-    const clanSource = clan && (clan.source === 'discord' || clan.source === 'web') ? clan.source : null;
-    if (!clanSource) {
+    if (!clan) {
       res.status(404).send('クラン情報が見つかりません');
       return;
     }
@@ -517,15 +516,14 @@ app.post('/clan-management/members/add', ensureDiscordServerLinked, async (req, 
     const nextMemberId = await supabaseGenerateWebId(config);
     const now = new Date().toISOString();
     await supabaseInsertClanMember(config, {
-      source: clanSource,
       clanid: clanId,
-      membersource: 'web',
       memberid: nextMemberId,
       name,
       mention: name,
       role: 'member',
       taskkill: 0,
       plan: [],
+      yearmonth: '',
       attacktime: [],
       sortie: 0,
       attackboss: 0,
@@ -577,7 +575,6 @@ type UserOwnedCharacterRecord = UserOwnedCharacter & {
 };
 
 type ClanInfoRow = {
-  source: string;
   clanid: string;
   name: string;
   bosslaps: number[];
@@ -586,15 +583,14 @@ type ClanInfoRow = {
 };
 
 type ClanMemberRow = {
-  source: string;
   clanid: string;
-  membersource: string;
   memberid: string;
   name: string;
   mention: string;
   role: 'member' | 'officer' | 'leader';
   taskkill: number;
   plan: number[];
+  yearmonth: string;
   attacktime: Array<number | null>;
   sortie: number;
   attackboss: number;
@@ -610,9 +606,7 @@ type ClanMemberRow = {
 type AttackHistoryRow = {
   id: number;
   day?: string | number | null;
-  source?: string;
   clanid?: string;
-  membersource?: string;
   memberid?: string;
   sortie: number;
   sortiecount?: number;
@@ -623,7 +617,6 @@ type AttackHistoryRow = {
 };
 
 type ClanBossStateRow = {
-  source: string;
   clanid: string;
   yearmonth: string;
   boss_index: number;
@@ -731,7 +724,6 @@ function normalizeClanInfoRow(raw: unknown): ClanInfoRow | null {
   }
 
   return {
-    source: typeof source.source === 'string' ? source.source : '',
     clanid: clanIdText,
     name: typeof source.name === 'string' ? source.name : '',
     bosslaps,
@@ -746,6 +738,9 @@ function normalizeClanMemberRow(raw: unknown): ClanMemberRow | null {
   }
 
   const source = raw as Record<string, unknown>;
+  const attackData = source.attackdata && typeof source.attackdata === 'object'
+    ? source.attackdata as Record<string, unknown>
+    : {};
   const clanIdText = typeof source.clanid === 'string'
     ? source.clanid.trim()
     : typeof source.clanid === 'number' && Number.isFinite(source.clanid)
@@ -764,8 +759,8 @@ function normalizeClanMemberRow(raw: unknown): ClanMemberRow | null {
     ? source.plan.map((item) => Number(item)).filter((item) => Number.isFinite(item)).map((item) => Math.trunc(item))
     : [];
 
-  const attacktime = Array.isArray(source.attacktime)
-    ? source.attacktime.map((item) => {
+  const attacktime = Array.isArray(attackData.attacktime)
+    ? attackData.attacktime.map((item) => {
       if (item === null || item === undefined || item === '') {
         return null;
       }
@@ -774,38 +769,50 @@ function normalizeClanMemberRow(raw: unknown): ClanMemberRow | null {
     })
     : [];
 
-  const overattack = source.overattack === null || source.overattack === undefined
+  const overattack = attackData.overattack === null || attackData.overattack === undefined
     ? null
-    : Number.isFinite(Number(source.overattack))
-      ? Math.trunc(Number(source.overattack))
+    : Number.isFinite(Number(attackData.overattack))
+      ? Math.trunc(Number(attackData.overattack))
       : null;
 
-  const damage = source.damage === null || source.damage === undefined
+  const damage = attackData.damage === null || attackData.damage === undefined
     ? null
-    : Number.isFinite(Number(source.damage))
-      ? Math.trunc(Number(source.damage))
+    : Number.isFinite(Number(attackData.damage))
+      ? Math.trunc(Number(attackData.damage))
       : null;
 
   return {
-    source: typeof source.source === 'string' ? source.source : '',
     clanid: clanIdText,
-    membersource: typeof source.membersource === 'string' ? source.membersource : '',
     memberid: memberIdText,
     name: typeof source.name === 'string' ? source.name : '',
     mention: typeof source.mention === 'string' ? source.mention : '',
     role: source.role === 'officer' || source.role === 'leader' ? source.role : 'member',
     taskkill: Number.isFinite(Number(source.taskkill)) ? Math.trunc(Number(source.taskkill)) : 0,
     plan,
+    yearmonth: typeof attackData.yearmonth === 'string' ? attackData.yearmonth : '',
     attacktime,
-    sortie: Number.isFinite(Number(source.sortie)) ? Math.trunc(Number(source.sortie)) : 0,
-    attackboss: Number.isFinite(Number(source.attackboss)) ? Math.trunc(Number(source.attackboss)) : 0,
-    attacklap: Number.isFinite(Number(source.attacklap)) ? Math.trunc(Number(source.attacklap)) : 0,
+    sortie: Number.isFinite(Number(attackData.sortie)) ? Math.trunc(Number(attackData.sortie)) : 0,
+    attackboss: Number.isFinite(Number(attackData.attackboss)) ? Math.trunc(Number(attackData.attackboss)) : 0,
+    attacklap: Number.isFinite(Number(attackData.attacklap)) ? Math.trunc(Number(attackData.attacklap)) : 0,
     overattack,
     damage,
-    attackmessage: typeof source.attackmessage === 'string' ? source.attackmessage : null,
+    attackmessage: typeof attackData.attackmessage === 'string' ? attackData.attackmessage : null,
     lastactive: toIsoStringOrEmpty(source.lastactive),
     created_at: toIsoStringOrEmpty(source.created_at),
     updated_at: toIsoStringOrEmpty(source.updated_at)
+  };
+}
+
+function toClanMemberAttackData(member: ClanMemberRow): Record<string, unknown> {
+  return {
+    yearmonth: member.yearmonth,
+    sortie: member.sortie,
+    attacklap: member.attacklap,
+    attackboss: member.attackboss,
+    overattack: member.overattack,
+    attacktime: member.attacktime,
+    damage: member.damage,
+    attackmessage: member.attackmessage
   };
 }
 
@@ -943,9 +950,7 @@ function normalizeAttackHistoryRow(raw: unknown): AttackHistoryRow | null {
   return {
     id: Math.trunc(id),
     day: dayValue,
-    source: typeof source.source === 'string' ? source.source : undefined,
     clanid: typeof source.clanid === 'string' || typeof source.clanid === 'number' ? String(source.clanid) : undefined,
-    membersource: typeof source.membersource === 'string' ? source.membersource : undefined,
     memberid: typeof source.memberid === 'string' || typeof source.memberid === 'number' ? String(source.memberid) : undefined,
     sortie: Math.trunc(sortie),
     sortiecount: sorteiCountValue === undefined ? undefined : Math.trunc(sorteiCountValue),
@@ -973,7 +978,6 @@ function normalizeClanBossStateRow(raw: unknown): ClanBossStateRow | null {
   }
 
   return {
-    source: typeof source.source === 'string' ? source.source : '',
     clanid: typeof source.clanid === 'string' ? source.clanid : '',
     yearmonth: typeof source.yearmonth === 'string' ? source.yearmonth : '',
     boss_index: Math.trunc(bossIndex),
@@ -992,7 +996,7 @@ async function supabaseSelectClanBossStates(
 ): Promise<ClanBossStateRow[]> {
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLAN_BOSS_STATE_TABLE);
   const query = new URLSearchParams({
-    select: 'source,clanid,yearmonth,boss_index,current_hp,max_hp,is_defeated,updated_at,updated_by',
+    select: 'clanid,yearmonth,boss_index,current_hp,max_hp,is_defeated,updated_at,updated_by',
     clanid: `eq.${clanid}`,
     yearmonth: `eq.${yearmonth}`,
     order: 'boss_index.asc'
@@ -1023,7 +1027,6 @@ async function supabaseSelectClanBossStates(
 
 async function supabaseUpsertClanBossStateCurrentHp(
   config: SupabaseConfig,
-  source: string,
   clanid: string,
   yearmonth: string,
   bossIndex: number,
@@ -1045,7 +1048,6 @@ async function supabaseUpsertClanBossStateCurrentHp(
       Prefer: 'resolution=merge-duplicates,return=minimal'
     },
     body: JSON.stringify([{
-      source,
       clanid,
       yearmonth,
       boss_index: bossIndex,
@@ -1069,7 +1071,7 @@ async function resolveClanBossHpForDisplay(
   clanBattleState: ClanBattleSettingsSavePayload
 ): Promise<Array<number | null>> {
   const fallbackBossHp = clanBattleState?.bossHp || [];
-  if (!clan || !clan.source || !clan.clanid || !clanBattleState?.yearmonth) {
+  if (!clan || !clan.clanid || !clanBattleState?.yearmonth) {
     return fallbackBossHp;
   }
 
@@ -1096,7 +1098,7 @@ async function supabaseSelectAttackHistories(
 ): Promise<AttackHistoryRow[]> {
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_ATTACK_HISTORIES_TABLE);
   const query = new URLSearchParams({
-    select: 'id,day,source,clanid,membersource,memberid,sortie,boss,attacklap,overtime,defeat',
+    select: 'id,day,clanid,memberid,sortie,boss,attacklap,overtime,defeat',
     memberid: `eq.${member.memberid}`,
     day: `eq.${day}`,
     order: 'sortie.asc,overtime.desc'
@@ -1149,7 +1151,7 @@ async function supabaseSelectClanAttackHistories(
 
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_ATTACK_HISTORIES_TABLE);
   const query = new URLSearchParams({
-    select: 'id,day,source,clanid,membersource,memberid,sortie,sortiecount,boss,attacklap,overtime,defeat',
+    select: 'id,day,clanid,memberid,sortie,sortiecount,boss,attacklap,overtime,defeat',
     clanid: `eq.${clanId}`,
     order: 'day.asc,sortie.asc,overtime.asc'
   });
@@ -1247,6 +1249,17 @@ async function supabaseGenerateWebId(config: SupabaseConfig): Promise<string> {
 
 async function supabaseInsertClanMember(config: SupabaseConfig, member: ClanMemberRow): Promise<void> {
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLAN_MEMBERS_TABLE);
+  const {
+    sortie,
+    attacklap,
+    attackboss,
+    overattack,
+    attacktime,
+    yearmonth,
+    damage,
+    attackmessage,
+    ...memberData
+  } = member;
   const response = await fetch(endpointUrl, {
     method: 'POST',
     headers: {
@@ -1255,7 +1268,10 @@ async function supabaseInsertClanMember(config: SupabaseConfig, member: ClanMemb
       Authorization: `Bearer ${config.secretKey}`,
       Prefer: 'return=minimal'
     },
-    body: JSON.stringify([member])
+    body: JSON.stringify([{
+      ...memberData,
+      attackdata: toClanMemberAttackData(member)
+    }])
   });
 
   if (!response.ok) {
@@ -1456,7 +1472,7 @@ async function supabaseStartClanMemberAttack(
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLAN_MEMBERS_TABLE);
   const query = new URLSearchParams({
     memberid: `eq.${member.memberid}`,
-    attackboss: 'eq.0'
+    'attackdata->>attackboss': 'eq.0'
   });
 
   const attacktime = [...member.attacktime];
@@ -1467,18 +1483,22 @@ async function supabaseStartClanMemberAttack(
     attacktime[sortie - 1] = carryOvertime;
   }
 
-  const updatePayload: Record<string, unknown> = {
+  const attackdata: Record<string, unknown> = {
+    ...toClanMemberAttackData(member),
     attackboss: attackBoss,
     attacklap: attackLap,
     sortie,
     overattack: carryOvertime === null ? 0 : 1,
     damage: 0,
-    attackmessage: '',
-    updated_at: new Date().toISOString()
+    attackmessage: ''
   };
   if (carryOvertime !== null) {
-    updatePayload.attacktime = attacktime;
+    attackdata.attacktime = attacktime;
   }
+  const updatePayload = {
+    attackdata,
+    updated_at: new Date().toISOString()
+  };
 
   const response = await fetch(`${endpointUrl}?${query.toString()}`, {
     method: 'PATCH',
@@ -1540,13 +1560,17 @@ async function supabaseUpdateClanMemberAttackMessage(
     memberid: `eq.${member.memberid}`
   });
 
-  const updatePayload: Record<string, unknown> = {
-    attackmessage: attackMessage,
-    updated_at: new Date().toISOString()
+  const attackdata: Record<string, unknown> = {
+    ...toClanMemberAttackData(member),
+    attackmessage: attackMessage
   };
   if (damage !== null) {
-    updatePayload.damage = damage;
+    attackdata.damage = damage;
   }
+  const updatePayload = {
+    attackdata,
+    updated_at: new Date().toISOString()
+  };
 
   const response = await fetch(`${endpointUrl}?${query.toString()}`, {
     method: 'PATCH',
@@ -2533,7 +2557,6 @@ app.post('/api/clan/active-boss-hp/save', ensureDiscordServerLinked, express.jso
 
     await supabaseUpsertClanBossStateCurrentHp(
       config,
-      clan.source,
       clan.clanid,
       clanBattleState.yearmonth,
       bossIndex,

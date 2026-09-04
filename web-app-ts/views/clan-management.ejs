@@ -79,7 +79,6 @@
           <thead>
             <tr>
               <th>名前</th>
-              <th>区分</th>
               <th>役職</th>
               <th>操作</th>
             </tr>
@@ -90,16 +89,11 @@
               <tr>
                 <td class="clan-management-name-cell"><%= member.name || 'Unknown' %></td>
                 <td>
-                  <span class="clan-management-source-badge"><%= member.membersource || '' %></span>
-                </td>
-                <td>
                   <span class="clan-management-role-badge <%= roleBadgeClass %>"><%= roleLabel(member.role) || 'メンバー' %></span>
                 </td>
                 <td>
                   <form method="post" action="/clan-management/members/delete" class="clan-management-delete-form" onsubmit="return confirm('このメンバーを削除します。よろしいですか？');">
-                    <input type="hidden" name="source" value="<%= member.source %>" />
                     <input type="hidden" name="clanid" value="<%= member.clanid %>" />
-                    <input type="hidden" name="membersource" value="<%= member.membersource %>" />
                     <input type="hidden" name="memberid" value="<%= member.memberid %>" />
                     <button type="submit" class="btn btn-danger clan-management-delete-button">削除</button>
                   </form>

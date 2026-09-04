@@ -148,10 +148,28 @@ class SupabaseClient:
     ) -> None:
         query = urlencode(
             {
+                "select": "attackdata",
                 "memberid": f"eq.{member_id}",
+                "limit": "1",
             }
         )
-        payload = json.dumps(
+        get_request = Request(
+            f"{self.url}/rest/v1/clan_members?{query}",
+            headers={
+                "apikey": self.secret_key,
+                "Authorization": f"Bearer {self.secret_key}",
+            },
+        )
+        with urlopen(get_request, timeout=10) as response:
+            rows = json.load(response)
+
+        attackdata: dict[str, Any] = {}
+        if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+            stored_attackdata = rows[0].get("attackdata")
+            if isinstance(stored_attackdata, dict):
+                attackdata.update(stored_attackdata)
+
+        attackdata.update(
             {
                 "attackboss": boss,
                 "attacklap": boss_lap,
@@ -159,11 +177,17 @@ class SupabaseClient:
                 "damage": 0,
                 "attackmessage": "",
                 "sortie": sortie,
+            }
+        )
+        update_query = urlencode({"memberid": f"eq.{member_id}"})
+        payload = json.dumps(
+            {
+                "attackdata": attackdata,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }
         ).encode("utf-8")
         request = Request(
-            f"{self.url}/rest/v1/clan_members?{query}",
+            f"{self.url}/rest/v1/clan_members?{update_query}",
             data=payload,
             method="PATCH",
             headers={
