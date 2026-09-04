@@ -218,7 +218,27 @@ $$;
 revoke all on function public.generate_web_id() from public, anon, authenticated;
 grant execute on function public.generate_web_id() to service_role;
 
-create or replace function public.finish_clan_member_attack(
+do $$
+begin
+  if exists (
+    select 1
+    from pg_type t
+    join pg_namespace n on n.oid = t.typnamespace
+    where n.nspname = 'public'
+      and t.typname = 'clan_source'
+  ) then
+    execute 'drop function if exists public.finish_clan_member_attack(public.clan_source, text, public.clan_source, text, text, integer)';
+  end if;
+end
+$$;
+
+drop function if exists public.finish_clan_member_attack(
+  text,
+  text,
+  integer
+);
+
+create function public.finish_clan_member_attack(
   p_memberid text,
   p_action text,
   p_overtime integer default 0
