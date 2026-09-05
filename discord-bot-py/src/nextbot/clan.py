@@ -44,7 +44,7 @@ class Clan(MessageRouter):
     ]
 
     emojis = [
-        u"\u2705",
+        u"  ",
         "\N{DIGIT TWO}\N{COMBINING ENCLOSING KEYCAP}", # type: ignore
         "\N{DIGIT THREE}\N{COMBINING ENCLOSING KEYCAP}", # type: ignore
         "\N{DIGIT FOUR}\N{COMBINING ENCLOSING KEYCAP}", # type: ignore

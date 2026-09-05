@@ -127,6 +127,7 @@ class SupabaseClient:
             "memberid": str(member_id),
             "name": name,
             "mention": mention,
+            "attacktime": [],
             "attackdata": self.normalize_attackdata({"day": day}),
             "lastactive": now,
             "updated_at": now,
@@ -156,23 +157,14 @@ class SupabaseClient:
         raw_day = source.get("day")
         if not isinstance(raw_day, str):
             raw_day = source.get("yearmonth")
-        raw_attacktime = source.get("attacktime")
-        attacktime: list[int | None] = []
-        if isinstance(raw_attacktime, list):
-            attacktime = [
-                value if isinstance(value, int) else None
-                for value in cast(list[object], raw_attacktime)[:3]
-            ]
-
         return {
             "day": raw_day if isinstance(raw_day, str) else "",
             "sortie": source.get("sortie") if isinstance(source.get("sortie"), int) else 0,
-            "attacklap": source.get("attacklap") if isinstance(source.get("attacklap"), int) else 0,
-            "attackboss": source.get("attackboss") if isinstance(source.get("attackboss"), int) else 0,
+            "lap": source.get("lap") if isinstance(source.get("lap"), int) else source.get("attacklap") if isinstance(source.get("attacklap"), int) else 0,
+            "boss": source.get("boss") if isinstance(source.get("boss"), int) else source.get("attackboss") if isinstance(source.get("attackboss"), int) else 0,
             "overattack": source.get("overattack") if isinstance(source.get("overattack"), int) else None,
-            "attacktime": attacktime,
             "damage": source.get("damage") if isinstance(source.get("damage"), int) else None,
-            "attackmessage": source.get("attackmessage") if isinstance(source.get("attackmessage"), str) else None,
+            "message": source.get("message") if isinstance(source.get("message"), str) else source.get("attackmessage") if isinstance(source.get("attackmessage"), str) else None,
         }
 
     def get_clan_members(self, clan_id: int) -> list[dict[str, Any]]:
@@ -212,7 +204,7 @@ class SupabaseClient:
     ) -> None:
         query = urlencode(
             {
-                "select": "attackdata",
+                "select": "attackdata,attacktime",
                 "memberid": f"eq.{member_id}",
                 "limit": "1",
             }
@@ -235,11 +227,11 @@ class SupabaseClient:
         attackdata.update(
             {
                 "day": day,
-                "attackboss": boss,
-                "attacklap": boss_lap,
+                "boss": boss,
+                "lap": boss_lap,
                 "overattack": overattack,
                 "damage": 0,
-                "attackmessage": "",
+                "message": "",
                 "sortie": sortie,
             }
         )

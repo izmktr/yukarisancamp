@@ -759,8 +759,9 @@ function normalizeClanMemberRow(raw: unknown): ClanMemberRow | null {
     ? source.plan.map((item) => Number(item)).filter((item) => Number.isFinite(item)).map((item) => Math.trunc(item))
     : [];
 
-  const attacktime = Array.isArray(attackData.attacktime)
-    ? attackData.attacktime.map((item) => {
+  const rawAttacktime = Array.isArray(source.attacktime) ? source.attacktime : attackData.attacktime;
+  const attacktime = Array.isArray(rawAttacktime)
+    ? rawAttacktime.map((item) => {
       if (item === null || item === undefined || item === '') {
         return null;
       }
@@ -792,11 +793,13 @@ function normalizeClanMemberRow(raw: unknown): ClanMemberRow | null {
     day: typeof attackData.day === 'string' ? attackData.day : '',
     attacktime,
     sortie: Number.isFinite(Number(attackData.sortie)) ? Math.trunc(Number(attackData.sortie)) : 0,
-    attackboss: Number.isFinite(Number(attackData.attackboss)) ? Math.trunc(Number(attackData.attackboss)) : 0,
-    attacklap: Number.isFinite(Number(attackData.attacklap)) ? Math.trunc(Number(attackData.attacklap)) : 0,
+    attackboss: Number.isFinite(Number(attackData.boss ?? attackData.attackboss)) ? Math.trunc(Number(attackData.boss ?? attackData.attackboss)) : 0,
+    attacklap: Number.isFinite(Number(attackData.lap ?? attackData.attacklap)) ? Math.trunc(Number(attackData.lap ?? attackData.attacklap)) : 0,
     overattack,
     damage,
-    attackmessage: typeof attackData.attackmessage === 'string' ? attackData.attackmessage : null,
+    attackmessage: typeof (attackData.message ?? attackData.attackmessage) === 'string'
+      ? String(attackData.message ?? attackData.attackmessage)
+      : null,
     lastactive: toIsoStringOrEmpty(source.lastactive),
     created_at: toIsoStringOrEmpty(source.created_at),
     updated_at: toIsoStringOrEmpty(source.updated_at)
@@ -807,12 +810,11 @@ function toClanMemberAttackData(member: ClanMemberRow): Record<string, unknown> 
   return {
     day: member.day,
     sortie: member.sortie,
-    attacklap: member.attacklap,
-    attackboss: member.attackboss,
+    lap: member.attacklap,
+    boss: member.attackboss,
     overattack: member.overattack,
-    attacktime: member.attacktime,
     damage: member.damage,
-    attackmessage: member.attackmessage
+    message: member.attackmessage
   };
 }
 
@@ -1264,6 +1266,7 @@ async function supabaseInsertClanMember(config: SupabaseConfig, member: ClanMemb
       mention: member.mention,
       role: member.role,
       taskkill: member.taskkill,
+      attacktime: member.attacktime,
       attackdata: toClanMemberAttackData(member),
       lastactive: member.lastactive,
       created_at: member.created_at,
@@ -1489,7 +1492,7 @@ async function supabaseStartClanMemberAttack(
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLAN_MEMBERS_TABLE);
   const query = new URLSearchParams({
     memberid: `eq.${member.memberid}`,
-    'attackdata->>attackboss': 'eq.0'
+    'attackdata->>boss': 'eq.0'
   });
 
   const attacktime = [...member.attacktime];
@@ -1503,18 +1506,16 @@ async function supabaseStartClanMemberAttack(
   const attackdata: Record<string, unknown> = {
     ...toClanMemberAttackData(member),
     day,
-    attackboss: attackBoss,
-    attacklap: attackLap,
+    boss: attackBoss,
+    lap: attackLap,
     sortie,
     overattack: carryOvertime === null ? 0 : 1,
     damage: 0,
-    attackmessage: ''
+    message: ''
   };
-  if (carryOvertime !== null) {
-    attackdata.attacktime = attacktime;
-  }
   const updatePayload = {
     attackdata,
+    attacktime,
     updated_at: new Date().toISOString()
   };
 
@@ -1580,7 +1581,7 @@ async function supabaseUpdateClanMemberAttackMessage(
 
   const attackdata: Record<string, unknown> = {
     ...toClanMemberAttackData(member),
-    attackmessage: attackMessage
+    message: attackMessage
   };
   if (damage !== null) {
     attackdata.damage = damage;

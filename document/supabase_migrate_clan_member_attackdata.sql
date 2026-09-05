@@ -1,10 +1,11 @@
--- Migration: consolidate clan member attack columns into attackdata JSONB.
+-- Migration: consolidate clan member attack columns into attackdata and attacktime JSONB.
 -- Safe to re-run.
 
 begin;
 
 alter table public.clan_members
-  add column if not exists attackdata jsonb;
+  add column if not exists attackdata jsonb,
+  add column if not exists attacktime jsonb not null default '[]'::jsonb;
 
 do $$
 begin
@@ -20,12 +21,11 @@ begin
       set attackdata = coalesce(attackdata, '{}'::jsonb) || jsonb_build_object(
         'day', yearmonth,
         'sortie', sortie,
-        'attacklap', attacklap,
-        'attackboss', attackboss,
+        'lap', attacklap,
+        'boss', attackboss,
         'overattack', overattack,
-        'attacktime', to_jsonb(attacktime),
         'damage', damage,
-        'attackmessage', attackmessage
+        'message', attackmessage
       )
     $migration$;
 
@@ -36,7 +36,6 @@ begin
         drop column attacklap,
         drop column attackboss,
         drop column overattack,
-        drop column attacktime,
         drop column damage,
         drop column attackmessage
     $migration$;
@@ -44,12 +43,29 @@ begin
 end
 $$;
 
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'clan_members'
+      and column_name = 'attacktime'
+      and data_type <> 'jsonb'
+  ) then
+    alter table public.clan_members alter column attacktime drop default;
+    alter table public.clan_members alter column attacktime type jsonb using to_jsonb(attacktime);
+    alter table public.clan_members alter column attacktime set default '[]'::jsonb;
+  end if;
+end
+$$;
+
 update public.clan_members
-set attackdata = '{"day":"","sortie":0,"attacklap":0,"attackboss":0,"overattack":null,"attacktime":[],"damage":null,"attackmessage":null}'::jsonb
+set attackdata = '{"day":"","sortie":0,"lap":0,"boss":0,"overattack":null,"damage":null,"message":null}'::jsonb
 where attackdata is null;
 
 alter table public.clan_members
-  alter column attackdata set default '{"day":"","sortie":0,"attacklap":0,"attackboss":0,"overattack":null,"attacktime":[],"damage":null,"attackmessage":null}'::jsonb,
+  alter column attackdata set default '{"day":"","sortie":0,"lap":0,"boss":0,"overattack":null,"damage":null,"message":null}'::jsonb,
   alter column attackdata set not null;
 
 update public.clan_members
@@ -107,7 +123,7 @@ begin
   where memberid = p_memberid
   for update;
 
-  if (target_member.attackdata->>'attackboss')::integer = 0 then
+  if (target_member.attackdata->>'boss')::integer = 0 then
     raise exception 'Attack is not active';
   end if;
 
@@ -131,8 +147,8 @@ begin
       ((changed_at at time zone 'Asia/Tokyo') - interval '5 hours')::date,
       (target_member.attackdata->>'sortie')::integer,
       null,
-      (target_member.attackdata->>'attackboss')::integer,
-      (target_member.attackdata->>'attacklap')::integer,
+      (target_member.attackdata->>'boss')::integer,
+      (target_member.attackdata->>'lap')::integer,
       case
         when coalesce((target_member.attackdata->>'overattack')::integer, 0) = 1 then 0
         when p_action = 'defeat' then p_overtime
@@ -150,15 +166,15 @@ begin
 
   if p_action = 'defeat' then
     update public.clans
-    set bosslaps[(target_member.attackdata->>'attackboss')::integer] = bosslaps[(target_member.attackdata->>'attackboss')::integer] + 1,
+    set bosslaps[(target_member.attackdata->>'boss')::integer] = bosslaps[(target_member.attackdata->>'boss')::integer] + 1,
         updated_at = changed_at
     where clanid = target_member.clanid
       and cardinality(bosslaps) = 5
-      and bosslaps[(target_member.attackdata->>'attackboss')::integer] = (target_member.attackdata->>'attacklap')::integer;
+      and bosslaps[(target_member.attackdata->>'boss')::integer] = (target_member.attackdata->>'lap')::integer;
   end if;
 
   update public.clan_members
-  set attackdata = jsonb_set(attackdata, '{attackboss}', '0'::jsonb),
+  set attackdata = jsonb_set(attackdata, '{boss}', '0'::jsonb),
       updated_at = changed_at
   where memberid = target_member.memberid;
 end;

@@ -36,7 +36,9 @@ class ClanMember():
 
         raw_attackdata = row.get("attackdata")
         attackdata = cast(dict[str, object], raw_attackdata) if isinstance(raw_attackdata, dict) else {}
-        raw_attacktime = attackdata.get("attacktime")
+        raw_attacktime = row.get("attacktime")
+        if not isinstance(raw_attacktime, list):
+            raw_attacktime = attackdata.get("attacktime")
         attacktime = cast(list[object], raw_attacktime) if isinstance(raw_attacktime, list) else []
         self.attacktime = [
             value if isinstance(value, int) else None
@@ -44,7 +46,7 @@ class ClanMember():
         ]
         self.attacktime.extend([None] * (constants.MAX_SORTIE - len(self.attacktime)))
 
-        attackboss = attackdata.get("attackboss")
+        attackboss = attackdata.get("boss", attackdata.get("attackboss"))
         sortie = attackdata.get("sortie")
         if isinstance(attackboss, int) and constants.is_valid_boss(attackboss) \
                 and isinstance(sortie, int) and constants.is_valid_sortie(sortie):
@@ -134,9 +136,6 @@ class ClanMember():
         self.reportlimit = None
         self.taskkill = 0
         self.attacktime = [None] * constants.MAX_SORTIE
-
-    def Revert(self, messageid):
-        return None
 
     def DayFinish(self):
         for t in self.attacktime:

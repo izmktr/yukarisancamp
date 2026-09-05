@@ -113,7 +113,8 @@ create table if not exists public.clan_members (
   mention text not null,
   role public.clan_member_role not null default 'member',
   taskkill integer not null default 0,
-  attackdata jsonb not null default '{"day":"","sortie":0,"attacklap":0,"attackboss":0,"overattack":null,"attacktime":[],"damage":null,"attackmessage":null}'::jsonb,
+  attacktime jsonb not null default '[]'::jsonb,
+  attackdata jsonb not null default '{"day":"","sortie":0,"lap":0,"boss":0,"overattack":null,"damage":null,"message":null}'::jsonb,
   lastactive timestamptz not null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -262,7 +263,7 @@ begin
   where memberid = p_memberid
   for update;
 
-  if (target_member.attackdata->>'attackboss')::integer = 0 then
+  if (target_member.attackdata->>'boss')::integer = 0 then
     raise exception 'Attack is not active';
   end if;
 
@@ -295,8 +296,8 @@ begin
       ((changed_at at time zone 'Asia/Tokyo') - interval '5 hours')::date,
       (target_member.attackdata->>'sortie')::integer,
       null,
-      (target_member.attackdata->>'attackboss')::integer,
-      (target_member.attackdata->>'attacklap')::integer,
+      (target_member.attackdata->>'boss')::integer,
+      (target_member.attackdata->>'lap')::integer,
       case
         when coalesce((target_member.attackdata->>'overattack')::integer, 0) = 1 then 0
         when p_action = 'defeat' then p_overtime
@@ -314,15 +315,15 @@ begin
 
   if p_action = 'defeat' then
     update public.clans
-    set bosslaps[(target_member.attackdata->>'attackboss')::integer] = bosslaps[(target_member.attackdata->>'attackboss')::integer] + 1,
+    set bosslaps[(target_member.attackdata->>'boss')::integer] = bosslaps[(target_member.attackdata->>'boss')::integer] + 1,
         updated_at = changed_at
     where clanid = target_member.clanid
       and cardinality(bosslaps) = 5
-      and bosslaps[(target_member.attackdata->>'attackboss')::integer] = (target_member.attackdata->>'attacklap')::integer;
+      and bosslaps[(target_member.attackdata->>'boss')::integer] = (target_member.attackdata->>'lap')::integer;
   end if;
 
   update public.clan_members
-  set attackdata = jsonb_set(attackdata, '{attackboss}', '0'::jsonb),
+  set attackdata = jsonb_set(attackdata, '{boss}', '0'::jsonb),
       updated_at = changed_at
   where memberid = target_member.memberid;
 end;

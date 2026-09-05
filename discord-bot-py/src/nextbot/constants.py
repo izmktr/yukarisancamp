@@ -20,3 +20,12 @@ def is_valid_boss(boss: int) -> bool:
 # sortieの値が正しいか
 def is_valid_sortie(sortie: int) -> bool:
     return 0 < sortie <= MAX_SORTIE
+
+# 基準日
+def reference_date() -> str:
+    # 5:00～翌日の4:59までを1日とする基準日
+    import datetime
+    now = datetime.datetime.now()
+    if now.hour < 5:
+        now -= datetime.timedelta(days=1)
+    return now.strftime("%Y-%m-%d")
