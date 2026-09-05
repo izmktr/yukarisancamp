@@ -1,8 +1,10 @@
 from __future__ import annotations
 import asyncio
+from functools import cmp_to_key
 from typing import TYPE_CHECKING
 
 import discord
+from . import constants
 from .clan_member import ClanMember
 
 if TYPE_CHECKING:
@@ -75,7 +77,7 @@ class DamageControl():
 
     @staticmethod
     def AttackBoss(member : ClanMember):
-        return member.boss
+        return member.boss - 1
 
     def IsAttackMember(self, member : ClanMember):
         return self.AttackBoss(member) == self.bossindex
@@ -141,22 +143,26 @@ class DamageControl():
             ao = a.member.IsOverkill() if 0 < a.damage else False
             bo = b.member.IsOverkill() if 0 < b.damage else False
 
-            if ao == bo: return sign(b.damage - a.damage)
-            return sign(bo - ao)
+            if ao == bo:
+                return (b.damage > a.damage) - (b.damage < a.damage)
+            return (bo > ao) - (bo < ao)
 
         damagelist : list[DamageControlMember] = sorted([value for value in self.members.values()], key=cmp_to_key(Compare)) 
         totaldamage = sum([n.damage for n in damagelist])
 
-        attackmember = set([m for m in self.clanmembers.values() if m.IsAttack() and m.boss % BOSSNUMBER == self.bossindex])
+        attackmember = set([
+            m for m in self.clanmembers.values()
+            if m.IsAttack() and (m.boss - 1) % constants.BOSSNUMBER == self.bossindex
+        ])
 
-        mes += '%s HP %d' % (BossName[self.bossindex] , self.remainhp)
+        mes += '%dボス HP %d' % (self.bossindex + 1, self.remainhp)
         if 0 < totaldamage and totaldamage < self.remainhp:
             mes += '  不足分 %d' % (self.remainhp - totaldamage)
         else:
             defeatcount = self.DefeatCount(damagelist)
             if 3 <= defeatcount:
                 last = damagelist[defeatcount - 1]
-                namelist = []
+                namelist: list[str] = []
 
                 remainhp = self.remainhp
                 for m in damagelist:

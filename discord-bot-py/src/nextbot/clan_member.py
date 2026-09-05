@@ -26,6 +26,9 @@ class ClanMember():
         self.reportlimit = datetime.datetime.now() + datetime.timedelta(minutes = 30)
         self.boss = bossindex
 
+    def AttackBoss(self) -> int:
+        return self.boss
+
     def ApplyDatabaseRow(self, row: dict[str, Any]) -> None:
         name = row.get("name")
         mention = row.get("mention")

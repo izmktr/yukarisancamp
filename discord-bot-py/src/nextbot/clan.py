@@ -19,14 +19,17 @@ class MessageReaction():
     def __init__(
         self,
         member: ClanMember,
-        addreaction: Callable[[discord.Message, bool], Awaitable[None]],
+        addreaction: Callable[[ClanMember, discord.RawReactionActionEvent], Awaitable[bool]],
         removereaction: Callable[[ClanMember, discord.RawReactionActionEvent], Awaitable[bool]],
-        deletereaction: Callable[[discord.RawReactionActionEvent], Awaitable[bool]],
+        deletereaction: Callable[[discord.RawMessageDeleteEvent], Awaitable[bool]],
     ) -> None:
         self.addreaction = addreaction
         self.removereaction = removereaction
         self.deletereaction = deletereaction
         self.member = member
+        self.history_id: int | None = None
+        self.selected_emoji: str | None = None
+        self.action: str | None = None
 
 
 class Clan(MessageRouter):
@@ -44,7 +47,7 @@ class Clan(MessageRouter):
     ]
 
     emojis = [
-        u"  ",
+        u"\u2705",
         "\N{DIGIT TWO}\N{COMBINING ENCLOSING KEYCAP}", # type: ignore
         "\N{DIGIT THREE}\N{COMBINING ENCLOSING KEYCAP}", # type: ignore
         "\N{DIGIT FOUR}\N{COMBINING ENCLOSING KEYCAP}", # type: ignore
@@ -261,82 +264,143 @@ class Clan(MessageRouter):
                 break
 
     def CreateAttackReaction(self, atmember : ClanMember, message : discord.Message, boss : int, sortie : int, overtime : int):
+        react: MessageReaction
+
+        def reaction_action(emoji: str) -> tuple[str, int] | None:
+            if emoji == self.emojis[9]:
+                return "cancel", 0
+            if emoji == self.emojis[0]:
+                return "complete", 0
+            if overtime > 0:
+                if emoji == self.numbermarks[0]:
+                    return "defeat", 0
+                return None
+            if emoji in self.emojis[1:9]:
+                index = self.emojis.index(emoji)
+                return "defeat", (index + 1) * 10
+            return None
+
+        def apply_rpc_result(member: ClanMember, result: dict[str, Any]) -> None:
+            member.ApplyDatabaseRow(
+                {
+                    "name": member.name,
+                    "mention": member.mention,
+                    "taskkill": member.taskkill,
+                    "attacktime": result.get("attacktime"),
+                    "attackdata": result.get("attackdata"),
+                }
+            )
+            raw_bosslaps = result.get("bosslaps")
+            if self.supabase_data is not None and isinstance(raw_bosslaps, list):
+                self.supabase_data["bosslaps"] = raw_bosslaps
+
         async def addreaction(member : ClanMember, payload : discord.RawReactionActionEvent) -> bool:
             if member != atmember:
                 return False
 
-            idx = self.emojiindex(payload.emoji.name)
-            if idx is None:
+            emoji = payload.emoji.name
+            action_data = reaction_action(emoji)
+            if action_data is None:
                 return False
 
             v = self.AddStamp(payload.message_id)
             if v != 1:
                 return False
 
-            if idx == 0:
-                member.Finish(payload.message_id, False, 1 if member.IsOverkill() else 2)
+            action, result_overtime = action_data
+            if self.supabase is None:
+                self.RemoveStamp(payload.message_id)
+                return False
 
+            try:
+                result = await asyncio.to_thread(
+                    self.supabase.finish_clan_member_attack,
+                    member.id,
+                    member.name,
+                    member.mention,
+                    payload.message_id,
+                    action,
+                    result_overtime,
+                )
+            except Exception as exc:
+                self.RemoveStamp(payload.message_id)
+                self.TemporaryMessage(message.channel, f'攻撃の更新に失敗しました: {exc}')
+                return False
+
+            apply_rpc_result(member, result)
+            raw_history_id = result.get("history_id")
+            react.history_id = raw_history_id if isinstance(raw_history_id, int) else None
+            react.selected_emoji = emoji
+            react.action = action
+
+            if action == "complete":
                 await self.damagecontrol[boss - 1].Injure(member)
                 await self.damagecontrol[boss - 1].SendResult()
-            
-            if 1 <= idx and idx <= 8:
-                if 0 < overtime:
-                    member.Finish(payload.message_id, True, 1)
-                else:
-                    member.Overkill(payload.message_id, (idx + 1) * 10)
-
-                # await self.DamageControlDefeat(boss)
-
-                newlap = self.BossLap(boss) + 1
-                await self.SetBossLap(boss, newlap)
-
-                for m in self.members.values():
-                    if m.IsAttack() and m.boss == boss:
-                        m.reportlimit = datetime.datetime.now() + datetime.timedelta(minutes = 5)
-            
-            if idx == 9:
-                member.Cancel()
+            elif action == "cancel":
                 await self.damagecontrol[boss - 1].Remove(member)
                 await self.damagecontrol[boss - 1].SendResult()
+            else:
+                for attacking_member in self.members.values():
+                    if attacking_member.IsAttack() and attacking_member.boss == boss:
+                        attacking_member.reportlimit = datetime.datetime.now() + datetime.timedelta(minutes=5)
 
-            await self.RemoveReaction(message, 0 < overtime, message.guild.me)
+            if message.guild is not None:
+                await self.RemoveReaction(message, 0 < overtime, message.guild.me)
             return True
 
         async def removereaction(member : ClanMember, payload : discord.RawReactionActionEvent) -> bool:
             if member != atmember:
                 return False
 
-            idx = self.emojiindex(payload.emoji.name)
-            if idx is None:
+            if react.selected_emoji != payload.emoji.name or react.action is None:
                 return False
 
             v = self.RemoveStamp(payload.message_id)
             if v != 0:
                 return False
 
-            if member.attackmessage is not None and member.attackmessage.id == payload.message_id:
-                if idx == 9:
-                    member.Attack(boss, sortie)
-                    await self.AddReaction(message, 0 < overtime)
-                    return True
+            if member.attackmessage is None or member.attackmessage.id != payload.message_id:
+                return False
+            if self.supabase is None or self.clan_id is None:
+                return False
 
-                data = member.Revert(payload.message_id)
-                if data is not None:
-                    member.Attack(data.boss, data.sortie)
-                    if data.defeat:
-                        bossidx = data.boss % BOSSNUMBER
-                        self.UndefeatBoss(bossidx)
-                        self.TemporaryMessage(self.inputchannel, '巻き戻しました\nボスが違うときは、defeat/undefeat/setbossで調整してください')
-                    
-                    await self.AddReaction(message, 0 < overtime)
+            try:
+                if react.action == "cancel":
+                    await asyncio.to_thread(
+                        self.supabase.update_discord_clan_member_attack,
+                        self.clan_id,
+                        member.id,
+                        member.name,
+                        member.mention,
+                        boss,
+                        self.BossLap(boss),
+                        sortie,
+                        1 if overtime > 0 else 0,
+                        self.CurrentBaseDate(),
+                    )
+                    member.Attack(boss, sortie)
+                elif react.history_id is not None:
+                    result = await asyncio.to_thread(
+                        self.supabase.revert_clan_member_attack,
+                        member.id,
+                        react.history_id,
+                    )
+                    apply_rpc_result(member, result)
                 else:
-                    self.TemporaryMessage(self.inputchannel, '巻き戻しに失敗しました')
+                    raise RuntimeError("攻撃履歴が見つかりません")
+            except Exception as exc:
+                self.TemporaryMessage(message.channel, f'巻き戻しに失敗しました: {exc}')
                 return True
 
+            react.history_id = None
+            react.selected_emoji = None
+            react.action = None
+            await self.AddReaction(message, 0 < overtime)
+            return True
 
-        async def deletereaction(payload):
-            atmember.Revert(payload.message_id)
-            if atmember.attackmessage.id == payload.message_id:
+
+        async def deletereaction(payload: discord.RawMessageDeleteEvent) -> bool:
+            if atmember.attackmessage is not None and atmember.attackmessage.id == payload.message_id:
                 atmember.Cancel()
             return True
 
@@ -368,7 +432,8 @@ class Clan(MessageRouter):
         asyncio.ensure_future(self.SendMessage(channel, message))
 
     def CheckInputChannel(self, message : discord.Message):
-        if self.input_channel_name != "" and message.channel.name != self.input_channel_name:
+        channel_name = getattr(message.channel, "name", None)
+        if self.input_channel_name != "" and channel_name != self.input_channel_name:
             return True
             
         return False
@@ -425,11 +490,15 @@ class Clan(MessageRouter):
             return False
 
         try:
+            if not re.fullmatch(r'\d{1,2}', opt):
+                raise ValueError
             num = int(opt)
-            boss = (num if num < 10 else num // 10) + 1
+            boss = num if num < 10 else num // 10
             sortie = 0 if num < 10 else num % 10
 
-            if not constants.is_valid_boss(boss) or not constants.is_valid_sortie(sortie):
+            if not constants.is_valid_boss(boss) or (
+                len(opt) == 2 and not constants.is_valid_sortie(sortie)
+            ):
                 raise ValueError
         except ValueError:
             self.TemporaryMessage(message.channel, '「凸5」 のように発言してください')
@@ -444,7 +513,7 @@ class Clan(MessageRouter):
             sortie = cmember.SortieCount() + 1
         else:
             if cmember.attacktime[sortie - 1] is None or cmember.attacktime[sortie - 1] == 0:
-                self.TemporaryMessage(message.channel, '持ち越し凸がありません')
+                self.TemporaryMessage(message.channel, '持ち越しではありません')
                 return False
             overattack = 1
 
@@ -453,28 +522,44 @@ class Clan(MessageRouter):
             return False
 
         if self.supabase is not None and self.clan_id is not None:
-            await asyncio.to_thread(
-                self.supabase.update_discord_clan_member_attack,
-                self.clan_id,
-                member.id,
-                boss,
-                self.BossLap(boss),
-                sortie,
-                overattack,
-                self.CurrentBaseDate(),
-            )
+            try:
+                await asyncio.to_thread(
+                    self.supabase.update_discord_clan_member_attack,
+                    self.clan_id,
+                    member.id,
+                    member.display_name,
+                    member.mention,
+                    boss,
+                    self.BossLap(boss),
+                    sortie,
+                    overattack,
+                    self.CurrentBaseDate(),
+                )
+            except Exception as exc:
+                self.TemporaryMessage(message.channel, f'攻撃の開始に失敗しました: {exc}')
+                return False
 
         cmember.Attack(boss, sortie)
+        cmember.name = member.display_name
+        cmember.mention = member.mention
+        cmember.UpdateActive()
         if cmember.attackmessage is not None:
             self.messagereaction.pop(cmember.attackmessage.id, None)
         cmember.attackmessage = message
 
-        self.messagereaction[message.id] = self.CreateAttackReaction(cmember, message, boss, sortie, overtime)
+        overtime = cmember.attacktime[sortie - 1] if overattack else 0
+        self.messagereaction[message.id] = self.CreateAttackReaction(
+            cmember,
+            message,
+            boss,
+            sortie,
+            overtime or 0,
+        )
 
         if cmember.taskkill != 0:
             await message.add_reaction(self.taskkillmark)
 
-        await self.AddReaction(message, overattack, cmember)
+        await self.AddReaction(message, bool(overattack))
 
         return True
 
@@ -621,47 +706,6 @@ class Clan(MessageRouter):
     async def TaskKill(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
         return True
 
-    async def OnReactionAdd(self, reaction: discord.Reaction, user: discord.User) -> bool:
-        if user.bot:
-            return False
-
-        if reaction.message.id not in self.messagereaction:
-            return False
-
-        member = self.GetMember(user.id)
-        if member is None:
-            return False
-        if member.attackmessage is None or member.attackmessage.id != reaction.message.id:
-            return False
-
-        if reaction.emoji == self.taskkillmark:
-            member.taskkill = 1
-            await reaction.message.remove_reaction(reaction.emoji, user)
-            return True
-
-        if reaction.emoji not in self.emojis:
-            return False
-
-        idx = self.emojis.index(reaction.emoji)
-        if idx == 0:
-            idx = 10
-
-        boss = member.boss
-        sortie = member.sortie
-        overtime = member.attacktime[sortie - 1]
-
-        if idx == 10 and overtime == 0:
-            await reaction.message.remove_reaction(reaction.emoji, user)
-            return True
-
-        if idx != 10 and overtime != 0:
-            await reaction.message.remove_reaction(reaction.emoji, user)
-            return True
-
-        await self.AddReaction(reaction.message, idx < 10)
-
-        return True
-
     async def Defeat(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
         # optのbossindexのlapを増やし、supabaseのpublic.clansのbosslapsを更新
 
@@ -753,43 +797,19 @@ class Clan(MessageRouter):
 
         return True
 
-    async def OnReactionRemove(self, reaction: discord.Reaction, user: discord.User) -> bool:
-        if user.bot:
+    async def OnRawReactionAdd(self, payload: discord.RawReactionActionEvent) -> bool:
+        member = self.GetMember(payload.user_id)
+        reaction = self.messagereaction.get(payload.message_id)
+        if member is None or reaction is None:
             return False
+        return await reaction.addreaction(member, payload)
 
-        if reaction.message.id not in self.messagereaction:
+    async def OnRawReactionRemove(self, payload: discord.RawReactionActionEvent) -> bool:
+        member = self.GetMember(payload.user_id)
+        reaction = self.messagereaction.get(payload.message_id)
+        if member is None or reaction is None:
             return False
-
-        member = self.GetMember(user.id)
-        if member is None:
-            return False
-        if member.attackmessage is None or member.attackmessage.id != reaction.message.id:
-            return False
-
-        if reaction.emoji == self.taskkillmark:
-            member.taskkill = 0
-            return True
-
-        if reaction.emoji not in self.emojis:
-            return False
-
-        idx = self.emojis.index(reaction.emoji)
-        if idx == 0:
-            idx = 10
-
-        boss = member.boss
-        sortie = member.sortie
-        overtime = member.attacktime[sortie - 1]
-
-        if idx == 10 and overtime == 0:
-            return True
-
-        if idx != 10 and overtime != 0:
-            return True
-
-        await self.AddReaction(reaction.message, idx < 10)
-
-        return True
+        return await reaction.removereaction(member, payload)
 
     def MinLap(self) -> int:
         if self.supabase_data is None:
@@ -885,6 +905,9 @@ class Clan(MessageRouter):
             s += '**完凸 %d人/%d人(%d凸/%d凸)**\n' % (membernum - unfinish, membernum, self.TotalSortieCount(), membernum * constants.MAX_SORTIE)
         
         return s
+
+    def TotalSortieCount(self) -> int:
+        return sum(member.SortieCount() for member in self.members.values())
 
     def Status(self) -> str:
         s = ''

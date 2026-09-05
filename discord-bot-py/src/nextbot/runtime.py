@@ -211,6 +211,24 @@ class NextBotApp:
             clan = self._get_clan(message.guild)
             await clan.on_message(message, message.author, bot_user)
 
+        @self.client.event
+        async def on_raw_reaction_add(payload: discord.RawReactionActionEvent) -> None:
+            bot_user = self.client.user
+            if payload.guild_id is None or (bot_user is not None and payload.user_id == bot_user.id):
+                return
+            clan = self._clans.get(payload.guild_id)
+            if clan is not None:
+                await clan.OnRawReactionAdd(payload)
+
+        @self.client.event
+        async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent) -> None:
+            bot_user = self.client.user
+            if payload.guild_id is None or (bot_user is not None and payload.user_id == bot_user.id):
+                return
+            clan = self._clans.get(payload.guild_id)
+            if clan is not None:
+                await clan.OnRawReactionRemove(payload)
+
     async def _run_one_shot_callback(self) -> None:
         print("one-shot callback called")
 

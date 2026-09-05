@@ -150,11 +150,12 @@ Supabaseダッシュボードから取得します。
 
 1. `web-app-ts/.env.local` を設定
 2. Supabase SQL Editor で `document/supabase_createtable.sql` を実行し、5テーブルを作成
-3. web-app-ts を起動
-4. `/settings` を開いてログイン
-5. 表示名変更を保存し、`setting_userprofile` の対象 `googleUserId` 行が insert/update されることを確認
-6. 所持キャラ更新を保存し、`setting_user_owned_character` の対象 `googleUserId` 行が delete/insert されることを確認
-7. `/clanbattle-settings` を開いて保存し、`setting_clanbattle` の `id=0` 行が insert/update されることを確認
+3. Supabase SQL Editor で `document/supabase_complete_discord_attack.sql` を実行し、Discord の凸確定・巻き戻しRPCを作成
+4. web-app-ts を起動
+5. `/settings` を開いてログイン
+6. 表示名変更を保存し、`setting_userprofile` の対象 `googleUserId` 行が insert/update されることを確認
+7. 所持キャラ更新を保存し、`setting_user_owned_character` の対象 `googleUserId` 行が delete/insert されることを確認
+8. `/clanbattle-settings` を開いて保存し、`setting_clanbattle` の `id=0` 行が insert/update されることを確認
 
 ## 8. クラン画面 Realtime 更新設定（clanid 一致時）
 

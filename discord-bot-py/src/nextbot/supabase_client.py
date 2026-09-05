@@ -196,6 +196,8 @@ class SupabaseClient:
         self,
         clan_id: int,
         member_id: int,
+        name: str,
+        mention: str,
         boss: int,
         boss_lap: int,
         sortie: int,
@@ -236,10 +238,14 @@ class SupabaseClient:
             }
         )
         update_query = urlencode({"memberid": f"eq.{member_id}"})
+        now = datetime.now(timezone.utc).isoformat()
         payload = json.dumps(
             {
+                "name": name,
+                "mention": mention,
                 "attackdata": attackdata,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "lastactive": now,
+                "updated_at": now,
             }
         ).encode("utf-8")
         request = Request(
@@ -256,3 +262,56 @@ class SupabaseClient:
 
         with urlopen(request, timeout=10):
             pass
+
+    def _call_attack_rpc(self, function_name: str, parameters: dict[str, Any]) -> dict[str, Any]:
+        payload = json.dumps(parameters).encode("utf-8")
+        request = Request(
+            f"{self.url}/rest/v1/rpc/{function_name}",
+            data=payload,
+            method="POST",
+            headers={
+                "apikey": self.secret_key,
+                "Authorization": f"Bearer {self.secret_key}",
+                "Content-Type": "application/json",
+            },
+        )
+        with urlopen(request, timeout=10) as response:
+            raw_result: object = json.load(response)
+
+        if not isinstance(raw_result, dict):
+            raise RuntimeError(f"{function_name} returned an invalid response")
+        return cast(dict[str, Any], raw_result)
+
+    def finish_clan_member_attack(
+        self,
+        member_id: int,
+        name: str,
+        mention: str,
+        message_id: int,
+        action: str,
+        overtime: int,
+    ) -> dict[str, Any]:
+        return self._call_attack_rpc(
+            "finish_clan_member_attack",
+            {
+                "p_memberid": str(member_id),
+                "p_name": name,
+                "p_mention": mention,
+                "p_messageid": str(message_id),
+                "p_action": action,
+                "p_overtime": overtime,
+            },
+        )
+
+    def revert_clan_member_attack(
+        self,
+        member_id: int,
+        history_id: int,
+    ) -> dict[str, Any]:
+        return self._call_attack_rpc(
+            "revert_clan_member_attack",
+            {
+                "p_memberid": str(member_id),
+                "p_history_id": history_id,
+            },
+        )
