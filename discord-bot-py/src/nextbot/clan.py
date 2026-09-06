@@ -3,6 +3,7 @@ import asyncio
 import datetime
 import random
 import re
+import unicodedata
 from typing import Any, cast, Callable, Awaitable
 
 import discord
@@ -72,6 +73,7 @@ class Clan(MessageRouter):
         supabase: SupabaseClient | None = None,
         clan_id: int | None = None,
         yukalink_common_key: str = "",
+        guild: discord.Guild | None = None,
     ) -> None:
         super().__init__(
             input_channel_name,
@@ -83,6 +85,7 @@ class Clan(MessageRouter):
                 (["defeat"], self.Defeat),
                 (["undefeat"], self.Undefeat),
                 (['setboss'], self.SetBoss),
+                (['output'], self.Output),
                 (['yukalink'], self.Yukalink),
                 (["register", "登録"], self.RegisterClan),
                 (['memberdelete'], self.MemberDelete),
@@ -108,6 +111,7 @@ class Clan(MessageRouter):
         self.supabase = supabase
         self.clan_id = clan_id
         self.yukalink_common_key = yukalink_common_key
+        self.guild = guild
 
         self.outputchannel = None
         self.outputlock = 0                                     # メッセージ出力中のロックフラグ
@@ -115,6 +119,7 @@ class Clan(MessageRouter):
         self.damagecontrol = [DamageControl(self.members, bidx) for bidx in range(constants.BOSSNUMBER)]
                                                                 # ダメコン用
 
+        self.lastmessage: discord.Message | None = None
 
         # self.messagereaction : Dict[int, MessageReaction] = {}
                                                                 # スタンプを押したときの反応用
@@ -849,6 +854,9 @@ class Clan(MessageRouter):
 
         return True
 
+    async def Output(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
+        return True
+
     async def OnRawReactionAdd(self, payload: discord.RawReactionActionEvent) -> bool:
         member = self.GetMember(payload.user_id)
         reaction = self.messagereaction.get(payload.message_id)
@@ -979,23 +987,70 @@ class Clan(MessageRouter):
         if len(new_bosslaps) == 0:
             return
 
+        change  = False
         for boss in range(len(new_bosslaps)):
             if old_bosslaps[boss] != new_bosslaps[boss]:
                 # Handle the change in bosslaps here
                 # self.ChangeBoss(boss + 1)
-                pass
+                change = True
+
+        if change and self.guild is not None:
+            await self.OnMessageHandled(self.guild)
 
         self.supabase_data = new_data
 
     async def OnSupabaseUpdateClanMembers(self, old_data: dict[str, Any], new_data: dict[str, Any]) -> None:
-        self.ApplySupabaseMember(new_data)
+        if new_data:
+            raw_memberid = new_data.get("memberid")
+            if not isinstance(raw_memberid, (int, str)):
+                return
+            try:
+                memberid = int(raw_memberid)
+            except (TypeError, ValueError):
+                return
+            member = self.members.get(memberid)
+            old_state = None if member is None else (
+                member.name,
+                member.mention,
+                member.taskkill,
+                tuple(member.attacktime),
+                member.boss,
+                member.sortie,
+            )
+            self.ApplySupabaseMember(new_data)
+            member = self.members.get(memberid)
+            new_state = None if member is None else (
+                member.name,
+                member.mention,
+                member.taskkill,
+                tuple(member.attacktime),
+                member.boss,
+                member.sortie,
+            )
+            if old_state != new_state and self.guild is not None:
+                await self.OnMessageHandled(self.guild)
+            return
+
+        raw_memberid = old_data.get("memberid")
+        if isinstance(raw_memberid, (int, str)):
+            try:
+                removed = self.members.pop(int(raw_memberid), None)
+            except (TypeError, ValueError):
+                return
+            if removed is not None and self.guild is not None:
+                await self.OnMessageHandled(self.guild)
 
 
     async def OnSupabaseUpdateClanBossState(self, old_data: dict[str, Any], new_data: dict[str, Any]) -> None:
         self.supabase_bossstate = new_data
 
-    def FindChannel(self, guild : discord.Guild, name : str) -> discord.TextChannel | None:
-        return discord.utils.get(guild.text_channels, name=name)
+    def FindChannel(self, guild: discord.Guild, name: str) -> discord.TextChannel | None:
+        normalized_name = unicodedata.normalize("NFKC", name).strip()
+        for channel in guild.text_channels:
+            channel_name = unicodedata.normalize("NFKC", channel.name).strip()
+            if channel_name == normalized_name:
+                return channel
+        return None
 
     async def OnMessageHandled(self, guild: discord.Guild) -> None:
         if self.outputchannel is None:
@@ -1017,7 +1072,14 @@ class Clan(MessageRouter):
             try:
                 self.outputlock = 2
                 self.lastmessage = await self.outputchannel.send(self.Status())
-            except discord.errors.Forbidden:
+            except discord.errors.Forbidden as exc:
+                permissions = self.outputchannel.permissions_for(guild.me)
+                print(
+                    "Forbidden when sending to "
+                    f"#{self.outputchannel.name}: status={exc.status}, code={exc.code}, "
+                    f"message={exc.text}, view_channel={getattr(permissions, 'view_channel', None)}, "
+                    f"send_messages={getattr(permissions, 'send_messages', None)}"
+                )
                 self.outputchannel = None
             finally:
                 self.outputlock = 0

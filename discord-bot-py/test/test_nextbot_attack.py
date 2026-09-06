@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from src.nextbot.clan import Clan
 from src.nextbot.clan_member import ClanMember
+from src.nextbot.runtime import NextBotApp
 
 
 class AttackTests(unittest.IsolatedAsyncioTestCase):
@@ -212,6 +213,45 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
             123, 456, "old name", "<@456>", 5, 1, 2, 1, clan.CurrentBaseDate()
         )
         clan.AddReaction.assert_awaited_once_with(message, True)
+
+    def test_find_channel_normalizes_visible_name(self) -> None:
+        clan = Clan()
+        channel = types.SimpleNamespace(name="\u3000状況報告\u3000")
+        guild = types.SimpleNamespace(text_channels=[channel])
+
+        result = clan.FindChannel(guild, "状況報告")
+
+        self.assertIs(result, channel)
+
+    async def test_clan_member_realtime_insert_and_delete(self) -> None:
+        guild = MagicMock()
+        clan = Clan(guild=guild)
+        clan.OnMessageHandled = AsyncMock()
+        row = {"clanid": "123", "memberid": "456", "name": "member"}
+
+        await clan.OnSupabaseUpdateClanMembers({}, row)
+        self.assertIn(456, clan.members)
+        clan.OnMessageHandled.assert_awaited_once_with(guild)
+
+        clan.OnMessageHandled.reset_mock()
+        await clan.OnSupabaseUpdateClanMembers(row, {})
+        self.assertNotIn(456, clan.members)
+        clan.OnMessageHandled.assert_awaited_once_with(guild)
+
+    def test_delete_realtime_payload_uses_old_record_clan_id(self) -> None:
+        app = NextBotApp.__new__(NextBotApp)
+        clan = Clan()
+        app._clans = {123: clan}
+        payload = {
+            "data": {
+                "record": None,
+                "old_record": {"clanid": "123", "memberid": "456"},
+            }
+        }
+
+        result = app._get_realtime_clan(payload)
+
+        self.assertEqual(result, (clan, payload["data"]["old_record"], {}))
 
 
 if __name__ == "__main__":

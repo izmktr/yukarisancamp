@@ -46,6 +46,7 @@ class NextBotApp:
                 self.supabase,
                 guild.id,
                 self.yukalink_common_key,
+                guild,
             )
             self._clans[guild.id] = clan
         clan.clanbattle_setting = self.clanbattle_setting
@@ -75,12 +76,12 @@ class NextBotApp:
 
         data = cast(dict[str, object], raw_data)
         raw_record: object = data.get("record")
-        if not isinstance(raw_record, dict):
-            return None
-
-        new_data = cast(dict[str, Any], raw_record)
         raw_old_record: object = data.get("old_record")
+        new_data = cast(dict[str, Any], raw_record) if isinstance(raw_record, dict) else {}
         old_data = cast(dict[str, Any], raw_old_record) if isinstance(raw_old_record, dict) else {}
+
+        if not new_data and not old_data:
+            return None
 
         clan_id = new_data.get("clanid", old_data.get("clanid"))
         if not isinstance(clan_id, (int, str)):
@@ -140,7 +141,7 @@ class NextBotApp:
             table="clans",
         )
         channel.on_postgres_changes(
-            "UPDATE",
+            "*",
             self._schedule_realtime_clan_members_update,
             schema="public",
             table="clan_members",
