@@ -780,6 +780,10 @@
                     throw new Error(payload && payload.error ? payload.error : 'Failed to update attack message');
                 }
 
+                if (messageInput) {
+                    messageInput.defaultValue = messageInput.value;
+                    messageInput.dispatchEvent(new CustomEvent('clan-attack-message-saved'));
+                }
                 setStatus('送信しました。', 'success');
             } catch (error) {
                 console.error('攻撃中メッセージの送信に失敗しました:', error);
@@ -1046,14 +1050,30 @@
     function initializeClanRealtimeSubscription() {
         const clanIdInput = document.getElementById('clan-id');
         const clanId = clanIdInput ? String(clanIdInput.value || '').trim() : '';
+        const messageInput = document.getElementById('clan-attack-message');
         let isReloading = false;
+        let isReloadPending = false;
+
+        const hasUnsavedMessage = () => (
+            !!messageInput && messageInput.value !== messageInput.defaultValue
+        );
 
         const reloadPage = () => {
             if (isReloading) {
                 return;
             }
+            if (hasUnsavedMessage()) {
+                isReloadPending = true;
+                return;
+            }
             isReloading = true;
             window.location.reload();
+        };
+
+        const reloadPendingPage = () => {
+            if (isReloadPending && !hasUnsavedMessage()) {
+                reloadPage();
+            }
         };
 
         if (!/^(?:\d+|w\d{8})$/.test(clanId) || !window.__SUPABASE_PUBLIC_CONFIG__) {
@@ -1081,6 +1101,11 @@
         if (!window.supabase || typeof window.supabase.createClient !== 'function') {
             console.error('Supabase Realtime を開始できません: Supabaseクライアントの読み込みに失敗しました。');
             return;
+        }
+
+        if (messageInput) {
+            messageInput.addEventListener('input', reloadPendingPage);
+            messageInput.addEventListener('clan-attack-message-saved', reloadPendingPage);
         }
 
         const tryApplyActiveBossHpRealtimeUpdate = (row) => {
@@ -1169,6 +1194,10 @@
                 });
 
             window.addEventListener('beforeunload', () => {
+                if (messageInput) {
+                    messageInput.removeEventListener('input', reloadPendingPage);
+                    messageInput.removeEventListener('clan-attack-message-saved', reloadPendingPage);
+                }
                 client.removeChannel(channel);
             });
         } catch (error) {
