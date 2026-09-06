@@ -973,6 +973,18 @@ class Clan(MessageRouter):
         return s
     
     async def OnSupabaseUpdateClans(self, old_data: dict[str, Any], new_data: dict[str, Any]) -> None:
+        old_bosslaps : list[int] = self.supabase_data.get('bosslaps', []) if self.supabase_data else []
+        new_bosslaps = new_data.get('bosslaps', [])
+
+        if len(new_bosslaps) == 0:
+            return
+
+        for boss in range(len(new_bosslaps)):
+            if old_bosslaps[boss] != new_bosslaps[boss]:
+                # Handle the change in bosslaps here
+                # self.ChangeBoss(boss + 1)
+                pass
+
         self.supabase_data = new_data
 
     async def OnSupabaseUpdateClanMembers(self, old_data: dict[str, Any], new_data: dict[str, Any]) -> None:

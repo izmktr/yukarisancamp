@@ -114,6 +114,15 @@ class NextBotApp:
             clan, old_data, new_data = result
             await clan.OnSupabaseUpdateClanBossState(old_data, new_data)
 
+    def _schedule_realtime_clans_update(self, payload: dict[str, Any]) -> None:
+        asyncio.create_task(self._on_realtime_clans_update(payload))
+
+    def _schedule_realtime_clan_members_update(self, payload: dict[str, Any]) -> None:
+        asyncio.create_task(self._on_realtime_clan_members_update(payload))
+
+    def _schedule_realtime_clan_boss_state_update(self, payload: dict[str, Any]) -> None:
+        asyncio.create_task(self._on_realtime_clan_boss_state_update(payload))
+
     async def _subscribe_supabase_updates(self) -> None:
         if self._realtime_channel is not None:
             return
@@ -126,19 +135,19 @@ class NextBotApp:
         channel: Any = realtime_client.channel("nextbot-database-updates")
         channel.on_postgres_changes(
             "UPDATE",
-            self._on_realtime_clans_update,
+            self._schedule_realtime_clans_update,
             schema="public",
             table="clans",
         )
         channel.on_postgres_changes(
             "UPDATE",
-            self._on_realtime_clan_members_update,
+            self._schedule_realtime_clan_members_update,
             schema="public",
             table="clan_members",
         )
         channel.on_postgres_changes(
             "UPDATE",
-            self._on_realtime_clan_boss_state_update,
+            self._schedule_realtime_clan_boss_state_update,
             schema="public",
             table="clan_boss_state",
         )

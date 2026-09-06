@@ -100,6 +100,7 @@ create table if not exists public.clans (
   clanid text not null,
   name text not null,
   bosslaps integer[] not null,
+  discord_data jsonb not null default '{}'::jsonb,
   "createdAt" timestamptz not null,
   updated_at timestamptz not null default now(),
   primary key (clanid),
