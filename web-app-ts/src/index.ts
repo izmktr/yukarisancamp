@@ -2481,7 +2481,50 @@ app.post('/api/clan/attack/finish', ensureDiscordServerLinked, express.json(), a
       });
     }
 
+    const discordServer = getSessionDiscordServer(req);
+    const clan = await supabaseSelectClanByDiscordServer(config, discordServer);
+    if (!clan) {
+      return res.status(404).json({ error: 'Clan was not found' });
+    }
+
+    const clanBattleState = await ensureClanBattleStateFromSupabase(config);
+    const bossIndex = currentMember.attackboss;
+    const settingMaxHp = Number(clanBattleState.bossHp[bossIndex - 1]);
+    if ((action === 'complete' || action === 'defeat')
+      && (!Number.isFinite(settingMaxHp) || settingMaxHp < 0)) {
+      return res.status(409).json({ error: 'Boss HP is not configured' });
+    }
+
+    let nextBossHp: number | null = null;
+    const normalizedMaxHp = Math.trunc(settingMaxHp);
+    if (action === 'complete') {
+      const bossStates = await supabaseSelectClanBossStates(
+        config,
+        clan.clanid,
+        clanBattleState.yearmonth
+      );
+      const targetState = bossStates.find((row) => row.boss_index === bossIndex) || null;
+      const currentHp = targetState ? targetState.current_hp : normalizedMaxHp;
+      const damage = Number.isFinite(currentMember.damage) && currentMember.damage !== null
+        ? Math.max(0, Math.trunc(currentMember.damage))
+        : 0;
+      nextBossHp = Math.max(0, currentHp - damage);
+    } else if (action === 'defeat') {
+      nextBossHp = normalizedMaxHp;
+    }
+
     await supabaseFinishClanMemberAttack(config, currentMember, action, overtime);
+    if (nextBossHp !== null) {
+      await supabaseUpsertClanBossStateCurrentHp(
+        config,
+        clan.clanid,
+        clanBattleState.yearmonth,
+        bossIndex,
+        nextBossHp,
+        normalizedMaxHp,
+        discordId
+      );
+    }
     return res.json({ success: true });
   } catch (error) {
     console.error('Failed to finish clan member attack:', error);
