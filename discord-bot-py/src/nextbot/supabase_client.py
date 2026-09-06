@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from typing import Any, cast
+from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -136,8 +137,9 @@ class SupabaseClient:
             member_data["role"] = role
 
         payload = json.dumps(member_data).encode("utf-8")
+        query = urlencode({"on_conflict": "clanid,memberid"})
         request = Request(
-            f"{self.url}/rest/v1/clan_members?on_conflict=memberid",
+            f"{self.url}/rest/v1/clan_members?{query}",
             data=payload,
             method="POST",
             headers={
@@ -148,8 +150,37 @@ class SupabaseClient:
             },
         )
 
-        with urlopen(request, timeout=10):
-            pass
+        try:
+            with urlopen(request, timeout=10):
+                pass
+        except HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(
+                f"Supabase clan member registration failed: {exc.code} {detail}"
+            ) from exc
+
+    def delete_discord_clan_member(self, clan_id: int, member_id: int) -> bool:
+        query = urlencode(
+            {
+                "clanid": f"eq.{clan_id}",
+                "memberid": f"eq.{member_id}",
+            }
+        )
+        request = Request(
+            f"{self.url}/rest/v1/clan_members?{query}",
+            method="DELETE",
+            headers={
+                "apikey": self.secret_key,
+                "Authorization": f"Bearer {self.secret_key}",
+                "Accept": "application/json",
+                "Prefer": "return=representation",
+            },
+        )
+
+        with urlopen(request, timeout=10) as response:
+            raw_rows: object = json.load(response)
+
+        return isinstance(raw_rows, list) and len(cast(list[object], raw_rows)) > 0
 
     @staticmethod
     def normalize_attackdata(raw: object) -> dict[str, Any]:

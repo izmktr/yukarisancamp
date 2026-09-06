@@ -92,7 +92,9 @@ alter table public.clans drop constraint if exists clans_pkey;
 alter table public.clans add primary key (clanid);
 
 alter table public.clan_members drop constraint if exists clan_members_pkey;
-alter table public.clan_members add primary key (memberid);
+alter table public.clan_members add primary key (clanid, memberid);
+create index if not exists clan_members_memberid_idx
+  on public.clan_members (memberid);
 
 alter table public.clan_boss_state drop constraint if exists clan_boss_state_pkey;
 alter table public.clan_boss_state add primary key (clanid, yearmonth, boss_index);

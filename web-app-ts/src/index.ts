@@ -1491,8 +1491,9 @@ async function supabaseStartClanMemberAttack(
 ): Promise<void> {
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLAN_MEMBERS_TABLE);
   const query = new URLSearchParams({
+    clanid: `eq.${member.clanid}`,
     memberid: `eq.${member.memberid}`,
-    'attackdata->>boss': 'eq.0'
+    or: '(attackdata->>boss.eq.0,attackdata->>boss.is.null)'
   });
 
   const attacktime = [...member.attacktime];
@@ -1557,6 +1558,9 @@ async function supabaseFinishClanMemberAttack(
     },
     body: JSON.stringify({
       p_memberid: member.memberid,
+      p_name: member.name,
+      p_mention: member.mention,
+      p_messageid: null,
       p_action: action,
       p_overtime: overtime
     })

@@ -634,15 +634,19 @@ class Clan(MessageRouter):
         admin = not self.CheckNotAdministrator(message)
 
         # supabaseのpublic.clan_membersに自分自身の情報を登録
-        await asyncio.to_thread(
-            self.supabase.insert_discord_clan_member_if_missing,
-            self.clan_id,
-            member.id,
-            member.display_name,
-            member.mention,
-            self.CurrentBaseDate(),
-            "leader" if admin else "member",
-        )
+        try:
+            await asyncio.to_thread(
+                self.supabase.insert_discord_clan_member_if_missing,
+                self.clan_id,
+                member.id,
+                member.display_name,
+                member.mention,
+                self.CurrentBaseDate(),
+                "leader" if admin else "member",
+            )
+        except Exception as exc:
+            self.TemporaryMessage(message.channel, f'クラン登録に失敗しました: {exc}')
+            return False
         await self.ReloadSupabaseMembers()
 
         self.TemporaryMessage(message.channel, text)
@@ -678,23 +682,71 @@ class Clan(MessageRouter):
         )
         await self.ReloadSupabaseMembers()
 
+        clan_member = self.members.get(member.id)
+        if clan_member is None:
+            clan_member = ClanMember(member.id)
+            self.members[member.id] = clan_member
+        clan_member.name = member.display_name
+        clan_member.mention = member.mention
+        clan_member.UpdateActive()
+
+        self.TemporaryMessage(message.channel, 'クランに登録しました')
+
         return False
 
+    def FindMember(self, name: str) -> ClanMember | None:
+        for clan_member in self.members.values():
+            if clan_member.name == name:
+                return clan_member
+        return None
+
     async def MemberDelete(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
-        if self.CheckNotAdministrator(message):
+        if self.CheckNotAdministrator(message) or self.supabase is None or self.clan_id is None:
             return False
 
-        result = self.DeleteMember(opt)
-        if result is not None:
-            self.TemporaryMessage(message.channel, '%s を消しました' % result.name)
+        clan_member = self.FindMember(opt)
+        if clan_member is not None:
+            try:
+                deleted = await asyncio.to_thread(
+                    self.supabase.delete_discord_clan_member,
+                    self.clan_id,
+                    clan_member.id,
+                )
+            except Exception as exc:
+                self.TemporaryMessage(message.channel, f'メンバーの削除に失敗しました: {exc}')
+                return False
+
+            if not deleted:
+                self.TemporaryMessage(message.channel, 'Databaseにメンバーが見つかりません')
+                return False
+
+            del self.members[clan_member.id]
+            self.TemporaryMessage(message.channel, '%s を消しました' % clan_member.name)
             return True
-        else:
-            self.TemporaryMessage(message.channel, 'メンバーがいません')
-            return False
+
+        # メンバーが見つからなかった場合の処理
+
+        self.TemporaryMessage(message.channel, 'メンバーがいません')
+        return False
 
     async def MemberReset(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
-        
+        # 自分がメンバーに入っているか
+        clan_member = self.FindMember(member.display_name)
+        if clan_member is None:
+            self.TemporaryMessage(message.channel, 'あなたはクランのメンバーではありません')
+            return False
+
+        # メンバーの情報をリセット
+        clan_member.Reset()
+
+        # supabaseを初期化
+
+        # 今日のattack_historiesも削除
+
+
+        self.TemporaryMessage(message.channel, 'メンバー情報をデータベースに更新しました')
         return True
+
     async def DailyReset(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
         return True
     async def MonthlyReset(self, message: discord.Message, member: discord.Member, opt: str) -> bool:

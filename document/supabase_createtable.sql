@@ -118,8 +118,11 @@ create table if not exists public.clan_members (
   lastactive timestamptz not null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  primary key (memberid)
+  primary key (clanid, memberid)
 );
+
+create index if not exists clan_members_memberid_idx
+  on public.clan_members (memberid);
 
 create table if not exists public.clan_boss_state (
   clanid text not null,
