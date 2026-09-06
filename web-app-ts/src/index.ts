@@ -1689,6 +1689,54 @@ async function supabaseUpdateAttackHistory(
   }
 }
 
+function buildAttacktimeFromHistories(histories: AttackHistoryRow[]): Array<number | null> {
+  return Array.from({ length: 3 }, (_, index) => {
+    const sortieHistories = histories.filter((history) => history.sortie === index + 1);
+    if (sortieHistories.length === 0) {
+      return null;
+    }
+    if (sortieHistories.length === 1) {
+      return sortieHistories[0].overtime;
+    }
+    return 0;
+  });
+}
+
+async function supabaseUpdateClanMemberAttacktime(
+  config: SupabaseConfig,
+  member: ClanMemberRow,
+  attacktime: Array<number | null>
+): Promise<void> {
+  const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLAN_MEMBERS_TABLE);
+  const query = new URLSearchParams({
+    clanid: `eq.${member.clanid}`,
+    memberid: `eq.${member.memberid}`
+  });
+  const response = await fetch(`${endpointUrl}?${query.toString()}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: config.secretKey,
+      Authorization: `Bearer ${config.secretKey}`,
+      Prefer: 'return=representation'
+    },
+    body: JSON.stringify({
+      attacktime,
+      updated_at: new Date().toISOString()
+    })
+  });
+
+  if (!response.ok) {
+    const responseText = await response.text();
+    throw new Error(`Supabase update clan member attacktime failed: ${response.status} ${responseText}`);
+  }
+
+  const rows = await response.json() as unknown;
+  if (!Array.isArray(rows) || rows.length === 0) {
+    throw new Error('Clan member was not found for attacktime update');
+  }
+}
+
 async function supabaseDeleteAttackHistory(
   config: SupabaseConfig,
   member: ClanMemberRow,
@@ -2715,6 +2763,9 @@ app.post('/api/clan/attack-history/save', ensureDiscordServerLinked, express.jso
     for (const history of histories as AttackHistoryEditInput[]) {
       await supabaseUpdateAttackHistory(config, currentMember, day, history);
     }
+    const updatedHistories = await supabaseSelectAttackHistories(config, currentMember, day);
+    const attacktime = buildAttacktimeFromHistories(updatedHistories);
+    await supabaseUpdateClanMemberAttacktime(config, currentMember, attacktime);
     return res.json({ success: true });
   } catch (error) {
     console.error('Failed to update attack histories:', error);
@@ -2769,6 +2820,9 @@ app.post('/api/clan/attack-history/delete', ensureDiscordServerLinked, express.j
     }
 
     await supabaseDeleteAttackHistory(config, currentMember, day, historyId);
+  const updatedHistories = await supabaseSelectAttackHistories(config, currentMember, day);
+  const attacktime = buildAttacktimeFromHistories(updatedHistories);
+  await supabaseUpdateClanMemberAttacktime(config, currentMember, attacktime);
     return res.json({ success: true });
   } catch (error) {
     console.error('Failed to delete attack history:', error);
