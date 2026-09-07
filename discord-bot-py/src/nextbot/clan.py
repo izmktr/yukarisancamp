@@ -1198,3 +1198,82 @@ class Clan(MessageRouter):
             finally:
                 self.outputlock = 0
 
+    async def on_message(
+        self,
+        message: discord.Message,
+        member: discord.Member,
+        bot_user: discord.ClientUser | None,
+    ) -> bool:
+        handled = await super().on_message(message, member, bot_user)
+
+        if isinstance(message.channel, discord.TextChannel) and any(
+            damage_control.channel == message.channel
+            for damage_control in self.damagecontrol
+        ):
+            await self.OnMessageDamageChannel(message, member)
+
+        return handled
+
+    async def OnMessageDamageChannel(self,  message: discord.Message, member: discord.Member) -> None:
+        dc = await self.DamageChannelMessage(message, member)
+        if dc is not None:
+            await dc.SendResult()
+
+    async def DamageChannelMessage(self,  message: discord.Message, member: discord.Member) -> DamageControl | None:
+        # 残りHP入力
+        m = re.match(r'([@＠])([\s　]*)(\d+)', message.content)
+        if m:
+            dclist = [dc for dc in self.damagecontrol if dc.channel == message.channel]
+            if len(dclist) == 1:
+                dc = dclist[0]
+            else:
+                actlist = [m for m in dclist if m.active]
+                if len(actlist) == 1:
+                    dc = actlist[0]
+                else:
+                    self.TemporaryMessage(message.channel, 'ボスが確定しません')
+                    return None
+
+            remainhp = int(m.group(3))
+            dc.RemainHp(remainhp)
+            return dc
+
+        cmember = self.GetMember(member.id)
+        if cmember is None:
+            return None
+
+        boss = cmember.AttackBoss()
+        if boss == 0:
+            return None
+        if self.damagecontrol[boss - 1].channel != message.channel:
+            return None
+
+
+    # ダメージ入力
+        if cmember.IsAttack():
+            dc = self.damagecontrol[boss - 1]
+            if dc.channel is None or dc.channel != message.channel:
+                return None
+
+            m = re.match(r'(\d+[sS秒ｓＳ])([\s　]*)(\d+)([^\d]*.*)', message.content)
+            if m:
+                damage = int(m.group(3))
+                comment = str.strip(m.group(1) + m.group(4))
+                dc.Damage(cmember, damage, comment)
+                return dc
+
+            m = re.match(r'(\d\d\d+)([^\d]*.*)', message.content)
+            if m:
+                damage = int(m.group(1))
+                comment = str.strip(m.group(2))
+                dc.Damage(cmember, damage, comment)
+                return dc
+
+            m = re.match(r'([xXｘＸ×])([\s　]*)([\d]*)([^\d]*.*)', message.content)
+            if m:
+                damage = int(m.group(3)) if 0 < len(m.group(3)) else 0
+                comment = m.group(4)
+                dc.Damage(cmember, damage, comment, 1)
+                return dc
+        return None
+

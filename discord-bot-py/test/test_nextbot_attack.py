@@ -369,6 +369,43 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         guild.get_channel.assert_any_call(111)
         guild.get_channel.assert_any_call(999)
 
+    async def test_on_message_calls_damage_handler_for_configured_channel(self) -> None:
+        clan = Clan(input_channel_name="凸報告")
+        channel = MagicMock(spec=discord.TextChannel)
+        clan.damagecontrol[0].SetChannel(channel)
+        clan.OnMessageDamageChannel = AsyncMock()
+        message = MagicMock(spec=discord.Message)
+        message.channel = channel
+        message.content = "1000"
+        message.guild = MagicMock(spec=discord.Guild)
+        message.raw_mentions = []
+        message.raw_role_mentions = []
+        member = MagicMock(spec=discord.Member)
+
+        handled = await clan.on_message(message, member, None)
+
+        self.assertFalse(handled)
+        clan.OnMessageDamageChannel.assert_awaited_once_with(message, member)
+
+    async def test_on_message_ignores_unconfigured_channel_for_damage_handler(self) -> None:
+        clan = Clan(input_channel_name="凸報告")
+        configured_channel = MagicMock(spec=discord.TextChannel)
+        other_channel = MagicMock(spec=discord.TextChannel)
+        clan.damagecontrol[0].SetChannel(configured_channel)
+        clan.OnMessageDamageChannel = AsyncMock()
+        message = MagicMock(spec=discord.Message)
+        message.channel = other_channel
+        message.content = "1000"
+        message.guild = MagicMock(spec=discord.Guild)
+        message.raw_mentions = []
+        message.raw_role_mentions = []
+        member = MagicMock(spec=discord.Member)
+
+        handled = await clan.on_message(message, member, None)
+
+        self.assertFalse(handled)
+        clan.OnMessageDamageChannel.assert_not_awaited()
+
     async def test_register_guild_applies_loaded_discord_data(self) -> None:
         app = NextBotApp.__new__(NextBotApp)
         app.supabase = MagicMock()
