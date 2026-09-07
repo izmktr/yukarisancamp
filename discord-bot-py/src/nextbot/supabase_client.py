@@ -113,6 +113,28 @@ class SupabaseClient:
         with urlopen(request, timeout=10):
             pass
 
+    def update_clan_discord_data(
+        self,
+        clan_id: int,
+        discord_data: dict[str, Any],
+    ) -> None:
+        query = urlencode({"clanid": f"eq.{clan_id}"})
+        payload = json.dumps({"discord_data": discord_data}).encode("utf-8")
+        request = Request(
+            f"{self.url}/rest/v1/clans?{query}",
+            data=payload,
+            method="PATCH",
+            headers={
+                "apikey": self.secret_key,
+                "Authorization": f"Bearer {self.secret_key}",
+                "Content-Type": "application/json",
+                "Prefer": "return=minimal",
+            },
+        )
+
+        with urlopen(request, timeout=10):
+            pass
+
     def insert_discord_clan_member_if_missing(
         self,
         clan_id: int,

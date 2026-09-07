@@ -766,6 +766,45 @@ class Clan(MessageRouter):
         self.TemporaryMessage(message.channel, '設定を再読み込みしました')
         return True
 
+    def DiscordData(self) -> dict[str, Any]:
+        return {
+            'damagecontrol': [dc.ChannelId() for dc in self.damagecontrol]
+        }
+
+    def ApplyDiscordData(self, raw_discord_data: object) -> None:
+        discord_data = (
+            cast(dict[str, object], raw_discord_data)
+            if isinstance(raw_discord_data, dict)
+            else {}
+        )
+        raw_channel_ids = discord_data.get('damagecontrol')
+        channel_ids = (
+            cast(list[object], raw_channel_ids)
+            if isinstance(raw_channel_ids, list)
+            else []
+        )
+
+        for index, damage_control in enumerate(self.damagecontrol):
+            channel_id = channel_ids[index] if index < len(channel_ids) else 0
+            if self.guild is None or not isinstance(channel_id, int) or channel_id == 0:
+                damage_control.SetChannel(None)
+                continue
+
+            channel = self.guild.get_channel(channel_id)
+            damage_control.SetChannel(
+                channel if isinstance(channel, discord.TextChannel) else None
+            )
+
+    async def SaveDiscordData(self) -> None:
+        if self.supabase is None or self.clan_id is None:
+            return
+
+        await asyncio.to_thread(
+            self.supabase.update_clan_discord_data,
+            self.clan_id,
+            self.DiscordData(),
+        )
+
     async def DamageChannel(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
         try:
             if not isinstance(message.channel, discord.TextChannel):
@@ -786,19 +825,21 @@ class Clan(MessageRouter):
             if opt == 'all':
                 for dc in self.damagecontrol:
                     dc.SetChannel(message.channel)
+                await self.SaveDiscordData()
                 self.TemporaryMessage(message.channel, 'チャンネルを設定しました')
                 return True
 
             if opt == 'reset':
                 for dc in self.damagecontrol:
                     dc.SetChannel(None)
+                await self.SaveDiscordData()
                 self.TemporaryMessage(message.channel, 'チャンネルをリセットしました')
                 return False
 
             bidx = int(opt)
             if constants.is_valid_boss(bidx):
                 self.damagecontrol[bidx - 1].SetChannel(message.channel)
-
+                await self.SaveDiscordData()
                 self.TemporaryMessage(message.channel, 'チャンネルを設定しました')
                 return True
             else:

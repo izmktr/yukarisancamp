@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import datetime
+import json
 import types
 import unittest
 from typing import Any, cast
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
 
@@ -12,6 +13,7 @@ from src.nextbot import constants
 from src.nextbot.clan import Clan
 from src.nextbot.clan_member import ClanMember
 from src.nextbot.runtime import NextBotApp
+from src.nextbot.supabase_client import SupabaseClient
 
 
 class AttackTests(unittest.IsolatedAsyncioTestCase):
@@ -317,6 +319,76 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
 
         clan_member.taskkill = "2026-09-08"
         self.assertEqual(clan_member.DecoName("nT", "2026-09-08"), "member[tk]")
+
+    async def test_save_discord_data_uses_damage_control_channel_ids(self) -> None:
+        clan, _, supabase = self.create_clan()
+        channel = cast(discord.TextChannel, types.SimpleNamespace(id=987))
+        clan.damagecontrol[1].SetChannel(channel)
+
+        await clan.SaveDiscordData()
+
+        supabase.update_clan_discord_data.assert_called_once_with(
+            123,
+            {"damagecontrol": [0, 987, 0, 0, 0]},
+        )
+
+    def test_update_clan_discord_data_patches_jsonb_column(self) -> None:
+        client = SupabaseClient("https://example.supabase.co", "secret")
+
+        with patch("src.nextbot.supabase_client.urlopen") as mocked_urlopen:
+            client.update_clan_discord_data(
+                123,
+                {"damagecontrol": [0, 987, 0, 0, 0]},
+            )
+
+        request = mocked_urlopen.call_args.args[0]
+        self.assertEqual(request.method, "PATCH")
+        self.assertIn("clanid=eq.123", request.full_url)
+        self.assertEqual(
+            json.loads(request.data),
+            {"discord_data": {"damagecontrol": [0, 987, 0, 0, 0]}},
+        )
+
+    def test_apply_discord_data_restores_damage_control_channels(self) -> None:
+        guild = MagicMock(spec=discord.Guild)
+        text_channel = MagicMock(spec=discord.TextChannel)
+        voice_channel = MagicMock(spec=discord.VoiceChannel)
+        guild.get_channel.side_effect = {
+            111: text_channel,
+            222: voice_channel,
+        }.get
+        clan = Clan(guild=guild)
+
+        clan.ApplyDiscordData({"damagecontrol": [111, 0, 999, 222, 111]})
+
+        self.assertIs(clan.damagecontrol[0].channel, text_channel)
+        self.assertIsNone(clan.damagecontrol[1].channel)
+        self.assertIsNone(clan.damagecontrol[2].channel)
+        self.assertIsNone(clan.damagecontrol[3].channel)
+        self.assertIs(clan.damagecontrol[4].channel, text_channel)
+        guild.get_channel.assert_any_call(111)
+        guild.get_channel.assert_any_call(999)
+
+    async def test_register_guild_applies_loaded_discord_data(self) -> None:
+        app = NextBotApp.__new__(NextBotApp)
+        app.supabase = MagicMock()
+        app.supabase.register_clan_if_missing.return_value = False
+        supabase_data = {
+            "clanid": "123",
+            "discord_data": {"damagecontrol": [111, 0, 0, 0, 0]},
+        }
+        app.supabase.get_clan.return_value = supabase_data
+        app.supabase.get_clan_members.return_value = []
+        clan = Clan()
+        clan.ApplyDiscordData = MagicMock()
+        app._get_clan = MagicMock(return_value=clan)
+        guild = MagicMock(spec=discord.Guild)
+        guild.id = 123
+        guild.name = "test guild"
+
+        await app._register_guild(guild)
+
+        clan.ApplyDiscordData.assert_called_once_with(supabase_data["discord_data"])
 
     def test_find_channel_normalizes_visible_name(self) -> None:
         clan = Clan()

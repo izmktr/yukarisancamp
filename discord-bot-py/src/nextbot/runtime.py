@@ -62,6 +62,7 @@ class NextBotApp:
         member_rows = await asyncio.to_thread(self.supabase.get_clan_members, guild.id)
         clan = self._get_clan(guild)
         clan.supabase_data = supabase_data
+        clan.ApplyDiscordData(supabase_data.get("discord_data"))
         clan.LoadSupabaseMembers(member_rows)
         if registered:
             print(f"Supabaseにクランを登録しました: {guild.name} ({guild.id})")
