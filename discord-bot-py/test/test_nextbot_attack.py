@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import datetime
 import types
 import unittest
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
+import discord
+
+from src.nextbot import constants
 from src.nextbot.clan import Clan
 from src.nextbot.clan_member import ClanMember
 from src.nextbot.runtime import NextBotApp
@@ -40,6 +45,26 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
             mention="<@456>",
         )
 
+    def test_reference_date_changes_at_five_am_jst(self) -> None:
+        jst = datetime.timezone(datetime.timedelta(hours=9))
+
+        self.assertEqual(
+            constants.reference_date(datetime.datetime(2026, 9, 8, 4, 59, tzinfo=jst)),
+            "2026-09-07",
+        )
+        self.assertEqual(
+            constants.reference_date(datetime.datetime(2026, 9, 8, 5, 0, tzinfo=jst)),
+            "2026-09-08",
+        )
+
+    def test_reference_date_converts_aware_datetime_to_jst(self) -> None:
+        self.assertEqual(
+            constants.reference_date(
+                datetime.datetime(2026, 9, 7, 20, 0, tzinfo=datetime.timezone.utc)
+            ),
+            "2026-09-08",
+        )
+
     async def test_one_digit_attack_uses_the_number_as_boss(self) -> None:
         clan, member, supabase = self.create_clan()
         message = self.create_message()
@@ -49,7 +74,7 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result)
         self.assertEqual((member.boss, member.sortie), (5, 1))
         supabase.update_discord_clan_member_attack.assert_called_once_with(
-            123, 456, "new name", "<@456>", 5, 1, 1, 0, clan.CurrentBaseDate()
+            123, 456, "new name", "<@456>", 5, 1, 1, 0, constants.reference_date()
         )
         clan.AddReaction.assert_awaited_once_with(message, False)
 
@@ -62,7 +87,7 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result)
         self.assertEqual((member.boss, member.sortie), (5, 2))
         supabase.update_discord_clan_member_attack.assert_called_once_with(
-            123, 456, "new name", "<@456>", 5, 1, 2, 1, clan.CurrentBaseDate()
+            123, 456, "new name", "<@456>", 5, 1, 2, 1, constants.reference_date()
         )
         clan.AddReaction.assert_awaited_once_with(message, True)
 
@@ -210,9 +235,88 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((member.boss, member.sortie), (5, 2))
         supabase.revert_clan_member_attack.assert_not_called()
         supabase.update_discord_clan_member_attack.assert_called_once_with(
-            123, 456, "old name", "<@456>", 5, 1, 2, 1, clan.CurrentBaseDate()
+            123, 456, "old name", "<@456>", 5, 1, 2, 1, constants.reference_date()
         )
         clan.AddReaction.assert_awaited_once_with(message, True)
+
+    async def test_setting_reload_updates_clanbattle_setting(self) -> None:
+        clan, _, supabase = self.create_clan()
+        message = cast(discord.Message, self.create_message())
+        discord_member = cast(discord.Member, self.create_discord_member())
+        clan.TemporaryMessage = MagicMock()
+        setting: dict[str, Any] = {"id": 0, "yearmonth": "202609"}
+        supabase.get_clanbattle_setting.return_value = setting
+
+        result = await clan.SettingReload(message, discord_member, "")
+
+        self.assertTrue(result)
+        self.assertIs(clan.clanbattle_setting, setting)
+        supabase.get_clanbattle_setting.assert_called_once_with()
+        clan.TemporaryMessage.assert_called_once_with(message.channel, "設定を再読み込みしました")
+
+    async def test_setting_reload_keeps_current_setting_on_failure(self) -> None:
+        clan, _, supabase = self.create_clan()
+        message = cast(discord.Message, self.create_message())
+        discord_member = cast(discord.Member, self.create_discord_member())
+        clan.TemporaryMessage = MagicMock()
+        current_setting: dict[str, Any] = {"id": 0, "yearmonth": "202608"}
+        clan.clanbattle_setting = current_setting
+        supabase.get_clanbattle_setting.side_effect = RuntimeError("database error")
+
+        result = await clan.SettingReload(message, discord_member, "")
+
+        self.assertFalse(result)
+        self.assertIs(clan.clanbattle_setting, current_setting)
+        clan.TemporaryMessage.assert_called_once_with(
+            message.channel, "設定の再読み込みに失敗しました: database error"
+        )
+
+    async def test_taskkill_sets_current_base_date(self) -> None:
+        clan, clan_member, supabase = self.create_clan()
+        message = cast(discord.Message, self.create_message())
+        discord_member = cast(discord.Member, self.create_discord_member())
+
+        result = await clan.TaskKill(message, discord_member, "")
+
+        self.assertTrue(result)
+        self.assertEqual(clan_member.taskkill, constants.reference_date())
+        supabase.update_clan_member_taskkill.assert_called_once_with(
+            123, 456, constants.reference_date()
+        )
+        message.add_reaction.assert_awaited_once_with(clan.taskkillmark)
+
+    async def test_taskkill_database_failure_does_not_update_member(self) -> None:
+        clan, clan_member, supabase = self.create_clan()
+        message = cast(discord.Message, self.create_message())
+        discord_member = cast(discord.Member, self.create_discord_member())
+        clan.TemporaryMessage = MagicMock()
+        supabase.update_clan_member_taskkill.side_effect = RuntimeError("database error")
+
+        result = await clan.TaskKill(message, discord_member, "")
+
+        self.assertFalse(result)
+        self.assertEqual(clan_member.taskkill, "")
+        message.add_reaction.assert_not_awaited()
+        clan.TemporaryMessage.assert_called_once_with(
+            message.channel, "タスキルの更新に失敗しました: database error"
+        )
+
+    def test_clan_member_loads_taskkill_date(self) -> None:
+        clan_member = ClanMember(456)
+
+        clan_member.ApplyDatabaseRow({"taskkill": "2026-09-08"})
+
+        self.assertEqual(clan_member.taskkill, "2026-09-08")
+
+    def test_taskkill_display_only_applies_to_matching_base_date(self) -> None:
+        clan_member = ClanMember(456)
+        clan_member.name = "member"
+        clan_member.taskkill = "2000-01-01"
+
+        self.assertEqual(clan_member.DecoName("nT", "2026-09-08"), "member")
+
+        clan_member.taskkill = "2026-09-08"
+        self.assertEqual(clan_member.DecoName("nT", "2026-09-08"), "member[tk]")
 
     def test_find_channel_normalizes_visible_name(self) -> None:
         clan = Clan()

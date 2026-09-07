@@ -126,12 +126,6 @@ class Clan(MessageRouter):
 
         # self.damagechannelid = [0] * BOSSNUMBER                 # ダメコンチャンネルID
 
-    def CurrentBaseDate(self) -> str:
-        japan_time = datetime.datetime.now(
-            datetime.timezone(datetime.timedelta(hours=9))
-        )
-        return (japan_time - datetime.timedelta(hours=5)).date().isoformat()
-
     def ApplySupabaseMember(self, row: dict[str, Any]) -> None:
         raw_memberid = row.get("memberid")
         if not isinstance(raw_memberid, (int, str)):
@@ -381,7 +375,7 @@ class Clan(MessageRouter):
                         self.BossLap(boss),
                         sortie,
                         1 if overtime > 0 else 0,
-                        self.CurrentBaseDate(),
+                        constants.reference_date(),
                     )
                     member.Attack(boss, sortie)
                 elif react.history_id is not None:
@@ -538,7 +532,7 @@ class Clan(MessageRouter):
                     self.BossLap(boss),
                     sortie,
                     overattack,
-                    self.CurrentBaseDate(),
+                    constants.reference_date(),
                 )
             except Exception as exc:
                 self.TemporaryMessage(message.channel, f'攻撃の開始に失敗しました: {exc}')
@@ -561,7 +555,7 @@ class Clan(MessageRouter):
             overtime or 0,
         )
 
-        if cmember.taskkill != 0:
+        if not cmember.HasTaskKill(constants.reference_date()):
             await message.add_reaction(self.taskkillmark)
 
         await self.AddReaction(message, bool(overattack))
@@ -646,7 +640,7 @@ class Clan(MessageRouter):
                 member.id,
                 member.display_name,
                 member.mention,
-                self.CurrentBaseDate(),
+                constants.reference_date(),
                 "leader" if admin else "member",
             )
         except Exception as exc:
@@ -682,7 +676,7 @@ class Clan(MessageRouter):
             member.id,
             member.display_name,
             member.mention,
-            self.CurrentBaseDate(),
+            constants.reference_date(),
             "leader" if admin else "member",
         )
         await self.ReloadSupabaseMembers()
@@ -756,11 +750,90 @@ class Clan(MessageRouter):
         return True
     async def MonthlyReset(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
         return True
+
     async def SettingReload(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
+        if self.supabase is None:
+            self.TemporaryMessage(message.channel, 'Supabaseが設定されていません')
+            return False
+
+        try:
+            setting = await asyncio.to_thread(self.supabase.get_clanbattle_setting)
+        except Exception as exc:
+            self.TemporaryMessage(message.channel, f'設定の再読み込みに失敗しました: {exc}')
+            return False
+
+        self.clanbattle_setting = setting
+        self.TemporaryMessage(message.channel, '設定を再読み込みしました')
         return True
+
     async def DamageChannel(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
+        try:
+            if not isinstance(message.channel, discord.TextChannel):
+                self.TemporaryMessage(message.channel, 'テキストチャンネルで実行してください')
+                return False
+
+            if opt == '':
+                result = ''
+                for i, dc in enumerate(self.damagecontrol):
+                    if dc.channel is None:
+                        result += '%d: None\n' % (i + 1)
+                    else:
+                        result += '%d: %s\n' % (i + 1, dc.channel.name)
+                await message.channel.send(result)
+
+                return False
+
+            if opt == 'all':
+                for dc in self.damagecontrol:
+                    dc.SetChannel(message.channel)
+                self.TemporaryMessage(message.channel, 'チャンネルを設定しました')
+                return True
+
+            if opt == 'reset':
+                for dc in self.damagecontrol:
+                    dc.SetChannel(None)
+                self.TemporaryMessage(message.channel, 'チャンネルをリセットしました')
+                return False
+
+            bidx = int(opt)
+            if constants.is_valid_boss(bidx):
+                self.damagecontrol[bidx - 1].SetChannel(message.channel)
+
+                self.TemporaryMessage(message.channel, 'チャンネルを設定しました')
+                return True
+            else:
+                raise ValueError
+        except ValueError:
+            self.TemporaryMessage(message.channel, '数字が読み取れません')
+            return False
+
         return True
+
     async def TaskKill(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
+        cmember = self.GetMember(message.author.id)
+        if cmember is None:
+            self.TemporaryMessage(message.channel, 'メンバーに参加していません')
+            return False
+
+        if self.supabase is None or self.clan_id is None:
+            self.TemporaryMessage(message.channel, 'Supabaseが設定されていません')
+            return False
+
+        base_date = constants.reference_date()
+        try:
+            await asyncio.to_thread(
+                self.supabase.update_clan_member_taskkill,
+                self.clan_id,
+                cmember.id,
+                base_date,
+            )
+        except Exception as exc:
+            self.TemporaryMessage(message.channel, f'タスキルの更新に失敗しました: {exc}')
+            return False
+
+        cmember.taskkill = base_date
+        await message.add_reaction(self.taskkillmark)
+
         return True
 
     async def Defeat(self, message: discord.Message, member: discord.Member, opt: str) -> bool:

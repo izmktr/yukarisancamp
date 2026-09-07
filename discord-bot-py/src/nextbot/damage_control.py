@@ -30,7 +30,7 @@ class DamageControl():
         self.outputlock : int = 0
         self.clanmembers : dict[int, ClanMember]= clanmembers
 
-    def SetChannel(self, channel : discord.TextChannel) -> None:
+    def SetChannel(self, channel : discord.TextChannel | None) -> None:
         self.channel = channel
 
     def SetBossHp(self, bosshp : int) -> None:

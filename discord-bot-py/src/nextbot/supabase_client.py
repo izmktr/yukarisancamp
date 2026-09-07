@@ -182,6 +182,34 @@ class SupabaseClient:
 
         return isinstance(raw_rows, list) and len(cast(list[object], raw_rows)) > 0
 
+    def update_clan_member_taskkill(
+        self,
+        clan_id: int,
+        member_id: int,
+        day: str,
+    ) -> None:
+        query = urlencode(
+            {
+                "clanid": f"eq.{clan_id}",
+                "memberid": f"eq.{member_id}",
+            }
+        )
+        payload = json.dumps({"taskkill": day}).encode("utf-8")
+        request = Request(
+            f"{self.url}/rest/v1/clan_members?{query}",
+            data=payload,
+            method="PATCH",
+            headers={
+                "apikey": self.secret_key,
+                "Authorization": f"Bearer {self.secret_key}",
+                "Content-Type": "application/json",
+                "Prefer": "return=minimal",
+            },
+        )
+
+        with urlopen(request, timeout=10):
+            pass
+
     @staticmethod
     def normalize_attackdata(raw: object) -> dict[str, Any]:
         source = cast(dict[str, object], raw) if isinstance(raw, dict) else {}

@@ -1,5 +1,7 @@
 """Shared game constants for nextbot modules."""
 
+import datetime
+
 # Number of bosses in one lap.
 BOSSNUMBER = 5
 
@@ -22,10 +24,13 @@ def is_valid_sortie(sortie: int) -> bool:
     return 0 < sortie <= MAX_SORTIE
 
 # 基準日
-def reference_date() -> str:
+def reference_date(now: datetime.datetime | None = None) -> str:
     # 5:00～翌日の4:59までを1日とする基準日
-    import datetime
-    now = datetime.datetime.now()
-    if now.hour < 5:
-        now -= datetime.timedelta(days=1)
-    return now.strftime("%Y-%m-%d")
+    jst = datetime.timezone(datetime.timedelta(hours=9))
+    if now is None:
+        now = datetime.datetime.now(jst)
+    elif now.tzinfo is None:
+        now = now.replace(tzinfo=jst)
+    else:
+        now = now.astimezone(jst)
+    return (now - datetime.timedelta(hours=5)).date().isoformat()

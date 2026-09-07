@@ -9,7 +9,7 @@ class ClanMember():
         self.id = id                                    # ユーザーID
         self.name : str = ''                                  # ユーザーの名前
         self.mention : str = ''                               # メンションするときの名前
-        self.taskkill = 0                               # タスキルをした回数
+        self.taskkill: str = ''                    # タスキルした基準日
 
         self.attacktime : list[Optional[int]] = [None] * constants.MAX_SORTIE  # 攻撃管理フラグ(None:未凸, 数値:持ち越し時刻)
 
@@ -35,7 +35,7 @@ class ClanMember():
         taskkill = row.get("taskkill")
         self.name = name if isinstance(name, str) else ""
         self.mention = mention if isinstance(mention, str) else ""
-        self.taskkill = taskkill if isinstance(taskkill, int) else 0
+        self.taskkill = taskkill if isinstance(taskkill, str) else ""
 
         raw_attackdata = row.get("attackdata")
         attackdata = cast(dict[str, object], raw_attackdata) if isinstance(raw_attackdata, dict) else {}
@@ -75,15 +75,21 @@ class ClanMember():
     def LapCount(self, lap : int) -> float:
         return len([m for m in self.attacktime if m is not None and m // 10 == lap])
 
-    def DecoName(self, opt : str) -> str:
+    def HasTaskKill(self, base_date: str) -> bool:
+        return self.taskkill == base_date
+
+    def DecoName(self, opt : str, base_date: str | None = None) -> str:
+        if base_date is None:
+            base_date = constants.reference_date()
+
         s: str = ''
         for c in opt:
             if c == 'n': 
                 s += self.name
             elif c == 't': 
-                if self.taskkill: s += 'tk'
+                if self.HasTaskKill(base_date): s += 'tk'
             elif c == 'T': 
-                if self.taskkill: s += '[tk]'
+                if self.HasTaskKill(base_date): s += '[tk]'
             elif c == 'o':
                 s += self.AttackTag(False)
             elif c == 'O':
@@ -137,7 +143,7 @@ class ClanMember():
     def Reset(self):
         self.sortie = -1
         self.reportlimit = None
-        self.taskkill = 0
+        self.taskkill = ''
         self.attacktime = [None] * constants.MAX_SORTIE
 
     def DayFinish(self):
