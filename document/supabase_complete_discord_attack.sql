@@ -1,5 +1,5 @@
 -- Complete Discord attack handling and reaction rollback.
--- Safe to re-run after supabase_migrate_clan_member_attack_fields.sql.
+-- Safe to re-run after supabase_createtable.sql.
 
 begin;
 
