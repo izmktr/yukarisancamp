@@ -149,8 +149,8 @@ Supabaseダッシュボードから取得します。
 ## 7. 動作確認手順
 
 1. `web-app-ts/.env.local` を設定
-2. Supabase SQL Editor で `document/supabase_createtable.sql` を実行し、5テーブルを作成
-3. Supabase SQL Editor で `document/supabase_complete_discord_attack.sql` を実行し、Discord の凸確定・巻き戻しRPCを作成
+2. Supabase SQL Editor で `document/supabase_createtable.sql` を実行する（テーブル、Discord の凸確定RPC、巻き戻しRPCをまとめて作成）
+3. `finish_clan_member_attack` と `revert_clan_member_attack` が作成されていることを確認
 4. web-app-ts を起動
 5. `/settings` を開いてログイン
 6. 表示名変更を保存し、`setting_userprofile` の対象 `googleUserId` 行が insert/update されることを確認
