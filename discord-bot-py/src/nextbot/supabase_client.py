@@ -150,6 +150,7 @@ class SupabaseClient:
             "memberid": str(member_id),
             "name": name,
             "mention": mention,
+            "day": day,
             "attacktime": [],
             "attackdata": self.normalize_attackdata({"day": day}),
             "lastactive": now,
