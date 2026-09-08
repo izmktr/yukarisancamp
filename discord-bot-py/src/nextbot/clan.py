@@ -555,7 +555,7 @@ class Clan(MessageRouter):
             overtime or 0,
         )
 
-        if not cmember.HasTaskKill(constants.reference_date()):
+        if cmember.HasTaskKill(constants.reference_date()):
             await message.add_reaction(self.taskkillmark)
 
         await self.AddReaction(message, bool(overattack))
@@ -738,12 +738,33 @@ class Clan(MessageRouter):
         # メンバーの情報をリセット
         clan_member.Reset()
 
-        # supabaseを初期化
+        # supabaseのmember情報もリセット
+        if self.supabase is not None and self.clan_id is not None:
+            try:
+                await asyncio.to_thread(
+                    self.supabase.reset_discord_clan_member,
+                    self.clan_id,
+                    clan_member.id,
+                )
+            except Exception as exc:
+                self.TemporaryMessage(message.channel, f'メンバー情報のリセットに失敗しました: {exc}')
+                return False
+
 
         # 今日のattack_historiesも削除
+        if self.supabase is not None and self.clan_id is not None:
+            try:
+                await asyncio.to_thread(
+                    self.supabase.delete_today_attack_histories,
+                    self.clan_id,
+                    clan_member.id,
+                )
+            except Exception as exc:
+                self.TemporaryMessage(message.channel, f'今日の攻撃履歴の削除に失敗しました: {exc}')
+                return False
 
 
-        self.TemporaryMessage(message.channel, 'メンバー情報をデータベースに更新しました')
+        self.TemporaryMessage(message.channel, 'メンバー情報をリセットしました')
         return True
 
     async def DailyReset(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
