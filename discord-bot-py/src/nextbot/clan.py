@@ -80,6 +80,7 @@ class Clan(MessageRouter):
             [
                 (["attack", "a", "凸", "あ"], self.Attack),
                 (["c", "持"], self.ContinuesAttack),
+                (["cancel", "持"], self.Cancel),
                 (["tl"], self.TimelineConvert),
                 (['dice', 'サイコロ', 'ダイス'], self.Dice),
                 (["defeat"], self.Defeat),
@@ -564,6 +565,55 @@ class Clan(MessageRouter):
 
     async def ContinuesAttack(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
         return await self._ack(message, "ContinuesAttack", member, opt)
+
+    async def Cancel(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
+        cmember = self.GetMember(member.id)
+        if cmember is None or not cmember.IsAttack():
+            self.TemporaryMessage(message.channel, 'クラバトに参加していません')
+            return False
+
+        if self.supabase is None:
+            self.TemporaryMessage(message.channel, 'Supabaseが設定されていません')
+            return False
+
+        attack_message_id = (
+            cmember.attackmessage.id
+            if cmember.attackmessage is not None
+            else message.id
+        )
+        try:
+            result = await asyncio.to_thread(
+                self.supabase.finish_clan_member_attack,
+                cmember.id,
+                cmember.name,
+                cmember.mention,
+                attack_message_id,
+                'cancel',
+                0,
+            )
+        except Exception as exc:
+            self.TemporaryMessage(message.channel, f'攻撃のキャンセルに失敗しました: {exc}')
+            return False
+
+        cmember.ApplyDatabaseRow(
+            {
+                'name': cmember.name,
+                'mention': cmember.mention,
+                'taskkill': cmember.taskkill,
+                'attacktime': result.get('attacktime'),
+                'attackdata': result.get('attackdata'),
+            }
+        )
+        raw_bosslaps = result.get('bosslaps')
+        if self.supabase_data is not None and isinstance(raw_bosslaps, list):
+            self.supabase_data['bosslaps'] = raw_bosslaps
+
+        if cmember.attackmessage is not None:
+            self.messagereaction.pop(cmember.attackmessage.id, None)
+        cmember.attackmessage = None
+        self.TemporaryMessage(message.channel, '攻撃をキャンセルしました')
+
+        return True
 
     async def TimelineConvert(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
         lines = opt.splitlines(True)
