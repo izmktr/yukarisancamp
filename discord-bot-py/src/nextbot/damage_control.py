@@ -103,7 +103,7 @@ class DamageControl():
 
         if damage <= 0: return 0
 
-        d = max + 1 - (max * remainhp // damage) + bonus
+        d = max  - (max * remainhp // damage) + bonus + 1
         if max < d: return max
         return d
 
