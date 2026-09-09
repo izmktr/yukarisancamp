@@ -23,6 +23,7 @@ Thumbs.db
 # Node.js
 node_modules/
 web-app-ts/dist/
+web-app-ts/logs/
 
 # firebase
 firebase.setting*

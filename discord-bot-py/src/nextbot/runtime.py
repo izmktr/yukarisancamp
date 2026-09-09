@@ -67,6 +67,25 @@ class NextBotApp:
         if registered:
             print(f"Supabaseにクランを登録しました: {guild.name} ({guild.id})")
 
+    async def _load_clan_boss_states(self) -> None:
+        if self.clanbattle_setting is None:
+            return
+
+        raw_yearmonth = self.clanbattle_setting.get("yearmonth")
+        if not isinstance(raw_yearmonth, str):
+            return
+
+        raw_bosshp = self.clanbattle_setting.get("bossHp")
+        for clan in self._clans.values():
+            if not clan.clan_id:
+                continue
+            states = await asyncio.to_thread(
+                self.supabase.get_clan_boss_states,
+                clan.clan_id,
+                raw_yearmonth,
+            )
+            clan.LoadSupabaseBossStates(states, raw_bosshp)
+
     def _get_realtime_clan(
         self,
         payload: dict[str, Any],
@@ -191,6 +210,8 @@ class NextBotApp:
                 print(f"setting_clanbattle(id=0): {self.clanbattle_setting}")
                 for clan in self._clans.values():
                     clan.clanbattle_setting = self.clanbattle_setting
+
+            await self._load_clan_boss_states()
 
             await self._subscribe_supabase_updates()
 

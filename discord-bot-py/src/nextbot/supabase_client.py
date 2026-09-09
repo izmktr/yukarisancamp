@@ -95,6 +95,35 @@ class SupabaseClient:
 
         return cast(dict[str, Any], raw_rows[0])
 
+    def get_clan_boss_states(self, clan_id: int, yearmonth: str) -> list[dict[str, Any]]:
+        query = urlencode(
+            {
+                "select": "boss_index,current_hp,max_hp,is_defeated",
+                "clanid": f"eq.{clan_id}",
+                "yearmonth": f"eq.{yearmonth}",
+                "order": "boss_index.asc",
+            }
+        )
+        request = Request(
+            f"{self.url}/rest/v1/clan_boss_state?{query}",
+            headers={
+                "apikey": self.secret_key,
+                "Authorization": f"Bearer {self.secret_key}",
+            },
+        )
+
+        with urlopen(request, timeout=10) as response:
+            raw_rows: object = json.load(response)
+
+        if not isinstance(raw_rows, list):
+            return []
+
+        return [
+            cast(dict[str, Any], row)
+            for row in raw_rows
+            if isinstance(row, dict)
+        ]
+
     def update_clan_bosslaps(self, clan_id: int, bosslaps: list[int]) -> None:
         query = urlencode({"clanid": f"eq.{clan_id}"})
         payload = json.dumps({"bosslaps": bosslaps}).encode("utf-8")
@@ -204,6 +233,70 @@ class SupabaseClient:
             raw_rows: object = json.load(response)
 
         return isinstance(raw_rows, list) and len(cast(list[object], raw_rows)) > 0
+
+    def reset_discord_clan_member(self, clan_id: int, member_id: int) -> None:
+        query = urlencode(
+            {
+                "clanid": f"eq.{clan_id}",
+                "memberid": f"eq.{member_id}",
+            }
+        )
+        payload = json.dumps(
+            {
+                "taskkill": None,
+                "attacktime": [],
+                "attackdata": {
+                    "day": "",
+                    "sortie": 0,
+                    "lap": 0,
+                    "boss": 0,
+                    "overattack": None,
+                    "damage": None,
+                    "message": None,
+                },
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ).encode("utf-8")
+        request = Request(
+            f"{self.url}/rest/v1/clan_members?{query}",
+            data=payload,
+            method="PATCH",
+            headers={
+                "apikey": self.secret_key,
+                "Authorization": f"Bearer {self.secret_key}",
+                "Content-Type": "application/json",
+                "Prefer": "return=minimal",
+            },
+        )
+
+        with urlopen(request, timeout=10):
+            pass
+
+    def delete_today_attack_histories(
+        self,
+        clan_id: int,
+        member_id: int,
+        day: str,
+    ) -> None:
+        query = urlencode(
+            {
+                "clanid": f"eq.{clan_id}",
+                "memberid": f"eq.{member_id}",
+                "day": f"eq.{day}",
+            }
+        )
+        request = Request(
+            f"{self.url}/rest/v1/attack_histories?{query}",
+            method="DELETE",
+            headers={
+                "apikey": self.secret_key,
+                "Authorization": f"Bearer {self.secret_key}",
+                "Prefer": "return=minimal",
+            },
+        )
+
+        with urlopen(request, timeout=10):
+            pass
 
     def update_clan_member_taskkill(
         self,

@@ -8,6 +8,10 @@
     "start": "node dist/index.js",
     "build": "npm run generate-types && tsc",
     "test": "node --test test/encrypt.test.js",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop web-app-ts",
+    "pm2:restart": "pm2 restart web-app-ts",
+    "pm2:logs": "pm2 logs web-app-ts",
     "generate-types": "npx json-schema-to-typescript --input ../schema/userProfile.schema.json --output src/types.ts"
   },
   "keywords": [],

@@ -25,6 +25,7 @@ class DamageControl():
         self.lastmessage : discord.Message | None = None
         self.channel : discord.TextChannel | None = None
         self.remainhp : int = 0
+        self.bossname : str = ''
         self.bossindex : int = bossindex
         self.members : dict[ClanMember, DamageControlMember] = {}
         self.outputlock : int = 0
@@ -40,6 +41,9 @@ class DamageControl():
 
     def SetBossHp(self, bosshp : int) -> None:
         self.remainhp = bosshp
+
+    def SetBossName(self, bossname : str) -> None:
+        self.bossname : str = bossname
 
     def RemainHp(self, hp : int) -> None:
         self.active = True
@@ -160,7 +164,7 @@ class DamageControl():
             if m.IsAttack() and (m.boss - 1) % constants.BOSSNUMBER == self.bossindex
         ])
 
-        mes += '%dボス HP %d' % (self.bossindex + 1, self.remainhp)
+        mes += '%s HP %d' % (self.bossname, self.remainhp)
         if 0 < totaldamage and totaldamage < self.remainhp:
             mes += '  不足分 %d' % (self.remainhp - totaldamage)
         else:

@@ -96,6 +96,7 @@ class Clan(MessageRouter):
                 (['settingreload'], self.SettingReload),
                 (['damagechannel'], self.DamageChannel),
                 (['taskkill', 'タスキル'], self.TaskKill),
+                (['bosshp'], self.BossHp)
             ],
         )
         self.members: dict[int, ClanMember] = {}
@@ -152,6 +153,27 @@ class Clan(MessageRouter):
             return
         rows = await asyncio.to_thread(self.supabase.get_clan_members, self.clan_id)
         self.LoadSupabaseMembers(rows)
+
+    def LoadSupabaseBossStates(
+        self,
+        states: list[dict[str, Any]],
+        fallback_bosshp: object,
+    ) -> None:
+        fallback = cast(list[object], fallback_bosshp) if isinstance(fallback_bosshp, list) else []
+        states_by_boss: dict[int, dict[str, Any]] = {}
+        for state in states:
+            raw_boss_index = state.get("boss_index")
+            if isinstance(raw_boss_index, int) and constants.is_valid_boss(raw_boss_index):
+                states_by_boss[raw_boss_index] = state
+
+        for boss_index, damage_control in enumerate(self.damagecontrol, start=1):
+            state = states_by_boss.get(boss_index)
+            raw_hp = state.get("current_hp") if state is not None else (
+                fallback[boss_index - 1] if boss_index <= len(fallback) else None
+            )
+            if isinstance(raw_hp, int) and raw_hp >= 0:
+                damage_control.SetBossHp(raw_hp)
+            damage_control.SetBossName(self.BossLabel(boss_index))
 
 
     async def _ack(self, message: discord.Message, title: str, member: discord.Member, opt: str) -> bool:
@@ -343,6 +365,7 @@ class Clan(MessageRouter):
                 for attacking_member in self.members.values():
                     if attacking_member.IsAttack() and attacking_member.boss == boss:
                         attacking_member.reportlimit = datetime.datetime.now() + datetime.timedelta(minutes=5)
+                await self.OnChangeBoss(boss)
 
             if message.guild is not None:
                 await self.RemoveReaction(message, 0 < overtime, message.guild.me)
@@ -407,8 +430,6 @@ class Clan(MessageRouter):
         react = MessageReaction(atmember, addreaction, removereaction, deletereaction)
         return react
 
-
-
     async def RemoveReaction(self, message : discord.Message, overkill : bool, me : discord.Member):
         reactemojis = self.emojis if not overkill else self.emojisoverkill
 
@@ -418,6 +439,15 @@ class Clan(MessageRouter):
             except (discord.errors.NotFound, discord.errors.Forbidden):
                 break
 
+    async def DamageControlDefeat(self, boss : int):
+        unfinishmember = [m.mention for m in self.members.values() if m.IsAttack() and m.boss == boss]
+        bidx = boss - 1
+
+        if 0 < len(unfinishmember):
+            mentions = ' '.join(unfinishmember) + ' 戦闘を抜けて報告してください'
+            await self.damagecontrol[bidx].SendFinish('%s の討伐お疲れさまです\n%s' % (self.BossLabel(boss), mentions))
+        else:
+            await self.damagecontrol[bidx].SendFinish('%s の討伐お疲れさまです' % (self.BossLabel(boss)))
 
     @staticmethod
     async def SendMessage(channel : discord.abc.Messageable, message : str):
@@ -576,9 +606,11 @@ class Clan(MessageRouter):
             self.TemporaryMessage(message.channel, 'Supabaseが設定されていません')
             return False
 
+        attack_boss = cmember.boss
+        attack_message = cmember.attackmessage
         attack_message_id = (
-            cmember.attackmessage.id
-            if cmember.attackmessage is not None
+            attack_message.id
+            if attack_message is not None
             else message.id
         )
         try:
@@ -608,8 +640,14 @@ class Clan(MessageRouter):
         if self.supabase_data is not None and isinstance(raw_bosslaps, list):
             self.supabase_data['bosslaps'] = raw_bosslaps
 
-        if cmember.attackmessage is not None:
-            self.messagereaction.pop(cmember.attackmessage.id, None)
+        if constants.is_valid_boss(attack_boss):
+            await self.damagecontrol[attack_boss - 1].Remove(cmember)
+            await self.damagecontrol[attack_boss - 1].SendResult()
+
+        if attack_message is not None:
+            self.messagereaction.pop(attack_message.id, None)
+            if attack_message.guild is not None:
+                await self.RemoveReaction(attack_message, False, attack_message.guild.me)
         cmember.attackmessage = None
         self.TemporaryMessage(message.channel, '攻撃をキャンセルしました')
 
@@ -785,9 +823,6 @@ class Clan(MessageRouter):
             self.TemporaryMessage(message.channel, 'あなたはクランのメンバーではありません')
             return False
 
-        # メンバーの情報をリセット
-        clan_member.Reset()
-
         # supabaseのmember情報もリセット
         if self.supabase is not None and self.clan_id is not None:
             try:
@@ -808,11 +843,14 @@ class Clan(MessageRouter):
                     self.supabase.delete_today_attack_histories,
                     self.clan_id,
                     clan_member.id,
+                        constants.reference_date(),
                 )
             except Exception as exc:
                 self.TemporaryMessage(message.channel, f'今日の攻撃履歴の削除に失敗しました: {exc}')
                 return False
 
+            # メンバー情報をリセット
+            clan_member.Reset()
 
         self.TemporaryMessage(message.channel, 'メンバー情報をリセットしました')
         return True
@@ -948,6 +986,36 @@ class Clan(MessageRouter):
 
         return True
 
+    async def BossHp(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
+        status_str: str = ''
+        bossnames = (
+            cast(list[object], self.clanbattle_setting.get('bossname'))
+            if self.clanbattle_setting is not None
+            and isinstance(self.clanbattle_setting.get('bossname'), list)
+            else []
+        )
+        bosshp = (
+            cast(list[object], self.clanbattle_setting.get('bossHp'))
+            if self.clanbattle_setting is not None
+            and isinstance(self.clanbattle_setting.get('bossHp'), list)
+            else []
+        )
+
+        for bidx in range(1, constants.BOSSNUMBER + 1):
+            bossname = (
+                bossnames[bidx - 1]
+                if bidx <= len(bossnames) and isinstance(bossnames[bidx - 1], str)
+                else f'ボス{bidx}'
+            )
+            max_hp = (
+                bosshp[bidx - 1]
+                if bidx <= len(bosshp) and isinstance(bosshp[bidx - 1], int)
+                else 0
+            )
+            status_str += f'{bossname}:{self.damagecontrol[bidx - 1].remainhp}/{max_hp}\n'
+        await message.channel.send(status_str)
+        return False
+
     async def Defeat(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
         # optのbossindexのlapを増やし、supabaseのpublic.clansのbosslapsを更新
 
@@ -971,6 +1039,8 @@ class Clan(MessageRouter):
         newlap = self.BossLap(bidx) + 1
         await self.SetBossLap(bidx, newlap)
         self.TemporaryMessage(message.channel, f'{self.BossLabel(bidx)}の周回数を{newlap}に更新しました') 
+
+        await self.OnChangeBoss(bidx)
 
         return True
 
@@ -1005,11 +1075,15 @@ class Clan(MessageRouter):
             return False
         self.TemporaryMessage(message.channel, f'{self.BossLabel(bidx)}の周回数を{newlap}に更新しました') 
 
+        await self.OnChangeBoss(bidx)
+
         return True
 
     async def SetBoss(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
         if self.supabase_data is None or self.supabase is None or self.clan_id is None:
             return False
+
+        old_bosslaps = self.supabase_data.get("bosslaps") if self.supabase_data else None
 
         try:
             sp = opt.split(' ')
@@ -1031,9 +1105,15 @@ class Clan(MessageRouter):
                 self.clan_id,
                 bosslaps,
             )
+            self.TemporaryMessage(message.channel, 'ボスを設定しました')
+
             self.supabase_data["bosslaps"] = bosslaps
 
-            self.TemporaryMessage(message.channel, 'ボスを設定しました')
+            # ボス変更通知を出す
+            for i in range(0, constants.BOSSNUMBER):
+                if old_bosslaps and old_bosslaps[i] != bosslaps[i]:
+                    await self.OnChangeBoss(i + 1)
+
         except ValueError:
             self.TemporaryMessage(message.channel, 'setboss [ボス周回数] × 5 でボスの周回数を設定します(0は未出現)\n例)setboss 5 4 0 0 4')
 
@@ -1182,6 +1262,10 @@ class Clan(MessageRouter):
         if change and self.guild is not None:
             await self.OnMessageHandled(self.guild)
 
+            for boss in range(len(new_bosslaps)):
+                if old_bosslaps[boss] != new_bosslaps[boss]:
+                    await self.OnChangeBoss(boss + 1)
+
         self.supabase_data = new_data
 
     async def OnSupabaseUpdateClanMembers(self, old_data: dict[str, Any], new_data: dict[str, Any]) -> None:
@@ -1227,7 +1311,14 @@ class Clan(MessageRouter):
 
 
     async def OnSupabaseUpdateClanBossState(self, old_data: dict[str, Any], new_data: dict[str, Any]) -> None:
-        self.supabase_bossstate = new_data
+        boss : int | None = new_data.get("boss_index") if new_data else None
+        hp : int | None = new_data.get("current_hp") if new_data else None
+
+        if boss is not None and hp is not None:
+            dc = self.damagecontrol[boss - 1]
+            dc.remainhp = hp
+            await dc.SendResult()
+
 
     def FindChannel(self, guild: discord.Guild, name: str) -> discord.TextChannel | None:
         normalized_name = unicodedata.normalize("NFKC", name).strip()
@@ -1284,6 +1375,9 @@ class Clan(MessageRouter):
             await self.OnMessageDamageChannel(message, member)
 
         return handled
+
+    async def OnChangeBoss(self, boss: int) -> None:
+        await self.DamageControlDefeat(boss)
 
     async def OnMessageDamageChannel(self,  message: discord.Message, member: discord.Member) -> None:
         dc = await self.DamageChannelMessage(message, member)
