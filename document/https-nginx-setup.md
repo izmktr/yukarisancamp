@@ -36,13 +36,7 @@ sudo systemctl enable --now nginx
 
 Rocky Linux(RHEL系)のnginxは `sites-available`/`sites-enabled` 方式ではなく、`/etc/nginx/conf.d/*.conf` を直接読み込む構成になっている（`nginx.conf` 内の `include /etc/nginx/conf.d/*.conf;` を参照）。
 
-このリポジトリの [deploy/nginx/yukarisan.mydns.jp.conf](../deploy/nginx/yukarisan.mydns.jp.conf) を配置する。
-
-```bash
-sudo cp deploy/nginx/yukarisan.mydns.jp.conf /etc/nginx/conf.d/yukarisan.mydns.jp.conf
-sudo nginx -t
-sudo systemctl reload nginx
-```
+証明書取得後、このリポジトリの [deploy/nginx/yukarisan.mydns.jp.conf](../deploy/nginx/yukarisan.mydns.jp.conf) を配置する。配置コマンドは証明書取得の手順に記載する。
 
 ## 3. firewalld でポートを開放
 
@@ -60,17 +54,26 @@ SELinuxがenforcingの場合、デフォルトではnginxからバックエン�
 sudo setsebool -P httpd_can_network_connect 1
 ```
 
-配置した設定ファイルには443番の`server`ブロックを含めていない（証明書取得前に443ブロックがあると`nginx -t`が証明書ファイル不在エラーで失敗するため）。次のcertbot実行時に443番ブロックが自動追記される。
+配置する設定ファイルには443番の`server`ブロックが含まれており、証明書取得後は`127.0.0.1:3000`へリバースプロキシする。証明書取得前に配置すると、証明書ファイル不在のため`nginx -t`が失敗する。
 
 ## 5. Let's Encrypt証明書の取得
 
 ```bash
-sudo certbot --nginx -d yukarisan.mydns.jp
+sudo systemctl stop nginx
+sudo certbot certonly --standalone -d yukarisan.mydns.jp
+sudo systemctl start nginx
 ```
 
 - 対話式でメールアドレスなどを入力する
-- HTTPからHTTPSへのリダイレクトを追加するか聞かれた場合は「有効化する」を選択する
-- 成功すると `/etc/letsencrypt/live/yukarisan.mydns.jp/` に証明書一式が生成され、nginx設定にも自動反映される
+- 成功すると `/etc/letsencrypt/live/yukarisan.mydns.jp/` に証明書一式が生成される
+
+既存の設定ファイルを配置する場合は、証明書取得後に以下を実行する。
+
+```bash
+sudo cp deploy/nginx/yukarisan.mydns.jp.conf /etc/nginx/conf.d/yukarisan.mydns.jp.conf
+sudo nginx -t
+sudo systemctl reload nginx
+```
 
 ## 6. 自動更新の確認
 
