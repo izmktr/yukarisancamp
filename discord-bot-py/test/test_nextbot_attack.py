@@ -21,7 +21,7 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         supabase = MagicMock()
         clan = Clan(supabase=supabase, clan_id=123)
         clan.supabase_data = {"bosslaps": [1, 1, 1, 1, 1]}
-        member = ClanMember(456)
+        member = ClanMember("456")
         member.name = "old name"
         member.mention = "<@456>"
         member.attacktime = attacktime or [None, None, None]
@@ -143,7 +143,7 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(result)
         supabase.finish_clan_member_attack.assert_called_once_with(
-            456, "old name", "<@456>", 100, "defeat", 20
+            "456", "old name", "<@456>", 100, "defeat", 20
         )
         self.assertEqual(member.attacktime, [20, None, None])
         self.assertFalse(member.IsAttack())
@@ -172,7 +172,7 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(result)
         supabase.finish_clan_member_attack.assert_called_once_with(
-            456, "old name", "<@456>", 100, "defeat", 0
+            "456", "old name", "<@456>", 100, "defeat", 0
         )
         self.assertEqual(member.attacktime, [None, 0, None])
 
@@ -205,7 +205,7 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         result = await reaction.removereaction(member, payload)
 
         self.assertTrue(result)
-        supabase.revert_clan_member_attack.assert_called_once_with(456, 79)
+        supabase.revert_clan_member_attack.assert_called_once_with("456", 79)
         self.assertTrue(member.IsAttack())
         self.assertEqual((member.boss, member.sortie), (5, 1))
         self.assertEqual(clan.supabase_data["bosslaps"], [1, 1, 1, 1, 1])
@@ -237,7 +237,7 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((member.boss, member.sortie), (5, 2))
         supabase.revert_clan_member_attack.assert_not_called()
         supabase.update_discord_clan_member_attack.assert_called_once_with(
-            123, 456, "old name", "<@456>", 5, 1, 2, 1, constants.reference_date()
+            123, "456", "old name", "<@456>", 5, 1, 2, 1, constants.reference_date()
         )
         clan.AddReaction.assert_awaited_once_with(message, True)
 
@@ -283,9 +283,31 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result)
         self.assertEqual(clan_member.taskkill, constants.reference_date())
         supabase.update_clan_member_taskkill.assert_called_once_with(
-            123, 456, constants.reference_date()
+            123, "456", constants.reference_date()
         )
         message.add_reaction.assert_awaited_once_with(clan.taskkillmark)
+
+    def test_get_member_accepts_discord_integer_id_for_string_key(self) -> None:
+        clan = Clan()
+        member = ClanMember("456")
+        clan.members[member.id] = member
+
+        self.assertIs(clan.GetMember(456), member)
+        self.assertIs(clan.GetMember("456"), member)
+
+    def test_apply_supabase_member_preserves_web_member_id(self) -> None:
+        clan = Clan()
+
+        clan.ApplySupabaseMember({
+            "memberid": "w00000001",
+            "name": "Web member",
+            "mention": "",
+            "attacktime": [],
+            "attackdata": {"day": "", "sortie": 0, "lap": 0, "boss": 0},
+        })
+
+        self.assertIn("w00000001", clan.members)
+        self.assertEqual(clan.members["w00000001"].id, "w00000001")
 
     async def test_taskkill_database_failure_does_not_update_member(self) -> None:
         clan, clan_member, supabase = self.create_clan()
@@ -304,14 +326,14 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         )
 
     def test_clan_member_loads_taskkill_date(self) -> None:
-        clan_member = ClanMember(456)
+        clan_member = ClanMember("456")
 
         clan_member.ApplyDatabaseRow({"taskkill": "2026-09-08"})
 
         self.assertEqual(clan_member.taskkill, "2026-09-08")
 
     def test_taskkill_display_only_applies_to_matching_base_date(self) -> None:
-        clan_member = ClanMember(456)
+        clan_member = ClanMember("456")
         clan_member.name = "member"
         clan_member.taskkill = "2000-01-01"
 
@@ -443,12 +465,12 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         row = {"clanid": "123", "memberid": "456", "name": "member"}
 
         await clan.OnSupabaseUpdateClanMembers({}, row)
-        self.assertIn(456, clan.members)
+        self.assertIn("456", clan.members)
         clan.OnMessageHandled.assert_awaited_once_with(guild)
 
         clan.OnMessageHandled.reset_mock()
         await clan.OnSupabaseUpdateClanMembers(row, {})
-        self.assertNotIn(456, clan.members)
+        self.assertNotIn("456", clan.members)
         clan.OnMessageHandled.assert_awaited_once_with(guild)
 
     def test_delete_realtime_payload_uses_old_record_clan_id(self) -> None:

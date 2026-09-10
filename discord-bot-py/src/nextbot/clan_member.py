@@ -5,7 +5,7 @@ import discord
 from . import constants
 
 class ClanMember():
-    def __init__(self, id : int):
+    def __init__(self, id: str):
         self.id = id                                    # ユーザーID
         self.name : str = ''                                  # ユーザーの名前
         self.mention : str = ''                               # メンションするときの名前

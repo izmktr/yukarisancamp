@@ -211,7 +211,7 @@ class SupabaseClient:
                 f"Supabase clan member registration failed: {exc.code} {detail}"
             ) from exc
 
-    def delete_discord_clan_member(self, clan_id: int, member_id: int) -> bool:
+    def delete_discord_clan_member(self, clan_id: int, member_id: int | str) -> bool:
         query = urlencode(
             {
                 "clanid": f"eq.{clan_id}",
@@ -234,7 +234,7 @@ class SupabaseClient:
 
         return isinstance(raw_rows, list) and len(cast(list[object], raw_rows)) > 0
 
-    def reset_discord_clan_member(self, clan_id: int, member_id: int) -> None:
+    def reset_discord_clan_member(self, clan_id: int, member_id: int | str) -> None:
         query = urlencode(
             {
                 "clanid": f"eq.{clan_id}",
@@ -275,7 +275,7 @@ class SupabaseClient:
     def delete_today_attack_histories(
         self,
         clan_id: int,
-        member_id: int,
+        member_id: int | str,
         day: str,
     ) -> None:
         query = urlencode(
@@ -301,7 +301,7 @@ class SupabaseClient:
     def update_clan_member_taskkill(
         self,
         clan_id: int,
-        member_id: int,
+        member_id: int | str,
         day: str,
     ) -> None:
         query = urlencode(
@@ -370,7 +370,7 @@ class SupabaseClient:
     def update_discord_clan_member_attack(
         self,
         clan_id: int,
-        member_id: int,
+        member_id: int | str,
         name: str,
         mention: str,
         boss: int,
@@ -459,7 +459,7 @@ class SupabaseClient:
 
     def finish_clan_member_attack(
         self,
-        member_id: int,
+        member_id: int | str,
         name: str,
         mention: str,
         message_id: int,
@@ -480,7 +480,7 @@ class SupabaseClient:
 
     def revert_clan_member_attack(
         self,
-        member_id: int,
+        member_id: int | str,
         history_id: int,
     ) -> dict[str, Any]:
         return self._call_attack_rpc(

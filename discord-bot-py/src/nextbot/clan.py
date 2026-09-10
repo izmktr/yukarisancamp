@@ -99,7 +99,7 @@ class Clan(MessageRouter):
                 (['bosshp'], self.BossHp)
             ],
         )
-        self.members: dict[int, ClanMember] = {}
+        self.members: dict[str, ClanMember] = {}
 
         self.dicehistory = [10, 30, 50, 70, 90]                 # ダイスが重複した値が出ないようにしたフラグ
 
@@ -132,9 +132,8 @@ class Clan(MessageRouter):
         raw_memberid = row.get("memberid")
         if not isinstance(raw_memberid, (int, str)):
             return
-        try:
-            memberid = int(raw_memberid)
-        except (TypeError, ValueError):
+        memberid = str(raw_memberid).strip()
+        if not memberid:
             return
 
         member = self.members.get(memberid)
@@ -503,11 +502,12 @@ class Clan(MessageRouter):
 
         return False
 
-    def GetMember(self, user : int) -> ClanMember | None:
-        if user not in self.members:
+    def GetMember(self, user: int | str) -> ClanMember | None:
+        memberid = str(user)
+        if memberid not in self.members:
             return None
 
-        return self.members[user]
+        return self.members[memberid]
 
     async def Attack(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
         cmember = self.GetMember(message.author.id)
@@ -769,10 +769,11 @@ class Clan(MessageRouter):
         )
         await self.ReloadSupabaseMembers()
 
-        clan_member = self.members.get(member.id)
+        memberid = str(member.id)
+        clan_member = self.members.get(memberid)
         if clan_member is None:
-            clan_member = ClanMember(member.id)
-            self.members[member.id] = clan_member
+            clan_member = ClanMember(memberid)
+            self.members[memberid] = clan_member
         clan_member.name = member.display_name
         clan_member.mention = member.mention
         clan_member.UpdateActive()
@@ -1273,9 +1274,8 @@ class Clan(MessageRouter):
             raw_memberid = new_data.get("memberid")
             if not isinstance(raw_memberid, (int, str)):
                 return
-            try:
-                memberid = int(raw_memberid)
-            except (TypeError, ValueError):
+            memberid = str(raw_memberid).strip()
+            if not memberid:
                 return
             member = self.members.get(memberid)
             old_state = None if member is None else (
@@ -1302,10 +1302,10 @@ class Clan(MessageRouter):
 
         raw_memberid = old_data.get("memberid")
         if isinstance(raw_memberid, (int, str)):
-            try:
-                removed = self.members.pop(int(raw_memberid), None)
-            except (TypeError, ValueError):
+            memberid = str(raw_memberid).strip()
+            if not memberid:
                 return
+            removed = self.members.pop(memberid, None)
             if removed is not None and self.guild is not None:
                 await self.OnMessageHandled(self.guild)
 

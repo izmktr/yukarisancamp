@@ -20,7 +20,7 @@ class DamageControlMember:
 
 class DamageControl():
 
-    def __init__(self, clanmembers : dict[int, ClanMember], bossindex : int):
+    def __init__(self, clanmembers: dict[str, ClanMember], bossindex: int):
         self.active : bool = False
         self.lastmessage : discord.Message | None = None
         self.channel : discord.TextChannel | None = None
@@ -29,7 +29,7 @@ class DamageControl():
         self.bossindex : int = bossindex
         self.members : dict[ClanMember, DamageControlMember] = {}
         self.outputlock : int = 0
-        self.clanmembers : dict[int, ClanMember]= clanmembers
+        self.clanmembers: dict[str, ClanMember] = clanmembers
 
     def ChannelId(self) -> int:
         if self.channel is None:
