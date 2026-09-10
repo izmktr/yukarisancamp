@@ -1340,6 +1340,7 @@ async function supabaseInsertClanMember(config: SupabaseConfig, member: ClanMemb
       mention: member.mention,
       role: member.role,
       taskkill: member.taskkill,
+      day: new Date().toISOString().slice(0, 10),
       attacktime: member.attacktime,
       attackdata: toClanMemberAttackData(member),
       lastactive: member.lastactive,
