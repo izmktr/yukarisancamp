@@ -258,6 +258,7 @@ declare
   attack_sortie integer;
   attack_boss integer;
   attack_lap integer;
+  attack_day date;
   is_carry_over boolean;
   history_id bigint;
   changed_at timestamptz := now();
@@ -277,10 +278,15 @@ begin
   attack_sortie := coalesce((attack_data->>'sortie')::integer, 0);
   attack_boss := coalesce((attack_data->>'boss')::integer, 0);
   attack_lap := coalesce((attack_data->>'lap')::integer, 0);
+  attack_day := nullif(attack_data->>'day', '')::date;
   is_carry_over := coalesce((attack_data->>'overattack')::integer, 0) = 1;
 
   if attack_boss not between 1 and 5 or attack_sortie not between 1 and 3 then
     raise exception 'Attack is not active';
+  end if;
+
+  if attack_day is null then
+    raise exception 'Attack day is not set';
   end if;
 
   if p_action = 'defeat' then
@@ -316,8 +322,7 @@ begin
     ) values (
       target_member.clanid,
       target_member.memberid,
-      coalesce(nullif(attack_data->>'day', '')::date,
-        ((changed_at at time zone 'Asia/Tokyo') - interval '5 hours')::date),
+      attack_day,
       attack_sortie,
       p_messageid,
       attack_boss,
