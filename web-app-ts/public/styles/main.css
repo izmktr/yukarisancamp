@@ -429,6 +429,10 @@ body {
     color: #5f6a8a;
 }
 
+.clan-attack-active-action-status {
+    margin: 0;
+}
+
 .settings-status.success {
     color: #0b7a35;
 }

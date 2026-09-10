@@ -94,8 +94,7 @@
 
             <% operableAttackersForBoss.forEach((member) => { %>
                 <div class="clan-operate-panel" data-member-id="<%= member.memberid %>">
-                    <p class="clan-operate-panel-label"><%= member.isSelf ? '自分' : '代理操作' %>：<%= member.name || 'Unknown' %></p>
-                    <label class="clan-attack-message-label">メッセージ</label>
+                    <label class="clan-attack-message-label"><%= member.isSelf ? '自分' : '代理操作' %>：<%= member.name || 'Unknown' %></label>
                     <div class="clan-attack-message-row">
                         <input
                             class="clan-attack-message-input"
