@@ -1339,7 +1339,7 @@ async function supabaseInsertClanMember(config: SupabaseConfig, member: ClanMemb
       name: member.name,
       mention: member.mention,
       role: member.role,
-      taskkill: member.taskkill,
+      taskkill: null, // taskkillはDB上date型。新規メンバーには未設定
       day: new Date().toISOString().slice(0, 10),
       attacktime: member.attacktime,
       attackdata: toClanMemberAttackData(member),
@@ -1671,7 +1671,7 @@ async function supabaseUpdateClanMemberAttackMessage(
   member: ClanMemberRow,
   damage: number | null,
   attackMessage: string
-): Promise<void> {
+): Promise<ClanMemberRow> {
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLAN_MEMBERS_TABLE);
   const query = new URLSearchParams({
     memberid: `eq.${member.memberid}`
@@ -1706,9 +1706,11 @@ async function supabaseUpdateClanMemberAttackMessage(
   }
 
   const rows = await response.json() as unknown;
-  if (!Array.isArray(rows) || rows.length === 0) {
+  const updatedMember = Array.isArray(rows) ? normalizeClanMemberRow(rows[0]) : null;
+  if (!updatedMember) {
     throw new Error('Clan member was not found for attack message update');
   }
+  return updatedMember;
 }
 
 type AttackHistoryEditInput = {
@@ -2724,8 +2726,12 @@ app.post('/api/clan/attack/message', ensureDiscordServerLinked, express.json(), 
       return res.status(409).json({ error: 'Attack is not active' });
     }
 
-    await supabaseUpdateClanMemberAttackMessage(config, currentMember, damage, attackMessage);
-    return res.json({ success: true });
+    const updatedMember = await supabaseUpdateClanMemberAttackMessage(config, currentMember, damage, attackMessage);
+    return res.json({
+      success: true,
+      damage: updatedMember.damage,
+      message: updatedMember.attackmessage
+    });
   } catch (error) {
     console.error('Failed to update clan member attack message:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to update attack message';

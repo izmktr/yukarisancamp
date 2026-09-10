@@ -830,6 +830,60 @@ body {
     margin-top: 0.5rem;
 }
 
+.clan-start-attack-table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.clan-start-attack-table {
+    width: 100%;
+    min-width: 560px;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.clan-start-attack-table th,
+.clan-start-attack-table td {
+    padding: 0.6rem 0.5rem;
+    border-bottom: 1px solid #e7ebf2;
+    text-align: center;
+    vertical-align: middle;
+}
+
+.clan-start-attack-table th {
+    font-weight: 600;
+}
+
+.clan-start-attack-table th:not(.bosscount-item) {
+    background: #f6f8fb;
+    color: #3d4666;
+}
+
+.clan-start-attack-table th.bosscount-item {
+    border-bottom: 1px solid #e7ebf2;
+}
+
+.clan-start-attack-table th:first-child,
+.clan-start-attack-table td:first-child {
+    text-align: left;
+}
+
+.clan-start-attack-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.clan-start-attack-boss-cell {
+    display: table-cell;
+}
+
+.clan-start-attack-boss-cell .clan-attack-button {
+    margin-top: 0;
+}
+
+.clan-start-attack-boss-cell .clan-attack-button + .clan-attack-button {
+    margin-top: 0.35rem;
+}
+
 .clan-bosslap-input {
     width: 72px;
     margin: 0.35rem auto 0;

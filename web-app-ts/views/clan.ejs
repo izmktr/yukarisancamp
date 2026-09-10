@@ -78,9 +78,9 @@
                             ? ` [持:${carryTimeValue}]`
                             : '';
                     %>
-                    <div class="clan-attack-member-row">
+                    <div class="clan-attack-member-row" data-member-id="<%= member.memberid %>">
                         <strong><%= (member.name || 'Unknown') + carryTimeText %></strong>
-                        <span>
+                        <span class="clan-attack-member-row-text">
                             ：<%= Number(member.damage || 0).toLocaleString('ja-JP') %>
                             <% if (attackMessageText) { %>
                                 、<%= attackMessageText %>
@@ -161,9 +161,9 @@
                             ? ` [持:${carryTimeValue}]`
                             : '';
                     %>
-                    <div class="clan-attack-member-row">
+                    <div class="clan-attack-member-row" data-member-id="<%= member.memberid %>">
                         <strong><%= (member.name || 'Unknown') + carryTimeText %></strong>
-                        <span>
+                        <span class="clan-attack-member-row-text">
                             ：<%= Number(member.damage || 0).toLocaleString('ja-JP') %>
                             <% if (attackMessageText) { %>
                                 、<%= attackMessageText %>
@@ -250,57 +250,79 @@
                 <% if (idleOperableMembers.length > 0) { %>
                     <section class="clandata-section clan-start-attack-section">
                         <h3>攻撃開始</h3>
-                        <% idleOperableMembers.forEach((member) => { %>
-                            <%
-                                const memberHistories = currentAttackHistories.filter((history) => history.memberid === member.memberid);
-                                const memberMaxSortie = memberHistories.reduce((max, history) => {
-                                    const sortie = Number(history.sortie);
-                                    return Number.isFinite(sortie) ? Math.max(max, sortie) : max;
-                                }, 0);
-                                const memberHistoryCountBySortie = memberHistories.reduce((counts, history) => {
-                                    const sortie = Number(history.sortie);
-                                    counts.set(sortie, (counts.get(sortie) || 0) + 1);
-                                    return counts;
-                                }, new Map());
-                                const memberCarryOverHistories = memberHistories.filter((history) => (
-                                    history.defeat === true
-                                    && memberHistoryCountBySortie.get(Number(history.sortie)) === 1
-                                    && Number.isInteger(Number(history.overtime))
-                                    && Number(history.overtime) >= 20
-                                    && Number(history.overtime) <= 90
-                                ));
-                                const memberCanStartAttack = memberMaxSortie < 3;
-                            %>
-                            <div class="clan-operate-panel clan-start-attack-panel" data-member-id="<%= member.memberid %>">
-                                <p class="clan-operate-panel-label"><%= member.isSelf ? '自分' : '代理操作' %>：<%= member.name || 'Unknown' %></p>
-                                <div class="clan-start-attack-boss-list">
-                                    <% laps.forEach((count, idx) => { %>
-                                        <div class="clan-start-attack-boss-item">
-                                            <span class="boss-name-label" data-boss-index="<%= idx %>">ボス <%= idx + 1 %></span>
-                                            <% if (memberCanStartAttack) { %>
-                                                <button
-                                                    type="button"
-                                                    class="btn btn-primary clan-attack-button"
-                                                    data-boss="<%= idx + 1 %>"
-                                                    aria-label="ボス<%= idx + 1 %>を攻撃"
-                                                    <%= bossAttackDisabled[idx] ? 'disabled' : '' %>
-                                                >新規攻撃</button>
-                                            <% } %>
-                                            <% memberCarryOverHistories.forEach((history) => { %>
-                                                <button
-                                                    type="button"
-                                                    class="btn clan-attack-button clan-carryover-attack-button"
-                                                    data-boss="<%= idx + 1 %>"
-                                                    data-history-id="<%= Number(history.id) %>"
-                                                    aria-label="<%= Number(history.overtime) %>秒の持ち越しでボス<%= idx + 1 %>を攻撃"
-                                                    <%= bossAttackDisabled[idx] ? 'disabled' : '' %>
-                                                ><%= Number(history.overtime) %>s攻撃</button>
+                        <div class="clan-start-attack-table-wrapper">
+                            <table class="clan-start-attack-table">
+                                <thead>
+                                    <tr>
+                                        <th>名前</th>
+                                        <% laps.forEach((count, idx) => { %>
+                                            <%
+                                                const headerCount = Number(count);
+                                                let headerStateClass = '';
+                                                if (headerCount === minBossCount + 1) {
+                                                    headerStateClass = 'bosscount-near-min';
+                                                } else if (headerCount >= minBossCount + 2) {
+                                                    headerStateClass = 'bosscount-far-min';
+                                                }
+                                            %>
+                                            <th class="bosscount-item <%= headerStateClass %>">
+                                                <span class="boss-name-label" data-boss-index="<%= idx %>">ボス <%= idx + 1 %></span>
+                                            </th>
+                                        <% }); %>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <% idleOperableMembers.forEach((member) => { %>
+                                        <%
+                                            const memberHistories = currentAttackHistories.filter((history) => history.memberid === member.memberid);
+                                            const memberMaxSortie = memberHistories.reduce((max, history) => {
+                                                const sortie = Number(history.sortie);
+                                                return Number.isFinite(sortie) ? Math.max(max, sortie) : max;
+                                            }, 0);
+                                            const memberHistoryCountBySortie = memberHistories.reduce((counts, history) => {
+                                                const sortie = Number(history.sortie);
+                                                counts.set(sortie, (counts.get(sortie) || 0) + 1);
+                                                return counts;
+                                            }, new Map());
+                                            const memberCarryOverHistories = memberHistories.filter((history) => (
+                                                history.defeat === true
+                                                && memberHistoryCountBySortie.get(Number(history.sortie)) === 1
+                                                && Number.isInteger(Number(history.overtime))
+                                                && Number(history.overtime) >= 20
+                                                && Number(history.overtime) <= 90
+                                            ));
+                                            const memberCanStartAttack = memberMaxSortie < 3;
+                                        %>
+                                        <tr class="clan-operate-panel" data-member-id="<%= member.memberid %>">
+                                            <td class="clan-operate-panel-label"><%= member.isSelf ? '自分' : '代理操作' %>：<%= member.name || 'Unknown' %></td>
+                                            <% laps.forEach((count, idx) => { %>
+                                                <td class="clan-start-attack-boss-cell">
+                                                    <% if (memberCanStartAttack) { %>
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-primary clan-attack-button"
+                                                            data-boss="<%= idx + 1 %>"
+                                                            aria-label="ボス<%= idx + 1 %>を攻撃"
+                                                            <%= bossAttackDisabled[idx] ? 'disabled' : '' %>
+                                                        >新規攻撃</button>
+                                                    <% } %>
+                                                    <% memberCarryOverHistories.forEach((history) => { %>
+                                                        <button
+                                                            type="button"
+                                                            class="btn clan-attack-button clan-carryover-attack-button"
+                                                            data-boss="<%= idx + 1 %>"
+                                                            data-history-id="<%= Number(history.id) %>"
+                                                            aria-label="<%= Number(history.overtime) %>秒の持ち越しでボス<%= idx + 1 %>を攻撃"
+                                                            <%= bossAttackDisabled[idx] ? 'disabled' : '' %>
+                                                        ><%= Number(history.overtime) %>s攻撃</button>
+                                                    <% }); %>
+                                                </td>
                                             <% }); %>
-                                        </div>
+                                        </tr>
                                     <% }); %>
-                                </div>
-                            </div>
-                        <% }); %>
+                                </tbody>
+                            </table>
+                        </div>
                         <p id="clan-attack-status" class="settings-status" aria-live="polite"></p>
                     </section>
                 <% } %>
@@ -830,8 +852,20 @@
                         throw new Error(payload && payload.error ? payload.error : 'Failed to update attack message');
                     }
 
+                    const payload = await response.json().catch(() => null);
+                    const memberRow = document.querySelector(`.clan-attack-member-row[data-member-id="${memberId}"] .clan-attack-member-row-text`);
+                    if (memberRow && payload) {
+                        const updatedDamage = Number(payload.damage) || 0;
+                        const updatedMessage = typeof payload.message === 'string' ? payload.message.trim() : '';
+                        const suffix = updatedMessage
+                            ? `、${updatedMessage}`
+                            : (payload.damage === null || payload.damage === undefined ? '、メッセージなし' : '');
+                        memberRow.textContent = `：${updatedDamage.toLocaleString('ja-JP')}${suffix}`;
+                    }
+
                     if (messageInput) {
-                        messageInput.defaultValue = messageInput.value;
+                        messageInput.value = '';
+                        messageInput.defaultValue = '';
                         messageInput.dispatchEvent(new CustomEvent('clan-attack-message-saved'));
                     }
                     setStatus('送信しました。', 'success');
