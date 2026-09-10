@@ -318,6 +318,7 @@ app.get('/clan', ensureDiscordServerLinked, async (req, res) => {
     clan: null,
     members: [],
     currentMember: null,
+    operableMembers: [],
     attackHistories: [],
     bossNames: [],
     bossHp: [],
@@ -627,11 +628,14 @@ type ClanBossStateRow = {
   updated_by: string | null;
 };
 
+type OperableClanMemberRow = ClanMemberRow & { isSelf: boolean };
+
 type ClanPagePayload = {
   discordServer: string;
   clan: ClanInfoRow | null;
   members: ClanMemberRow[];
   currentMember: ClanMemberRow | null;
+  operableMembers: OperableClanMemberRow[];
   attackHistories: AttackHistoryRow[];
   bossNames: string[];
   bossHp: Array<number | null>;
@@ -653,6 +657,7 @@ const SUPABASE_CLANS_TABLE = 'clans';
 const SUPABASE_CLAN_MEMBERS_TABLE = 'clan_members';
 const SUPABASE_CLAN_BOSS_STATE_TABLE = 'clan_boss_state';
 const SUPABASE_ATTACK_HISTORIES_TABLE = 'attack_histories';
+const SUPABASE_MEMBER_DELEGATIONS_TABLE = 'member_delegations';
 const SUPABASE_CLAN_BATTLE_SINGLETON_ID = 0;
 
 type ClanBattleSettingEventPayload = {
@@ -919,6 +924,75 @@ async function supabaseSelectClanMembersByDiscordServer(config: SupabaseConfig, 
   return rows
     .map((row) => normalizeClanMemberRow(row))
     .filter((row): row is ClanMemberRow => !!row);
+}
+
+async function supabaseSelectDelegateIdsForOperator(
+  config: SupabaseConfig,
+  clanId: string,
+  operatorMemberId: string
+): Promise<string[]> {
+  if (!clanId || !operatorMemberId) {
+    return [];
+  }
+
+  const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_MEMBER_DELEGATIONS_TABLE);
+  const query = new URLSearchParams({
+    select: 'delegateid',
+    clanid: `eq.${clanId}`,
+    memberid: `eq.${operatorMemberId}`
+  });
+
+  const response = await fetch(`${endpointUrl}?${query.toString()}`, {
+    method: 'GET',
+    headers: {
+      apikey: config.secretKey,
+      Authorization: `Bearer ${config.secretKey}`
+    }
+  });
+
+  if (!response.ok) {
+    const responseText = await response.text();
+    throw new Error(`Supabase select member delegations failed: ${response.status} ${responseText}`);
+  }
+
+  const rows = await response.json() as unknown;
+  if (!Array.isArray(rows)) {
+    return [];
+  }
+
+  return rows
+    .map((row) => (row && typeof row === 'object' ? (row as Record<string, unknown>).delegateid : null))
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    .map((value) => value.trim());
+}
+
+type ActingClanMemberResult =
+  | { ok: true; member: ClanMemberRow }
+  | { ok: false; status: number; error: string };
+
+// 代理操作対象は自分自身か member_delegations に登録済みの相手に限定する
+async function resolveActingClanMember(
+  config: SupabaseConfig,
+  clanId: string,
+  discordId: string,
+  members: ClanMemberRow[],
+  requestedMemberId: string
+): Promise<ActingClanMemberResult> {
+  const targetMemberId = isNonEmptyTrimmedString(requestedMemberId) ? requestedMemberId.trim() : discordId;
+
+  if (targetMemberId !== discordId) {
+    const delegateIds = await supabaseSelectDelegateIdsForOperator(config, clanId, discordId);
+    if (!delegateIds.includes(targetMemberId)) {
+      return { ok: false, status: 403, error: 'Not authorized to act as this member' };
+    }
+  }
+
+  const member = members.find((item) => item.memberid === targetMemberId);
+  if (!member) {
+    return { ok: false, status: 404, error: 'Clan member was not found' };
+  }
+
+  return { ok: true, member };
 }
 
 function normalizeAttackHistoryRow(raw: unknown): AttackHistoryRow | null {
@@ -1328,14 +1402,33 @@ async function loadClanPagePayload(
       ? withoutClanMemberAttackData(member)
       : member
   ));
-  const attackHistories = currentMember
-    ? await supabaseSelectAttackHistories(config, currentMember, baseDate)
+
+  const clanId = normalizeDiscordServerToClanId(discordServer);
+  const delegateIds = clanId && currentDiscordId
+    ? await supabaseSelectDelegateIdsForOperator(config, clanId, currentDiscordId)
     : [];
+  const operableMembers: OperableClanMemberRow[] = [];
+  if (currentMember) {
+    operableMembers.push({ ...currentMember, isSelf: true });
+  }
+  for (const delegateId of delegateIds) {
+    const delegateMember = members.find((member) => member.memberid === delegateId);
+    if (delegateMember && !operableMembers.some((member) => member.memberid === delegateMember.memberid)) {
+      operableMembers.push({ ...delegateMember, isSelf: false });
+    }
+  }
+
+  const attackHistoryLists = await Promise.all(
+    operableMembers.map((member) => supabaseSelectAttackHistories(config, member, baseDate))
+  );
+  const attackHistories = attackHistoryLists.flat();
+
   return {
     discordServer,
     clan,
     members: displayMembers,
     currentMember: currentMember || null,
+    operableMembers,
     attackHistories,
     bossNames: clanBattleState?.bossname || [],
     bossHp,
@@ -1619,6 +1712,7 @@ async function supabaseUpdateClanMemberAttackMessage(
 
 type AttackHistoryEditInput = {
   id: number;
+  memberid: string;
   attacklap: number;
   boss: number;
   defeat: boolean;
@@ -1632,11 +1726,13 @@ function normalizeAttackHistoryEditInput(raw: unknown): AttackHistoryEditInput |
 
   const source = raw as Record<string, unknown>;
   const id = Number(source.id);
+  const memberid = typeof source.memberid === 'string' ? source.memberid.trim() : '';
   const attacklap = Number(source.attacklap);
   const boss = Number(source.boss);
   const defeat = source.defeat;
   const overtime = Number(source.overtime);
   if (!Number.isInteger(id) || id < 1
+    || !memberid
     || !Number.isInteger(attacklap) || attacklap < 0
     || !Number.isInteger(boss) || boss < 1 || boss > 5
     || typeof defeat !== 'boolean'
@@ -1645,7 +1741,7 @@ function normalizeAttackHistoryEditInput(raw: unknown): AttackHistoryEditInput |
     return null;
   }
 
-  return { id, attacklap, boss, defeat, overtime: defeat ? overtime : 0 };
+  return { id, memberid, attacklap, boss, defeat, overtime: defeat ? overtime : 0 };
 }
 
 async function supabaseUpdateAttackHistory(
@@ -2363,12 +2459,12 @@ app.post('/api/clan/attack/start', ensureDiscordServerLinked, express.json(), as
       return res.status(409).json({ error: 'This boss cannot be attacked at its current lap' });
     }
 
-    const currentMember = members.find((member) => (
-      member.memberid === discordId
-    ));
-    if (!currentMember) {
-      return res.status(404).json({ error: 'Clan member was not found' });
+    const actingMemberId = typeof req.body?.actingMemberId === 'string' ? req.body.actingMemberId : '';
+    const actingResult = await resolveActingClanMember(config, clan.clanid, discordId, members, actingMemberId);
+    if (!actingResult.ok) {
+      return res.status(actingResult.status).json({ error: actingResult.error });
     }
+    const currentMember = actingResult.member;
     if (currentMember.attackboss !== 0) {
       return res.status(409).json({ error: 'Attack has already started' });
     }
@@ -2441,12 +2537,12 @@ app.post('/api/clan/attack/carryover/start', ensureDiscordServerLinked, express.
       return res.status(409).json({ error: 'This boss cannot be attacked at its current lap' });
     }
 
-    const currentMember = members.find((member) => (
-      member.memberid === discordId
-    ));
-    if (!currentMember) {
-      return res.status(404).json({ error: 'Clan member was not found' });
+    const actingMemberId = typeof req.body?.actingMemberId === 'string' ? req.body.actingMemberId : '';
+    const actingResult = await resolveActingClanMember(config, clan.clanid, discordId, members, actingMemberId);
+    if (!actingResult.ok) {
+      return res.status(actingResult.status).json({ error: actingResult.error });
     }
+    const currentMember = actingResult.member;
     if (currentMember.attackboss !== 0) {
       return res.status(409).json({ error: 'Attack has already started' });
     }
@@ -2508,13 +2604,15 @@ app.post('/api/clan/attack/finish', ensureDiscordServerLinked, express.json(), a
       return res.status(403).json({ error: 'Discord account is not linked' });
     }
 
-    const members = await supabaseSelectClanMembersByDiscordServer(config, getSessionDiscordServer(req));
-    const currentMember = members.find((member) => (
-      member.memberid === discordId
-    ));
-    if (!currentMember) {
-      return res.status(404).json({ error: 'Clan member was not found' });
+    const discordServer = getSessionDiscordServer(req);
+    const clanId = normalizeDiscordServerToClanId(discordServer);
+    const members = await supabaseSelectClanMembersByDiscordServer(config, discordServer);
+    const actingMemberId = typeof req.body?.actingMemberId === 'string' ? req.body.actingMemberId : '';
+    const actingResult = await resolveActingClanMember(config, clanId, discordId, members, actingMemberId);
+    if (!actingResult.ok) {
+      return res.status(actingResult.status).json({ error: actingResult.error });
     }
+    const currentMember = actingResult.member;
     if (currentMember.attackboss === 0) {
       return res.status(409).json({ error: 'Attack is not active' });
     }
@@ -2529,7 +2627,6 @@ app.post('/api/clan/attack/finish', ensureDiscordServerLinked, express.json(), a
       });
     }
 
-    const discordServer = getSessionDiscordServer(req);
     const clan = await supabaseSelectClanByDiscordServer(config, discordServer);
     if (!clan) {
       return res.status(404).json({ error: 'Clan was not found' });
@@ -2613,13 +2710,15 @@ app.post('/api/clan/attack/message', ensureDiscordServerLinked, express.json(), 
       return res.status(403).json({ error: 'Discord account is not linked' });
     }
 
-    const members = await supabaseSelectClanMembersByDiscordServer(config, getSessionDiscordServer(req));
-    const currentMember = members.find((member) => (
-      member.memberid === discordId
-    ));
-    if (!currentMember) {
-      return res.status(404).json({ error: 'Clan member was not found' });
+    const discordServer = getSessionDiscordServer(req);
+    const clanId = normalizeDiscordServerToClanId(discordServer);
+    const members = await supabaseSelectClanMembersByDiscordServer(config, discordServer);
+    const actingMemberId = typeof req.body?.actingMemberId === 'string' ? req.body.actingMemberId : '';
+    const actingResult = await resolveActingClanMember(config, clanId, discordId, members, actingMemberId);
+    if (!actingResult.ok) {
+      return res.status(actingResult.status).json({ error: actingResult.error });
     }
+    const currentMember = actingResult.member;
     if (currentMember.attackboss === 0) {
       return res.status(409).json({ error: 'Attack is not active' });
     }
@@ -2664,12 +2763,12 @@ app.post('/api/clan/active-boss-hp/save', ensureDiscordServerLinked, express.jso
     }
 
     const members = await supabaseSelectClanMembersByDiscordServer(config, discordServer);
-    const currentMember = members.find((member) => (
-      member.memberid === discordId
-    ));
-    if (!currentMember) {
-      return res.status(404).json({ error: 'Clan member was not found' });
+    const actingMemberId = typeof req.body?.actingMemberId === 'string' ? req.body.actingMemberId : '';
+    const actingResult = await resolveActingClanMember(config, clan.clanid, discordId, members, actingMemberId);
+    if (!actingResult.ok) {
+      return res.status(actingResult.status).json({ error: actingResult.error });
     }
+    const currentMember = actingResult.member;
     if (currentMember.attackboss === 0) {
       return res.status(409).json({ error: 'Attack is not active' });
     }
@@ -2728,17 +2827,28 @@ app.post('/api/clan/attack-history/save', ensureDiscordServerLinked, express.jso
       return res.status(403).json({ error: 'Discord account is not linked' });
     }
 
-    const members = await supabaseSelectClanMembersByDiscordServer(config, getSessionDiscordServer(req));
-    const currentMember = members.find((member) => (
-      member.memberid === discordId
-    ));
-    if (!currentMember) {
-      return res.status(404).json({ error: 'Clan member was not found' });
-    }
+    const discordServer = getSessionDiscordServer(req);
+    const clanId = normalizeDiscordServerToClanId(discordServer);
+    const members = await supabaseSelectClanMembersByDiscordServer(config, discordServer);
 
     const day = getBaseDate();
-    const currentHistories = await supabaseSelectAttackHistories(config, currentMember, day);
+    const requestedMemberIds = Array.from(new Set((histories as AttackHistoryEditInput[]).map((history) => history.memberid)));
+    const actingMembers = new Map<string, ClanMemberRow>();
+    for (const memberId of requestedMemberIds) {
+      const actingResult = await resolveActingClanMember(config, clanId, discordId, members, memberId);
+      if (!actingResult.ok) {
+        return res.status(actingResult.status).json({ error: actingResult.error });
+      }
+      actingMembers.set(memberId, actingResult.member);
+    }
+
+    const currentHistoriesByMember = new Map<string, AttackHistoryRow[]>();
+    for (const [memberId, member] of actingMembers) {
+      currentHistoriesByMember.set(memberId, await supabaseSelectAttackHistories(config, member, day));
+    }
+
     for (const history of histories as AttackHistoryEditInput[]) {
+      const currentHistories = currentHistoriesByMember.get(history.memberid) || [];
       const currentHistory = currentHistories.find((item) => item.id === history.id);
       if (!currentHistory) {
         return res.status(404).json({ error: 'Attack history was not found' });
@@ -2761,11 +2871,17 @@ app.post('/api/clan/attack-history/save', ensureDiscordServerLinked, express.jso
       }
     }
     for (const history of histories as AttackHistoryEditInput[]) {
-      await supabaseUpdateAttackHistory(config, currentMember, day, history);
+      const member = actingMembers.get(history.memberid);
+      if (!member) {
+        continue;
+      }
+      await supabaseUpdateAttackHistory(config, member, day, history);
     }
-    const updatedHistories = await supabaseSelectAttackHistories(config, currentMember, day);
-    const attacktime = buildAttacktimeFromHistories(updatedHistories);
-    await supabaseUpdateClanMemberAttacktime(config, currentMember, attacktime);
+    for (const [, member] of actingMembers) {
+      const updatedHistories = await supabaseSelectAttackHistories(config, member, day);
+      const attacktime = buildAttacktimeFromHistories(updatedHistories);
+      await supabaseUpdateClanMemberAttacktime(config, member, attacktime);
+    }
     return res.json({ success: true });
   } catch (error) {
     console.error('Failed to update attack histories:', error);
@@ -2776,6 +2892,7 @@ app.post('/api/clan/attack-history/save', ensureDiscordServerLinked, express.jso
 
 app.post('/api/clan/attack-history/delete', ensureDiscordServerLinked, express.json(), async (req, res) => {
   const historyId = Number(req.body?.id);
+  const requestedMemberId = typeof req.body?.memberid === 'string' ? req.body.memberid : '';
   if (!Number.isInteger(historyId) || historyId < 1) {
     return res.status(400).json({ error: 'Invalid attack history ID' });
   }
@@ -2798,13 +2915,14 @@ app.post('/api/clan/attack-history/delete', ensureDiscordServerLinked, express.j
       return res.status(403).json({ error: 'Discord account is not linked' });
     }
 
-    const members = await supabaseSelectClanMembersByDiscordServer(config, getSessionDiscordServer(req));
-    const currentMember = members.find((member) => (
-      member.memberid === discordId
-    ));
-    if (!currentMember) {
-      return res.status(404).json({ error: 'Clan member was not found' });
+    const discordServer = getSessionDiscordServer(req);
+    const clanId = normalizeDiscordServerToClanId(discordServer);
+    const members = await supabaseSelectClanMembersByDiscordServer(config, discordServer);
+    const actingResult = await resolveActingClanMember(config, clanId, discordId, members, requestedMemberId);
+    if (!actingResult.ok) {
+      return res.status(actingResult.status).json({ error: actingResult.error });
     }
+    const currentMember = actingResult.member;
 
     const day = getBaseDate();
     const attackHistories = await supabaseSelectAttackHistories(config, currentMember, day);

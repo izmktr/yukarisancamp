@@ -657,5 +657,17 @@ begin
 end
 $$;
 
+-- 代理操作: memberid(操作者) が delegateid(被操作者) の代わりに攻撃・凸履歴を操作できるようにする権限テーブル
+create table if not exists public.member_delegations (
+  clanid text not null,
+  memberid text not null,
+  delegateid text not null,
+  created_at timestamptz not null default now(),
+  primary key (clanid, memberid, delegateid)
+);
+
+create index if not exists member_delegations_clanid_memberid_idx
+  on public.member_delegations (clanid, memberid);
+
 notify pgrst, 'reload schema';
 
