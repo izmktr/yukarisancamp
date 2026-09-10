@@ -30,7 +30,7 @@
   <% const sortedMembers = membersAttackSummary.slice().sort((left, right) => { const diff = left.attackCount - right.attackCount; if (diff !== 0) return diff; return String(left.member.name || '').localeCompare(String(right.member.name || ''), 'ja'); }); %>
   <% const rowToAttackCount = (member) => { const memberKey = String(member.memberid || ''); const totalSortieCount = todayHistoryRows.filter((history) => String(history.memberid || '') === memberKey).reduce((sum, history) => sum + Number(history.sortiecount ?? (history.defeat === true ? 1 : 2)), 0); return totalSortieCount / 2; }; %>
   <% const rowToPlanText = (member) => { const plan = Array.isArray(member.plan) ? [...member.plan].sort((a, b) => Number(a) - Number(b)) : []; return plan.map((p) => Number(p) + 1).join(','); }; %>
-  <% const roleLabel = (role) => { if (role === 'leader') return 'マスター'; if (role === 'officer') return 'サブリーダー'; return 'メンバー'; }; %>
+  <% const roleLabel = (role) => { if (role === 'leader') return 'マスター'; if (role === 'officer') return 'サブマスター'; return 'メンバー'; }; %>
 
   <div class="clandata-header">
     <h2>クランデータ詳細</h2>

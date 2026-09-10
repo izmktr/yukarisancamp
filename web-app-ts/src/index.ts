@@ -98,7 +98,7 @@ function getClanMemberRoleLabel(role: ClanMemberRow['role']): string {
   }
 
   if (role === 'officer') {
-    return 'サブリーダー';
+    return 'サブマスター';
   }
 
   return '';
