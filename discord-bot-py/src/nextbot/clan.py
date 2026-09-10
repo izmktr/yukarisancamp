@@ -1298,6 +1298,14 @@ class Clan(MessageRouter):
             )
             if old_state != new_state and self.guild is not None:
                 await self.OnMessageHandled(self.guild)
+
+            if member is not None and member.IsAttack():
+                dc = self.damagecontrol[member.boss - 1]
+                dc.Damage(member, member.damage, member.message)
+                if member.damage > 0 or len(member.message) > 0:
+                    self.active = True
+                    await dc.SendResult()
+
             return
 
         raw_memberid = old_data.get("memberid")
@@ -1382,6 +1390,22 @@ class Clan(MessageRouter):
     async def OnMessageDamageChannel(self,  message: discord.Message, member: discord.Member) -> None:
         dc = await self.DamageChannelMessage(message, member)
         if dc is not None:
+            # ダメージとコメントをsupabaseに送信
+            cmember = self.GetMember(member.id)
+            if cmember is not None:
+                dcm = dc.members.get(cmember)
+                if dcm is not None and self.supabase is not None and self.clan_id is not None:
+                    try:
+                        await asyncio.to_thread(
+                            self.supabase.update_clan_member_damage_message,
+                            self.clan_id,
+                            cmember.id,
+                            dcm.damage,
+                            dcm.message,
+                        )
+                    except Exception as exc:
+                        self.TemporaryMessage(message.channel, f'ダメージの更新に失敗しました: {exc}')
+
             await dc.SendResult()
 
     async def DamageChannelMessage(self,  message: discord.Message, member: discord.Member) -> DamageControl | None:
@@ -1401,6 +1425,29 @@ class Clan(MessageRouter):
 
             remainhp = int(m.group(3))
             dc.RemainHp(remainhp)
+
+            #supabaseに残りHPを送信
+            if self.supabase is not None and self.clan_id is not None and self.clanbattle_setting is not None:
+                raw_yearmonth = self.clanbattle_setting.get('yearmonth')
+                raw_bosshp = self.clanbattle_setting.get('bossHp')
+                yearmonth = raw_yearmonth if isinstance(raw_yearmonth, str) else ''
+                bosshp = cast(list[object], raw_bosshp) if isinstance(raw_bosshp, list) else []
+                raw_max_hp = bosshp[dc.bossindex] if dc.bossindex < len(bosshp) else None
+                max_hp = raw_max_hp if isinstance(raw_max_hp, int) else 0
+                if yearmonth:
+                    try:
+                        await asyncio.to_thread(
+                            self.supabase.update_clan_boss_state_current_hp,
+                            self.clan_id,
+                            yearmonth,
+                            dc.bossindex + 1,
+                            remainhp,
+                            max_hp,
+                            member.display_name,
+                        )
+                    except Exception as exc:
+                        self.TemporaryMessage(message.channel, f'残りHPの更新に失敗しました: {exc}')
+
             return dc
 
         cmember = self.GetMember(member.id)
@@ -1424,6 +1471,13 @@ class Clan(MessageRouter):
             if m:
                 damage = int(m.group(3))
                 comment = str.strip(m.group(1) + m.group(4))
+                dc.Damage(cmember, damage, comment)
+                return dc
+
+            m = re.match(r'(\d\d\d+)[+＋](\d\d+)([^\d]*.*)', message.content)
+            if m:
+                damage = int(m.group(1)) + int(m.group(2))
+                comment = str.strip(m.group(3))
                 dc.Damage(cmember, damage, comment)
                 return dc
 

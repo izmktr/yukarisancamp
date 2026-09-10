@@ -124,6 +124,45 @@ class SupabaseClient:
             if isinstance(row, dict)
         ]
 
+    def update_clan_boss_state_current_hp(
+        self,
+        clan_id: int,
+        yearmonth: str,
+        boss_index: int,
+        current_hp: int,
+        max_hp: int,
+        updated_by: str,
+    ) -> None:
+        query = urlencode({"on_conflict": "clanid,yearmonth,boss_index"})
+        payload = json.dumps(
+            [
+                {
+                    "clanid": str(clan_id),
+                    "yearmonth": yearmonth,
+                    "boss_index": boss_index,
+                    "current_hp": current_hp,
+                    "max_hp": max_hp,
+                    "is_defeated": current_hp <= 0,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                    "updated_by": updated_by,
+                }
+            ]
+        ).encode("utf-8")
+        request = Request(
+            f"{self.url}/rest/v1/clan_boss_state?{query}",
+            data=payload,
+            method="POST",
+            headers={
+                "apikey": self.secret_key,
+                "Authorization": f"Bearer {self.secret_key}",
+                "Content-Type": "application/json",
+                "Prefer": "resolution=merge-duplicates,return=minimal",
+            },
+        )
+
+        with urlopen(request, timeout=10):
+            pass
+
     def update_clan_bosslaps(self, clan_id: int, bosslaps: list[int]) -> None:
         query = urlencode({"clanid": f"eq.{clan_id}"})
         payload = json.dumps({"bosslaps": bosslaps}).encode("utf-8")
@@ -421,6 +460,59 @@ class SupabaseClient:
                 "attackdata": attackdata,
                 "lastactive": now,
                 "updated_at": now,
+            }
+        ).encode("utf-8")
+        request = Request(
+            f"{self.url}/rest/v1/clan_members?{update_query}",
+            data=payload,
+            method="PATCH",
+            headers={
+                "apikey": self.secret_key,
+                "Authorization": f"Bearer {self.secret_key}",
+                "Content-Type": "application/json",
+                "Prefer": "return=minimal",
+            },
+        )
+
+        with urlopen(request, timeout=10):
+            pass
+
+    def update_clan_member_damage_message(
+        self,
+        clan_id: int,
+        member_id: int | str,
+        damage: int,
+        message: str,
+    ) -> None:
+        query = urlencode(
+            {
+                "select": "attackdata",
+                "memberid": f"eq.{member_id}",
+                "limit": "1",
+            }
+        )
+        get_request = Request(
+            f"{self.url}/rest/v1/clan_members?{query}",
+            headers={
+                "apikey": self.secret_key,
+                "Authorization": f"Bearer {self.secret_key}",
+            },
+        )
+        with urlopen(get_request, timeout=10) as response:
+            rows = json.load(response)
+
+        attackdata = self.normalize_attackdata(None)
+        if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+            row = cast(dict[str, object], rows[0])
+            attackdata = self.normalize_attackdata(row.get("attackdata"))
+
+        attackdata.update({"damage": damage, "message": message})
+
+        update_query = urlencode({"memberid": f"eq.{member_id}"})
+        payload = json.dumps(
+            {
+                "attackdata": attackdata,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
             }
         ).encode("utf-8")
         request = Request(

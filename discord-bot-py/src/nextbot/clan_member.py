@@ -21,6 +21,9 @@ class ClanMember():
         self.lastactive = datetime.datetime.now() + datetime.timedelta(days = -1)
                                                         # 最後に発言した時刻
 
+        self.damage: int = 0                              # 与えたダメージ
+        self.message: str = ''                            # コメント
+
     def Attack(self, bossindex : int, sortie : int):
         self.sortie = sortie
         self.reportlimit = datetime.datetime.now() + datetime.timedelta(minutes = 30)
@@ -58,6 +61,12 @@ class ClanMember():
         else:
             self.boss = 0
             self.sortie = -1
+
+        damage = attackdata.get("damage", 0)
+        self.damage = damage if isinstance(damage, int) else 0
+
+        message = attackdata.get("message", "")
+        self.message = message if isinstance(message, str) else ""
 
     def IsAttack(self):
         return self.sortie != -1
@@ -154,7 +163,6 @@ class ClanMember():
     
     def UpdateActive(self):
         self.lastactive = datetime.datetime.now()
-
 
     # def PlanFromHistory(self):
     #     result : list[AttackHistory] = []
