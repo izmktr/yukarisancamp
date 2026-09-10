@@ -33,6 +33,8 @@
       if (role === 'officer') return 'サブマスター';
       return '';
     }; %>
+    <% const clanId = data.clan && typeof data.clan.clanid === 'string' ? data.clan.clanid : ''; %>
+    <% const delegations = Array.isArray(data.delegations) ? data.delegations : []; %>
 
     <section class="clan-management-panel">
       <div class="clan-management-header">
@@ -72,6 +74,31 @@
         </div>
       </div>
 
+      <div class="clan-management-modal" id="clan-management-delegation-modal" aria-hidden="true">
+        <div class="clan-management-modal-backdrop" data-clan-management-delegation-modal-close></div>
+        <div class="clan-management-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="clan-management-delegation-modal-title">
+          <div class="clan-management-modal-header">
+            <h4 id="clan-management-delegation-modal-title">代理設定</h4>
+            <div class="clan-management-modal-header-actions">
+              <button type="button" class="btn clan-management-modal-cancel" data-clan-management-delegation-modal-close>破棄</button>
+              <button type="button" id="clan-management-delegation-modal-submit" class="btn btn-primary">確定</button>
+            </div>
+          </div>
+          <p class="clan-management-modal-description">代理操作をするユーザーを選んでください。</p>
+          <div id="clan-management-delegation-checkbox-list" class="clan-management-delegation-checkbox-list"></div>
+        </div>
+      </div>
+
+      <form method="post" action="/clan-management/members/delegations" id="clan-management-delegation-form" class="clan-management-delegation-form">
+        <input type="hidden" name="clanid" value="<%= clanId %>" />
+        <input type="hidden" name="memberid" id="clan-management-delegation-memberid" />
+      </form>
+
+      <script type="application/json" id="clan-management-delegation-data"><%- JSON.stringify({
+        members: members.map((member) => ({ memberid: member.memberid, name: member.name || 'Unknown' })),
+        delegations
+      }) %></script>
+
       <h3 class="clan-management-member-list-title">クランメンバー一覧</h3>
 
       <div class="clan-management-table-wrapper">
@@ -92,6 +119,7 @@
                   <span class="clan-management-role-badge <%= roleBadgeClass %>"><%= roleLabel(member.role) || 'メンバー' %></span>
                 </td>
                 <td>
+                  <button type="button" class="btn clan-management-delegate-button" data-member-id="<%= member.memberid %>">代理</button>
                   <form method="post" action="/clan-management/members/delete" class="clan-management-delete-form" onsubmit="return confirm('このメンバーを削除します。よろしいですか？');">
                     <input type="hidden" name="clanid" value="<%= member.clanid %>" />
                     <input type="hidden" name="memberid" value="<%= member.memberid %>" />
@@ -399,6 +427,43 @@
     box-shadow: 0 10px 24px rgba(220, 38, 38, 0.18);
   }
 
+  .clan-management-delegate-button {
+    min-width: 4rem;
+    margin-right: 0.5rem;
+    border-radius: 999px;
+    background: rgba(59, 130, 246, 0.12);
+    color: #1d4ed8;
+    border: 1px solid rgba(59, 130, 246, 0.24);
+  }
+
+  .clan-management-modal-header-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-shrink: 0;
+  }
+
+  .clan-management-delegation-form {
+    display: none;
+  }
+
+  .clan-management-delegation-checkbox-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-height: 16rem;
+    overflow-y: auto;
+    margin-top: 0.5rem;
+  }
+
+  .clan-management-delegation-checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.5rem;
+    border-radius: 10px;
+    background: rgba(248, 250, 252, 0.9);
+  }
+
   @media (max-width: 720px) {
     .clan-management-panel {
       padding: 1rem;
@@ -487,6 +552,92 @@
       addNameInput.value = trimmedName;
       closeModal();
       addForm.submit();
+    });
+  })();
+
+  (function () {
+    const dataScript = document.getElementById('clan-management-delegation-data');
+    const modal = document.getElementById('clan-management-delegation-modal');
+    const checkboxList = document.getElementById('clan-management-delegation-checkbox-list');
+    const modalSubmit = document.getElementById('clan-management-delegation-modal-submit');
+    const modalCloseButtons = Array.from(document.querySelectorAll('[data-clan-management-delegation-modal-close]'));
+    const delegationForm = document.getElementById('clan-management-delegation-form');
+    const delegationMemberIdInput = document.getElementById('clan-management-delegation-memberid');
+    const delegateButtons = Array.from(document.querySelectorAll('.clan-management-delegate-button'));
+
+    if (!dataScript || !modal || !checkboxList || !modalSubmit || !delegationForm || !delegationMemberIdInput || delegateButtons.length === 0) {
+      return;
+    }
+
+    const parsedData = JSON.parse(dataScript.textContent || '{}');
+    const members = Array.isArray(parsedData.members) ? parsedData.members : [];
+    const delegations = Array.isArray(parsedData.delegations) ? parsedData.delegations : [];
+
+    const delegationsByTarget = new Map();
+    delegations.forEach((row) => {
+      if (!row || typeof row.memberid !== 'string' || typeof row.delegateid !== 'string') {
+        return;
+      }
+      if (!delegationsByTarget.has(row.delegateid)) {
+        delegationsByTarget.set(row.delegateid, new Set());
+      }
+      delegationsByTarget.get(row.delegateid).add(row.memberid);
+    });
+
+    const closeModal = () => {
+      modal.classList.remove('is-open');
+      modal.setAttribute('aria-hidden', 'true');
+    };
+
+    const openModal = (targetMemberId) => {
+      delegationMemberIdInput.value = targetMemberId;
+      checkboxList.innerHTML = '';
+
+      const checkedIds = delegationsByTarget.get(targetMemberId) || new Set();
+      members
+        .filter((member) => member.memberid !== targetMemberId)
+        .forEach((member) => {
+          const row = document.createElement('label');
+          row.className = 'clan-management-delegation-checkbox-row';
+
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.name = 'delegateMemberIds';
+          checkbox.value = member.memberid;
+          checkbox.checked = checkedIds.has(member.memberid);
+
+          row.appendChild(checkbox);
+          row.appendChild(document.createTextNode(member.name || 'Unknown'));
+          checkboxList.appendChild(row);
+        });
+
+      modal.classList.add('is-open');
+      modal.setAttribute('aria-hidden', 'false');
+    };
+
+    delegateButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        openModal(String(button.getAttribute('data-member-id') || ''));
+      });
+    });
+
+    modalCloseButtons.forEach((button) => {
+      button.addEventListener('click', closeModal);
+    });
+
+    modal.addEventListener('click', (event) => {
+      if (event.target === modal) {
+        closeModal();
+      }
+    });
+
+    modalSubmit.addEventListener('click', () => {
+      const checkedCheckboxes = Array.from(checkboxList.querySelectorAll('input[type="checkbox"]:checked'));
+      checkedCheckboxes.forEach((checkbox) => {
+        delegationForm.appendChild(checkbox.cloneNode(true));
+      });
+      closeModal();
+      delegationForm.submit();
     });
   })();
 </script>

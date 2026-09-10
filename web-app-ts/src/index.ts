@@ -432,13 +432,17 @@ app.get('/clan-management', ensureDiscordServerLinked, async (req, res) => {
       return;
     }
 
+    const clanId = normalizeDiscordServerToClanId(discordServer);
+    const delegations = clanId ? await supabaseSelectMemberDelegationsByClan(config, clanId) : [];
+
     res.render('clan-management', {
       title: 'ゆかりさん△',
       currentPage: 'clan-management',
       ...getAuthViewData(req),
       clanManagementData: {
         ...clanPageData,
-        members: sortClanMembersForManagement(clanPageData.members)
+        members: sortClanMembersForManagement(clanPageData.members),
+        delegations
       }
     });
   } catch (error) {
@@ -479,6 +483,68 @@ app.post('/clan-management/members/delete', ensureDiscordServerLinked, async (re
   } catch (error) {
     console.error('Failed to delete clan member:', error);
     res.status(502).send('メンバーの削除に失敗しました');
+  }
+});
+
+app.post('/clan-management/members/delegations', ensureDiscordServerLinked, async (req, res) => {
+  const config = getSupabaseConfig();
+  if (!config) {
+    res.status(503).send('Supabase is not configured');
+    return;
+  }
+
+  const userSession = req.session.user as any;
+  const googleUserId = typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '';
+  if (!googleUserId || !await canShowClanManagementTab(config, googleUserId)) {
+    res.status(403).send('クラン管理権限がありません');
+    return;
+  }
+
+  const profile = await supabaseSelectUserProfileByGoogleUserId(config, googleUserId);
+  const discordServer = profile && isNonEmptyTrimmedString(profile.discordServer) ? profile.discordServer : getSessionDiscordServer(req);
+  const clanId = normalizeDiscordServerToClanId(discordServer);
+  const body = req.body && typeof req.body === 'object' ? req.body as Record<string, unknown> : {};
+  const bodyClanId = typeof body.clanid === 'string' ? body.clanid.trim() : '';
+  const targetMemberId = typeof body.memberid === 'string' ? body.memberid.trim() : '';
+  const rawDelegateIds = body.delegateMemberIds;
+  const requestedMemberIds = (Array.isArray(rawDelegateIds) ? rawDelegateIds : rawDelegateIds !== undefined ? [rawDelegateIds] : [])
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .filter((value) => isEntityId(value));
+
+  if (!clanId || bodyClanId !== clanId || !isEntityId(targetMemberId)) {
+    res.status(400).send('不正な代理設定リクエストです');
+    return;
+  }
+
+  try {
+    const members = await supabaseSelectClanMembersByDiscordServer(config, discordServer);
+    if (!members.some((member) => member.memberid === targetMemberId)) {
+      res.status(404).send('クランメンバーが見つかりません');
+      return;
+    }
+
+    const validMemberIds = new Set(members.map((member) => member.memberid));
+    const nextDelegateIds = Array.from(new Set(
+      requestedMemberIds.filter((id) => id !== targetMemberId && validMemberIds.has(id))
+    ));
+
+    const currentDelegations = await supabaseSelectMemberDelegationsByClan(config, clanId);
+    const currentDelegateIds = currentDelegations
+      .filter((row) => row.delegateid === targetMemberId)
+      .map((row) => row.memberid);
+
+    const currentSet = new Set(currentDelegateIds);
+    const nextSet = new Set(nextDelegateIds);
+    const toAdd = nextDelegateIds.filter((id) => !currentSet.has(id));
+    const toRemove = currentDelegateIds.filter((id) => !nextSet.has(id));
+
+    await supabaseInsertMemberDelegations(config, clanId, targetMemberId, toAdd);
+    await supabaseDeleteMemberDelegations(config, clanId, targetMemberId, toRemove);
+
+    res.redirect(`/clan-management?updatedAt=${Date.now()}`);
+  } catch (error) {
+    console.error('Failed to update member delegations:', error);
+    res.status(502).send('代理設定の更新に失敗しました');
   }
 });
 
@@ -964,6 +1030,121 @@ async function supabaseSelectDelegateIdsForOperator(
     .map((row) => (row && typeof row === 'object' ? (row as Record<string, unknown>).delegateid : null))
     .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
     .map((value) => value.trim());
+}
+
+type MemberDelegationRow = {
+  memberid: string;
+  delegateid: string;
+};
+
+async function supabaseSelectMemberDelegationsByClan(
+  config: SupabaseConfig,
+  clanId: string
+): Promise<MemberDelegationRow[]> {
+  if (!clanId) {
+    return [];
+  }
+
+  const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_MEMBER_DELEGATIONS_TABLE);
+  const query = new URLSearchParams({
+    select: 'memberid,delegateid',
+    clanid: `eq.${clanId}`
+  });
+
+  const response = await fetch(`${endpointUrl}?${query.toString()}`, {
+    method: 'GET',
+    headers: {
+      apikey: config.secretKey,
+      Authorization: `Bearer ${config.secretKey}`
+    }
+  });
+
+  if (!response.ok) {
+    const responseText = await response.text();
+    throw new Error(`Supabase select member delegations failed: ${response.status} ${responseText}`);
+  }
+
+  const rows = await response.json() as unknown;
+  if (!Array.isArray(rows)) {
+    return [];
+  }
+
+  return rows
+    .map((row) => {
+      if (!row || typeof row !== 'object') {
+        return null;
+      }
+      const memberid = (row as Record<string, unknown>).memberid;
+      const delegateid = (row as Record<string, unknown>).delegateid;
+      return typeof memberid === 'string' && typeof delegateid === 'string'
+        ? { memberid, delegateid }
+        : null;
+    })
+    .filter((row): row is MemberDelegationRow => !!row);
+}
+
+async function supabaseInsertMemberDelegations(
+  config: SupabaseConfig,
+  clanId: string,
+  delegateId: string,
+  memberIds: string[]
+): Promise<void> {
+  if (memberIds.length === 0) {
+    return;
+  }
+
+  const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_MEMBER_DELEGATIONS_TABLE);
+  const response = await fetch(endpointUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: config.secretKey,
+      Authorization: `Bearer ${config.secretKey}`,
+      Prefer: 'return=minimal'
+    },
+    body: JSON.stringify(memberIds.map((memberid) => ({
+      clanid: clanId,
+      memberid,
+      delegateid: delegateId
+    })))
+  });
+
+  if (!response.ok) {
+    const responseText = await response.text();
+    throw new Error(`Supabase insert member delegations failed: ${response.status} ${responseText}`);
+  }
+}
+
+async function supabaseDeleteMemberDelegations(
+  config: SupabaseConfig,
+  clanId: string,
+  delegateId: string,
+  memberIds: string[]
+): Promise<void> {
+  if (memberIds.length === 0) {
+    return;
+  }
+
+  const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_MEMBER_DELEGATIONS_TABLE);
+  const query = new URLSearchParams({
+    clanid: `eq.${clanId}`,
+    delegateid: `eq.${delegateId}`,
+    memberid: `in.(${memberIds.join(',')})`
+  });
+
+  const response = await fetch(`${endpointUrl}?${query.toString()}`, {
+    method: 'DELETE',
+    headers: {
+      apikey: config.secretKey,
+      Authorization: `Bearer ${config.secretKey}`,
+      Prefer: 'return=minimal'
+    }
+  });
+
+  if (!response.ok) {
+    const responseText = await response.text();
+    throw new Error(`Supabase delete member delegations failed: ${response.status} ${responseText}`);
+  }
 }
 
 type ActingClanMemberResult =
