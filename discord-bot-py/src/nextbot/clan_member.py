@@ -68,6 +68,18 @@ class ClanMember():
         message = attackdata.get("message", "")
         self.message = message if isinstance(message, str) else ""
 
+    def ApplyAttackOvertimes(self, row: dict[str, Any]) -> None:
+        raw_maxsortie = row.get("maxsortie")
+        maxsortie = raw_maxsortie if isinstance(raw_maxsortie, int) and not isinstance(raw_maxsortie, bool) else 0
+        attacktime: list[Optional[int]] = []
+        for sortie in range(1, constants.MAX_SORTIE + 1):
+            if sortie > maxsortie:
+                attacktime.append(None)
+                continue
+            value = row.get(f"overtime_{sortie}")
+            attacktime.append(value if isinstance(value, int) and not isinstance(value, bool) else 0)
+        self.attacktime = attacktime
+
     def IsAttack(self):
         return self.sortie != -1
 

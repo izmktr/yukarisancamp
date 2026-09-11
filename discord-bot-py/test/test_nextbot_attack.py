@@ -438,6 +438,7 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         }
         app.supabase.get_clan.return_value = supabase_data
         app.supabase.get_clan_members.return_value = []
+        app.supabase.get_attack_overtimes.return_value = []
         clan = Clan()
         clan.ApplyDiscordData = MagicMock()
         app._get_clan = MagicMock(return_value=clan)
@@ -448,6 +449,98 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         await app._register_guild(guild)
 
         clan.ApplyDiscordData.assert_called_once_with(supabase_data["discord_data"])
+
+    async def test_register_guild_applies_attack_overtimes_from_histories(self) -> None:
+        app = NextBotApp.__new__(NextBotApp)
+        app.supabase = MagicMock()
+        app.supabase.register_clan_if_missing.return_value = False
+        app.supabase.get_clan.return_value = {"clanid": "123", "discord_data": {}}
+        app.supabase.get_clan_members.return_value = [
+            {
+                "memberid": "456",
+                "name": "member",
+                "mention": "<@456>",
+                "attacktime": [],
+                "attackdata": {"day": "", "sortie": 0, "lap": 0, "boss": 0},
+            }
+        ]
+        app.supabase.get_attack_overtimes.return_value = [
+            {
+                "clanid": "123",
+                "memberid": "456",
+                "day": constants.reference_date(),
+                "maxsortie": 2,
+                "overtime_1": 50,
+                "overtime_2": 0,
+                "overtime_3": 0,
+            }
+        ]
+        clan = Clan(clan_id=123)
+        clan.ApplyDiscordData = MagicMock()
+        app._get_clan = MagicMock(return_value=clan)
+        guild = MagicMock(spec=discord.Guild)
+        guild.id = 123
+        guild.name = "test guild"
+
+        await app._register_guild(guild)
+
+        app.supabase.get_attack_overtimes.assert_called_once_with(constants.reference_date(), 123)
+        self.assertEqual(clan.members["456"].attacktime, [50, 0, None])
+
+    def test_aggregate_attack_overtimes_matches_sql(self) -> None:
+        rows = [
+            {"clanid": "1", "memberid": "a", "day": "2026-09-11", "sortie": 1, "overtime": 50},
+            {"clanid": "1", "memberid": "a", "day": "2026-09-11", "sortie": 2, "overtime": 0},
+            {"clanid": "1", "memberid": "b", "day": "2026-09-11", "sortie": 1, "overtime": 20},
+            {"clanid": "1", "memberid": "b", "day": "2026-09-11", "sortie": 1, "overtime": 30},
+        ]
+
+        result = {
+            row["memberid"]: row
+            for row in SupabaseClient.aggregate_attack_overtimes(rows)
+        }
+
+        self.assertEqual(result["a"]["maxsortie"], 2)
+        self.assertEqual(result["a"]["overtime_1"], 50)
+        self.assertEqual(result["a"]["overtime_2"], 0)
+        self.assertEqual(result["a"]["overtime_3"], 0)
+        self.assertEqual(result["b"]["maxsortie"], 1)
+        self.assertEqual(result["b"]["overtime_1"], 0)
+        self.assertEqual(result["b"]["overtime_2"], 0)
+        self.assertEqual(result["b"]["overtime_3"], 0)
+
+    def test_apply_attack_overtimes_sets_none_beyond_maxsortie(self) -> None:
+        clan = Clan(clan_id=123)
+        clan.ApplySupabaseMember({
+            "memberid": "456",
+            "name": "member",
+            "mention": "",
+            "attacktime": [None, None, None],
+            "attackdata": {"day": "", "sortie": 0, "lap": 0, "boss": 0},
+        })
+
+        clan.ApplyAttackOvertimes([
+            {
+                "clanid": "123",
+                "memberid": "456",
+                "day": "2026-09-11",
+                "maxsortie": 1,
+                "overtime_1": 40,
+                "overtime_2": 0,
+                "overtime_3": 0,
+            },
+            {
+                "clanid": "999",
+                "memberid": "456",
+                "day": "2026-09-11",
+                "maxsortie": 3,
+                "overtime_1": 10,
+                "overtime_2": 20,
+                "overtime_3": 30,
+            },
+        ])
+
+        self.assertEqual(clan.members["456"].attacktime, [40, None, None])
 
     def test_find_channel_normalizes_visible_name(self) -> None:
         clan = Clan()

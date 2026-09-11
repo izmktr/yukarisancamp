@@ -142,6 +142,22 @@ class Clan(MessageRouter):
             self.members[memberid] = member
         member.ApplyDatabaseRow(row)
 
+    def ApplyAttackOvertimes(self, rows: list[dict[str, Any]]) -> None:
+        for row in rows:
+            raw_memberid = row.get("memberid")
+            if not isinstance(raw_memberid, (int, str)):
+                continue
+            memberid = str(raw_memberid).strip()
+            member = self.members.get(memberid)
+            if member is None:
+                continue
+
+            raw_clanid = row.get("clanid")
+            if self.clan_id is not None and isinstance(raw_clanid, (int, str)) \
+                    and str(raw_clanid) != str(self.clan_id):
+                continue
+            member.ApplyAttackOvertimes(row)
+
     def LoadSupabaseMembers(self, rows: list[dict[str, Any]]) -> None:
         self.members.clear()
         for row in rows:

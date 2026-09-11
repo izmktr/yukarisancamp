@@ -7,6 +7,7 @@ from typing import Any, cast
 import discord
 from supabase import create_async_client
 
+from . import constants
 from .clan import Clan
 from .one_shot_scheduler import OneShotScheduler, parse_scheduled_time
 from .supabase_client import SupabaseClient
@@ -60,10 +61,16 @@ class NextBotApp:
         )
         supabase_data = await asyncio.to_thread(self.supabase.get_clan, guild.id)
         member_rows = await asyncio.to_thread(self.supabase.get_clan_members, guild.id)
+        overtime_rows = await asyncio.to_thread(
+            self.supabase.get_attack_overtimes,
+            constants.reference_date(),
+            guild.id,
+        )
         clan = self._get_clan(guild)
         clan.supabase_data = supabase_data
         clan.ApplyDiscordData(supabase_data.get("discord_data"))
         clan.LoadSupabaseMembers(member_rows)
+        clan.ApplyAttackOvertimes(overtime_rows)
         if registered:
             print(f"Supabaseにクランを登録しました: {guild.name} ({guild.id})")
 

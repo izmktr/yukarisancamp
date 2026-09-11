@@ -406,6 +406,86 @@ class SupabaseClient:
             members.append(row)
         return members
 
+    def get_attack_overtimes(self, day: str, clan_id: int) -> list[dict[str, Any]]:
+        query = urlencode(
+            {
+                "select": "clanid,memberid,day,sortie,overtime",
+                "clanid": f"eq.{clan_id}",
+                "day": f"eq.{day}",
+            }
+        )
+        request = Request(
+            f"{self.url}/rest/v1/attack_histories?{query}",
+            headers={
+                "apikey": self.secret_key,
+                "Authorization": f"Bearer {self.secret_key}",
+            },
+        )
+
+        with urlopen(request, timeout=10) as response:
+            raw_rows: object = json.load(response)
+
+        if not isinstance(raw_rows, list):
+            return []
+
+        return self.aggregate_attack_overtimes(
+            [
+                cast(dict[str, Any], row)
+                for row in raw_rows
+                if isinstance(row, dict)
+            ]
+        )
+
+    @staticmethod
+    def aggregate_attack_overtimes(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        inner: dict[tuple[str, str, str, int], list[int]] = {}
+        for row in rows:
+            raw_clanid = row.get("clanid")
+            raw_memberid = row.get("memberid")
+            if not isinstance(raw_clanid, (int, str)) or not isinstance(raw_memberid, (int, str)):
+                continue
+            clanid = str(raw_clanid).strip()
+            memberid = str(raw_memberid).strip()
+            if not clanid or not memberid:
+                continue
+
+            raw_day = row.get("day")
+            if isinstance(raw_day, str):
+                day = raw_day
+            elif raw_day is not None:
+                day = str(raw_day)
+            else:
+                continue
+
+            sortie = row.get("sortie")
+            if not isinstance(sortie, int) or isinstance(sortie, bool):
+                continue
+
+            overtime = row.get("overtime")
+            overtime_value = overtime if isinstance(overtime, int) and not isinstance(overtime, bool) else 0
+            key = (clanid, memberid, day, sortie)
+            inner.setdefault(key, []).append(overtime_value)
+
+        outer: dict[tuple[str, str, str], dict[str, Any]] = {}
+        for (clanid, memberid, day, sortie), overtimes in inner.items():
+            rec = outer.get((clanid, memberid, day))
+            if rec is None:
+                rec = {
+                    "clanid": clanid,
+                    "memberid": memberid,
+                    "day": day,
+                    "maxsortie": sortie,
+                    "overtime_1": 0,
+                    "overtime_2": 0,
+                    "overtime_3": 0,
+                }
+                outer[(clanid, memberid, day)] = rec
+            rec["maxsortie"] = max(rec["maxsortie"], sortie)
+            if sortie in (1, 2, 3):
+                rec[f"overtime_{sortie}"] = max(overtimes) if len(overtimes) == 1 else 0
+
+        return list(outer.values())
+
     def update_discord_clan_member_attack(
         self,
         clan_id: int,
