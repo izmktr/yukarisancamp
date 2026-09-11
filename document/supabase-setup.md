@@ -250,9 +250,8 @@ using (true);
 ### クラン画面が自動更新されない
 - 原因例:
   - `SUPABASE_PUBLISHABLE_KEY` 未設定
-  - `public.clans` が Realtime 配信対象に未追加
-  - `public.clan_members` が Realtime 配信対象に未追加
-  - `public.clan_boss_state` が Realtime 配信対象に未追加
-  - RLS で `anon` の `SELECT` が拒否されている
-- 対処:
+  - RLS で `anon` の `SELECT` が拒否されている（Discord bot は `service_role` なので届くが、Web の publishable/anon では SUBSCRIBED でも payload が来ない）
+  - `public.clans` / `public.clan_members` / `public.clan_boss_state` が Realtime 配信対象に未追加- 対処:
   - 本ドキュメントの「8. クラン画面 Realtime 更新設定」を順に確認
+  - 必ず `anon` に `GRANT SELECT` と SELECT RLS ポリシーを付ける（`document/supabase_createtable.sql` 末尾参照）
+  - Web は Realtime（SUBSCRIBED）のみで更新する。ポーリングは使わない

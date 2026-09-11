@@ -1205,16 +1205,10 @@
 
         if (!/^(?:\d+|w\d{8})$/.test(clanId) || !window.__SUPABASE_PUBLIC_CONFIG__) {
             const configExists = !!window.__SUPABASE_PUBLIC_CONFIG__;
-            const debugInfo = {
+            console.warn('Supabase Realtime を開始できません: clanId/config が不足しています。', {
                 clanId,
-                hasConfig: configExists,
-                config: window.__SUPABASE_PUBLIC_CONFIG__ || null,
-                missing: {
-                    clanId: !/^(?:\d+|w\d{8})$/.test(clanId),
-                    config: !configExists
-                }
-            };
-            console.warn('Supabase Realtime を開始できません: clanId/config が不足しています。', debugInfo);
+                hasConfig: configExists
+            });
             return;
         }
 
@@ -1339,6 +1333,8 @@
         };
 
         try {
+            // Bot は service_role で RLS を迂回できるが、Web は publishable/anon。
+            // SUBSCRIBED でも payload が来ない場合は anon の SELECT 権限/RLS を確認すること。
             const client = window.supabase.createClient(supabaseUrl, publishableKey);
             const clanIdFilter = `clanid=eq.${clanId}`;
             const channel = client
@@ -1394,6 +1390,12 @@
                 })
                 .subscribe((status, error) => {
                     console.log('Supabase Realtime subscription status:', status, error || '');
+                    if (status === 'SUBSCRIBED') {
+                        console.info(
+                            'Realtime SUBSCRIBED。clan_members の payload が来ない場合は、'
+                            + 'anon への GRANT SELECT と SELECT RLS ポリシーを確認してください。'
+                        );
+                    }
                     if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
                         console.error('Supabase Realtimeの購読に失敗しました:', status, error || '');
                     }

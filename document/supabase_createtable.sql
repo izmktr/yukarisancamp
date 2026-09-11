@@ -712,5 +712,43 @@ create table if not exists public.member_delegations (
 create index if not exists member_delegations_clanid_memberid_idx
   on public.member_delegations (clanid, memberid);
 
+-- ブラウザ Realtime (publishable/anon) で postgres_changes を受け取るための権限。
+-- Discord bot は service_role のため不要だが、Web は anon JWT で RLS 判定される。
+grant select on public.clans to anon, authenticated;
+grant select on public.clan_members to anon, authenticated;
+grant select on public.clan_boss_state to anon, authenticated;
+
+alter table public.clans enable row level security;
+alter table public.clan_members enable row level security;
+alter table public.clan_boss_state enable row level security;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'clans' and policyname = 'anon can read clans'
+  ) then
+    create policy "anon can read clans"
+      on public.clans for select to anon using (true);
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'clan_members' and policyname = 'anon can read clan_members'
+  ) then
+    create policy "anon can read clan_members"
+      on public.clan_members for select to anon using (true);
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'clan_boss_state' and policyname = 'anon can read clan_boss_state'
+  ) then
+    create policy "anon can read clan_boss_state"
+      on public.clan_boss_state for select to anon using (true);
+  end if;
+end
+$$;
+
 notify pgrst, 'reload schema';
 
