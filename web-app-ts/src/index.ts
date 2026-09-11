@@ -311,6 +311,10 @@ app.get('/clanbattle-settings', (req, res) => {
 });
 
 app.get('/clan', ensureDiscordServerLinked, async (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+
   const config = getSupabaseConfig();
   const discordServer = getSessionDiscordServer(req);
   const fallbackPayload: ClanPagePayload = {
@@ -809,8 +813,16 @@ function normalizeClanMemberRow(raw: unknown): ClanMemberRow | null {
   }
 
   const source = raw as Record<string, unknown>;
-  const attackData = source.attackdata && typeof source.attackdata === 'object'
-    ? source.attackdata as Record<string, unknown>
+  let attackDataRaw: unknown = source.attackdata;
+  if (typeof attackDataRaw === 'string') {
+    try {
+      attackDataRaw = JSON.parse(attackDataRaw) as unknown;
+    } catch {
+      attackDataRaw = {};
+    }
+  }
+  const attackData = attackDataRaw && typeof attackDataRaw === 'object'
+    ? attackDataRaw as Record<string, unknown>
     : {};
   const clanIdText = typeof source.clanid === 'string'
     ? source.clanid.trim()
@@ -861,7 +873,7 @@ function normalizeClanMemberRow(raw: unknown): ClanMemberRow | null {
     role: source.role === 'officer' || source.role === 'leader' ? source.role : 'member',
     taskkill: Number.isFinite(Number(source.taskkill)) ? Math.trunc(Number(source.taskkill)) : 0,
     plan,
-    day: typeof attackData.day === 'string' ? attackData.day : '',
+    day: toClanMemberDay(attackData.day) || toClanMemberDay(source.day),
     attacktime,
     sortie: Number.isFinite(Number(attackData.sortie)) ? Math.trunc(Number(attackData.sortie)) : 0,
     attackboss: Number.isFinite(Number(attackData.boss ?? attackData.attackboss)) ? Math.trunc(Number(attackData.boss ?? attackData.attackboss)) : 0,
@@ -1550,6 +1562,19 @@ function toRefreshToken(clan: ClanInfoRow | null, members: ClanMemberRow[]): str
   return `${latest}:${members.length}`;
 }
 
+function toClanMemberDay(value: unknown): string {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  const trimmed = value.trim();
+  return /^\d{4}-\d{2}-\d{2}/.test(trimmed) ? trimmed.slice(0, 10) : trimmed;
+}
+
+function isClanMemberCurrentlyAttacking(member: ClanMemberRow): boolean {
+  const attackBoss = Number(member.attackboss);
+  return Number.isInteger(attackBoss) && attackBoss >= 1 && attackBoss <= 5;
+}
+
 function withoutClanMemberAttackData(member: ClanMemberRow): ClanMemberRow {
   return {
     ...member,
@@ -1580,7 +1605,9 @@ async function loadClanPagePayload(
     member.memberid === currentDiscordId
   ));
   const displayMembers = members.map((member) => (
-    member.memberid !== currentDiscordId && member.day !== baseDate
+    member.memberid !== currentDiscordId
+      && member.day !== baseDate
+      && !isClanMemberCurrentlyAttacking(member)
       ? withoutClanMemberAttackData(member)
       : member
   ));

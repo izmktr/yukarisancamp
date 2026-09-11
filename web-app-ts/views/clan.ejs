@@ -1145,6 +1145,44 @@
             messageInputs.some((input) => input.value !== input.defaultValue)
         );
 
+        const getRealtimeRow = (payload) => {
+            if (!payload || typeof payload !== 'object') {
+                return null;
+            }
+            const nested = payload.data && typeof payload.data === 'object' ? payload.data : null;
+            const next = payload.new && typeof payload.new === 'object'
+                ? payload.new
+                : (nested && nested.record && typeof nested.record === 'object' ? nested.record : {});
+            const prev = payload.old && typeof payload.old === 'object'
+                ? payload.old
+                : (nested && nested.old_record && typeof nested.old_record === 'object' ? nested.old_record : {});
+            return { ...prev, ...next };
+        };
+
+        const getRealtimeClanId = (row) => {
+            if (!row || row.clanid === undefined || row.clanid === null) {
+                return '';
+            }
+            return String(row.clanid).trim();
+        };
+
+        const isRealtimeRowForCurrentClan = (row) => {
+            const rowClanId = getRealtimeClanId(row);
+            return !rowClanId || rowClanId === clanId;
+        };
+
+        const parseAttackData = (rawAttackData) => {
+            let attackData = rawAttackData;
+            if (typeof attackData === 'string') {
+                try {
+                    attackData = JSON.parse(attackData);
+                } catch (error) {
+                    return {};
+                }
+            }
+            return attackData && typeof attackData === 'object' ? attackData : {};
+        };
+
         const reloadPage = () => {
             if (isReloading) {
                 return;
@@ -1154,7 +1192,9 @@
                 return;
             }
             isReloading = true;
-            window.location.reload();
+            const nextUrl = new URL(window.location.href);
+            nextUrl.searchParams.set('_rt', String(Date.now()));
+            window.location.replace(nextUrl.toString());
         };
 
         const reloadPendingPage = () => {
@@ -1229,6 +1269,75 @@
             return applied;
         };
 
+        const tryApplyClanMembersRealtimeUpdate = (row) => {
+            if (!row || typeof row !== 'object') {
+                return false;
+            }
+
+            const memberId = row.memberid !== undefined && row.memberid !== null
+                ? String(row.memberid).trim()
+                : '';
+            if (!memberId) {
+                return false;
+            }
+
+            const attackData = parseAttackData(row.attackdata);
+            const attackBoss = Number(attackData.boss ?? attackData.attackboss);
+            const isAttacking = Number.isInteger(attackBoss) && attackBoss >= 1 && attackBoss <= 5;
+            const escapedMemberId = (typeof CSS !== 'undefined' && typeof CSS.escape === 'function')
+                ? CSS.escape(memberId)
+                : memberId;
+            const memberRows = Array.from(document.querySelectorAll(`.clan-attack-member-row[data-member-id="${escapedMemberId}"]`));
+
+            if (isAttacking !== (memberRows.length > 0)) {
+                return false;
+            }
+            if (!isAttacking) {
+                return true;
+            }
+
+            const panelBossIndexes = memberRows.map((memberRow) => {
+                const panel = memberRow.closest('.clan-attack-active-panel');
+                const bossIndexElement = panel ? panel.querySelector('[data-boss-index]') : null;
+                return bossIndexElement ? Number(bossIndexElement.getAttribute('data-boss-index')) : NaN;
+            });
+            if (panelBossIndexes.some((bossIndex) => bossIndex !== attackBoss)) {
+                return false;
+            }
+
+            const damageValue = Number(attackData.damage);
+            const hasDamageValue = attackData.damage !== null
+                && attackData.damage !== undefined
+                && Number.isFinite(damageValue);
+            const attackMessageText = typeof (attackData.message ?? attackData.attackmessage) === 'string'
+                ? String(attackData.message ?? attackData.attackmessage).trim()
+                : '';
+            const suffix = attackMessageText
+                ? `、${attackMessageText}`
+                : (hasDamageValue ? '' : '、メッセージなし');
+            const rowText = `：${(Number.isFinite(damageValue) ? damageValue : 0).toLocaleString('ja-JP')}${suffix}`;
+            const attacktime = Array.isArray(row.attacktime) ? row.attacktime : attackData.attacktime;
+            const sortieIndex = Number(attackData.sortie) - 1;
+            const carryTimeValue = Array.isArray(attacktime) ? Number(attacktime[sortieIndex]) : NaN;
+            const carryTimeText = Number(attackData.overattack) === 1 && Number.isInteger(carryTimeValue)
+                ? ` [持:${carryTimeValue}]`
+                : '';
+            const displayName = `${row.name || 'Unknown'}${carryTimeText}`;
+
+            memberRows.forEach((memberRow) => {
+                const nameElement = memberRow.querySelector('strong');
+                const textElement = memberRow.querySelector('.clan-attack-member-row-text');
+                if (nameElement) {
+                    nameElement.textContent = displayName;
+                }
+                if (textElement) {
+                    textElement.textContent = rowText;
+                }
+            });
+
+            return true;
+        };
+
         try {
             const client = window.supabase.createClient(supabaseUrl, publishableKey);
             const clanIdFilter = `clanid=eq.${clanId}`;
@@ -1241,10 +1350,8 @@
                     filter: clanIdFilter
                 }, (payload) => {
                     console.log('Supabase Realtime clans change payload:', payload);
-                    const next = payload && payload.new ? payload.new : null;
-                    const nextClanId = next && next.clanid !== undefined && next.clanid !== null ? String(next.clanid).trim() : '';
-
-                    if (nextClanId === clanId) {
+                    const row = getRealtimeRow(payload);
+                    if (isRealtimeRowForCurrentClan(row)) {
                         reloadPage();
                     }
                 })
@@ -1255,12 +1362,16 @@
                     filter: clanIdFilter
                 }, (payload) => {
                     console.log('Supabase Realtime clan_members change payload:', payload);
-                    const row = payload && (payload.new || payload.old) ? (payload.new || payload.old) : null;
-                    const rowClanId = row && row.clanid !== undefined && row.clanid !== null ? String(row.clanid).trim() : '';
-
-                    if (rowClanId === clanId) {
-                        reloadPage();
+                    const row = getRealtimeRow(payload);
+                    if (!isRealtimeRowForCurrentClan(row)) {
+                        return;
                     }
+
+                    const eventType = payload && typeof payload.eventType === 'string' ? payload.eventType : '';
+                    if (eventType !== 'INSERT' && eventType !== 'DELETE' && tryApplyClanMembersRealtimeUpdate(row)) {
+                        return;
+                    }
+                    reloadPage();
                 })
                 .on('postgres_changes', {
                     event: '*',
@@ -1269,17 +1380,17 @@
                     filter: clanIdFilter
                 }, (payload) => {
                     console.log('Supabase Realtime clan_boss_state change payload:', payload);
-                    const row = payload && (payload.new || payload.old) ? (payload.new || payload.old) : null;
-                    const rowClanId = row && row.clanid !== undefined && row.clanid !== null ? String(row.clanid).trim() : '';
-
-                    if (rowClanId === clanId) {
-                        const eventType = payload && typeof payload.eventType === 'string' ? payload.eventType : '';
-                        if (eventType !== 'DELETE' && tryApplyActiveBossHpRealtimeUpdate(row)) {
-                            return;
-                        }
-                        //読み込めなかったものは無視
-                        //reloadPage();
+                    const row = getRealtimeRow(payload);
+                    if (!isRealtimeRowForCurrentClan(row)) {
+                        return;
                     }
+
+                    const eventType = payload && typeof payload.eventType === 'string' ? payload.eventType : '';
+                    if (eventType !== 'DELETE' && tryApplyActiveBossHpRealtimeUpdate(row)) {
+                        return;
+                    }
+                    //読み込めなかったものは無視
+                    //reloadPage();
                 })
                 .subscribe((status, error) => {
                     console.log('Supabase Realtime subscription status:', status, error || '');
