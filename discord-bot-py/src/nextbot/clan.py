@@ -358,10 +358,12 @@ class Clan(MessageRouter):
                     payload.message_id,
                     action,
                     result_overtime,
+                    self.clan_id,
                 )
             except Exception as exc:
                 self.RemoveStamp(payload.message_id)
-                self.TemporaryMessage(message.channel, f'攻撃の更新に失敗しました: {exc}')
+                error_label = '攻撃のキャンセルに失敗しました' if action == 'cancel' else '攻撃の更新に失敗しました'
+                self.TemporaryMessage(message.channel, f'{error_label}: {exc}')
                 return False
 
             apply_rpc_result(member, result)
@@ -638,6 +640,7 @@ class Clan(MessageRouter):
                 attack_message_id,
                 'cancel',
                 0,
+                self.clan_id,
             )
         except Exception as exc:
             self.TemporaryMessage(message.channel, f'攻撃のキャンセルに失敗しました: {exc}')

@@ -143,7 +143,7 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(result)
         supabase.finish_clan_member_attack.assert_called_once_with(
-            "456", "old name", "<@456>", 100, "defeat", 20
+            "456", "old name", "<@456>", 100, "defeat", 20, 123
         )
         self.assertEqual(member.attacktime, [20, None, None])
         self.assertFalse(member.IsAttack())
@@ -172,7 +172,7 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(result)
         supabase.finish_clan_member_attack.assert_called_once_with(
-            "456", "old name", "<@456>", 100, "defeat", 0
+            "456", "old name", "<@456>", 100, "defeat", 0, 123
         )
         self.assertEqual(member.attacktime, [None, 0, None])
 
@@ -240,6 +240,105 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
             123, "456", "old name", "<@456>", 5, 1, 2, 1, constants.reference_date()
         )
         clan.AddReaction.assert_awaited_once_with(message, True)
+
+    async def test_cancel_reaction_finishes_attack(self) -> None:
+        clan, member, supabase = self.create_clan()
+        message = self.create_message()
+        member.Attack(5, 1)
+        member.attackmessage = message
+        clan.TemporaryMessage = MagicMock()
+        clan.RemoveReaction = AsyncMock()
+        clan.damagecontrol[4].Remove = AsyncMock()
+        clan.damagecontrol[4].SendResult = AsyncMock()
+        supabase.finish_clan_member_attack.return_value = {
+            "history_id": None,
+            "attacktime": [None, None, None],
+            "attackdata": {"day": "", "sortie": 0, "lap": 0, "boss": 0},
+            "bosslaps": [1, 1, 1, 1, 1],
+        }
+        reaction = clan.CreateAttackReaction(member, message, 5, 1, 0)
+        payload = types.SimpleNamespace(
+            message_id=message.id,
+            emoji=types.SimpleNamespace(name=clan.emojis[9]),
+        )
+
+        result = await reaction.addreaction(member, payload)
+
+        self.assertTrue(result)
+        supabase.finish_clan_member_attack.assert_called_once_with(
+            "456", "old name", "<@456>", 100, "cancel", 0, 123
+        )
+        self.assertFalse(member.IsAttack())
+        clan.damagecontrol[4].Remove.assert_awaited_once_with(member)
+
+    async def test_cancel_command_finishes_attack(self) -> None:
+        clan, member, supabase = self.create_clan()
+        message = self.create_message()
+        member.Attack(5, 1)
+        member.attackmessage = message
+        clan.TemporaryMessage = MagicMock()
+        clan.RemoveReaction = AsyncMock()
+        clan.damagecontrol[4].Remove = AsyncMock()
+        clan.damagecontrol[4].SendResult = AsyncMock()
+        supabase.finish_clan_member_attack.return_value = {
+            "history_id": None,
+            "attacktime": [None, None, None],
+            "attackdata": {"day": "", "sortie": 0, "lap": 0, "boss": 0},
+            "bosslaps": [1, 1, 1, 1, 1],
+        }
+
+        result = await clan.Cancel(message, self.create_discord_member(), "")
+
+        self.assertTrue(result)
+        supabase.finish_clan_member_attack.assert_called_once_with(
+            "456", "old name", "<@456>", 100, "cancel", 0, 123
+        )
+        self.assertFalse(member.IsAttack())
+        clan.TemporaryMessage.assert_called_once_with(message.channel, "攻撃をキャンセルしました")
+
+    def test_update_discord_clan_member_attack_filters_by_clanid(self) -> None:
+        client = SupabaseClient("https://example.supabase.co", "secret")
+        get_response = MagicMock()
+        get_response.__enter__.return_value = get_response
+        patch_response = MagicMock()
+        patch_response.__enter__.return_value = patch_response
+
+        with patch("src.nextbot.supabase_client.urlopen", side_effect=[get_response, patch_response]) as mocked_urlopen:
+            with patch(
+                "src.nextbot.supabase_client.json.load",
+                side_effect=[[{"attackdata": {"day": "", "boss": 0}}], [{"memberid": "456"}]],
+            ):
+                client.update_discord_clan_member_attack(
+                    123, 456, "name", "<@456>", 5, 1, 1, 0, "2026-09-12"
+                )
+
+        get_request = mocked_urlopen.call_args_list[0].args[0]
+        patch_request = mocked_urlopen.call_args_list[1].args[0]
+        self.assertIn("clanid=eq.123", get_request.full_url)
+        self.assertIn("memberid=eq.456", get_request.full_url)
+        self.assertIn("clanid=eq.123", patch_request.full_url)
+        self.assertIn("memberid=eq.456", patch_request.full_url)
+        payload = json.loads(patch_request.data)
+        self.assertEqual(payload["day"], "2026-09-12")
+        self.assertEqual(payload["attackdata"]["day"], "2026-09-12")
+        self.assertEqual(payload["attackdata"]["boss"], 5)
+        self.assertEqual(payload["attackdata"]["sortie"], 1)
+
+    def test_finish_clan_member_attack_sends_clanid(self) -> None:
+        client = SupabaseClient("https://example.supabase.co", "secret")
+
+        with patch("src.nextbot.supabase_client.urlopen") as mocked_urlopen:
+            mocked_urlopen.return_value.__enter__.return_value = MagicMock()
+            with patch(
+                "src.nextbot.supabase_client.json.load",
+                return_value={"attackdata": {"boss": 0}, "attacktime": [None, None, None]},
+            ):
+                client.finish_clan_member_attack("456", "name", "<@456>", 100, "cancel", 0, 123)
+
+        called_request = mocked_urlopen.call_args.args[0]
+        self.assertIn("/rpc/finish_clan_member_attack", called_request.full_url)
+        self.assertEqual(json.loads(called_request.data)["p_clanid"], "123")
+        self.assertEqual(json.loads(called_request.data)["p_action"], "cancel")
 
     async def test_setting_reload_updates_clanbattle_setting(self) -> None:
         clan, _, supabase = self.create_clan()

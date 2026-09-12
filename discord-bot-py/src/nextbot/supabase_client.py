@@ -367,6 +367,11 @@ class SupabaseClient:
 
     @staticmethod
     def normalize_attackdata(raw: object) -> dict[str, Any]:
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except json.JSONDecodeError:
+                raw = {}
         source = cast(dict[str, object], raw) if isinstance(raw, dict) else {}
         raw_day = source.get("day")
         if not isinstance(raw_day, str):
@@ -501,6 +506,7 @@ class SupabaseClient:
         query = urlencode(
             {
                 "select": "attackdata,attacktime",
+                "clanid": f"eq.{clan_id}",
                 "memberid": f"eq.{member_id}",
                 "limit": "1",
             }
@@ -512,8 +518,14 @@ class SupabaseClient:
                 "Authorization": f"Bearer {self.secret_key}",
             },
         )
-        with urlopen(get_request, timeout=10) as response:
-            rows = json.load(response)
+        try:
+            with urlopen(get_request, timeout=10) as response:
+                rows = json.load(response)
+        except HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(
+                f"Supabase get clan member attack failed: {exc.code} {detail}"
+            ) from exc
 
         attackdata = self.normalize_attackdata(None)
         if isinstance(rows, list) and rows and isinstance(rows[0], dict):
@@ -531,12 +543,18 @@ class SupabaseClient:
                 "sortie": sortie,
             }
         )
-        update_query = urlencode({"memberid": f"eq.{member_id}"})
+        update_query = urlencode(
+            {
+                "clanid": f"eq.{clan_id}",
+                "memberid": f"eq.{member_id}",
+            }
+        )
         now = datetime.now(timezone.utc).isoformat()
         payload = json.dumps(
             {
                 "name": name,
                 "mention": mention,
+                "day": day,
                 "attackdata": attackdata,
                 "lastactive": now,
                 "updated_at": now,
@@ -550,12 +568,21 @@ class SupabaseClient:
                 "apikey": self.secret_key,
                 "Authorization": f"Bearer {self.secret_key}",
                 "Content-Type": "application/json",
-                "Prefer": "return=minimal",
+                "Prefer": "return=representation",
             },
         )
 
-        with urlopen(request, timeout=10):
-            pass
+        try:
+            with urlopen(request, timeout=10) as response:
+                updated_rows: object = json.load(response)
+        except HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(
+                f"Supabase update clan member attack failed: {exc.code} {detail}"
+            ) from exc
+
+        if not isinstance(updated_rows, list) or not updated_rows:
+            raise RuntimeError("clan_members の攻撃開始更新に失敗しました")
 
     def update_clan_member_damage_message(
         self,
@@ -622,8 +649,12 @@ class SupabaseClient:
                 "Content-Type": "application/json",
             },
         )
-        with urlopen(request, timeout=10) as response:
-            raw_result: object = json.load(response)
+        try:
+            with urlopen(request, timeout=10) as response:
+                raw_result: object = json.load(response)
+        except HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"{function_name} failed: {exc.code} {detail}") from exc
 
         if not isinstance(raw_result, dict):
             raise RuntimeError(f"{function_name} returned an invalid response")
@@ -637,28 +668,30 @@ class SupabaseClient:
         message_id: int,
         action: str,
         overtime: int,
+        clan_id: int | str | None = None,
     ) -> dict[str, Any]:
-        return self._call_attack_rpc(
-            "finish_clan_member_attack",
-            {
-                "p_memberid": str(member_id),
-                "p_name": name,
-                "p_mention": mention,
-                "p_messageid": str(message_id),
-                "p_action": action,
-                "p_overtime": overtime,
-            },
-        )
+        parameters: dict[str, Any] = {
+            "p_memberid": str(member_id),
+            "p_name": name,
+            "p_mention": mention,
+            "p_messageid": str(message_id),
+            "p_action": action,
+            "p_overtime": overtime,
+        }
+        if clan_id is not None:
+            parameters["p_clanid"] = str(clan_id)
+        return self._call_attack_rpc("finish_clan_member_attack", parameters)
 
     def revert_clan_member_attack(
         self,
         member_id: int | str,
         history_id: int,
+        clan_id: int | str | None = None,
     ) -> dict[str, Any]:
-        return self._call_attack_rpc(
-            "revert_clan_member_attack",
-            {
-                "p_memberid": str(member_id),
-                "p_history_id": history_id,
-            },
-        )
+        parameters: dict[str, Any] = {
+            "p_memberid": str(member_id),
+            "p_history_id": history_id,
+        }
+        if clan_id is not None:
+            parameters["p_clanid"] = str(clan_id)
+        return self._call_attack_rpc("revert_clan_member_attack", parameters)

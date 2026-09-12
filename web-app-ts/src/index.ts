@@ -1864,7 +1864,8 @@ async function supabaseFinishClanMemberAttack(
       p_mention: member.mention,
       p_messageid: null,
       p_action: action,
-      p_overtime: overtime
+      p_overtime: overtime,
+      p_clanid: member.clanid
     })
   });
 

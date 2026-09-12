@@ -275,6 +275,15 @@ drop function if exists public.finish_clan_member_attack(
   text,
   integer
 );
+drop function if exists public.finish_clan_member_attack(
+  text,
+  text,
+  text,
+  text,
+  text,
+  integer,
+  text
+);
 
 create function public.finish_clan_member_attack(
   p_memberid text,
@@ -282,7 +291,8 @@ create function public.finish_clan_member_attack(
   p_mention text,
   p_messageid text,
   p_action text,
-  p_overtime integer default 0
+  p_overtime integer default 0,
+  p_clanid text default null
 )
 returns jsonb
 language plpgsql
@@ -306,25 +316,71 @@ begin
     raise exception 'Invalid attack action';
   end if;
 
-  select *
-  into strict target_member
-  from public.clan_members
-  where memberid = p_memberid
-  for update;
+  if p_clanid is not null and length(trim(p_clanid)) > 0 then
+    select *
+    into target_member
+    from public.clan_members
+    where clanid = p_clanid
+      and memberid = p_memberid
+    for update;
+  else
+    select *
+    into target_member
+    from public.clan_members
+    where (clanid, memberid) = (
+      select clanid, memberid
+      from public.clan_members
+      where memberid = p_memberid
+      order by case
+                 when jsonb_typeof(attackdata->'boss') = 'number'
+                      and trunc((attackdata->>'boss')::numeric)::integer between 1 and 5 then 0
+                 when coalesce(attackdata->>'boss', '') ~ '^[1-5]$' then 0
+                 else 1
+               end,
+               updated_at desc
+      limit 1
+    )
+    for update;
+  end if;
 
-  attack_data := target_member.attackdata;
-  attack_sortie := coalesce((attack_data->>'sortie')::integer, 0);
-  attack_boss := coalesce((attack_data->>'boss')::integer, 0);
-  attack_lap := coalesce((attack_data->>'lap')::integer, 0);
-  attack_day := nullif(attack_data->>'day', '')::date;
-  is_carry_over := coalesce((attack_data->>'overattack')::integer, 0) = 1;
+  if not found then
+    raise exception 'Clan member was not found';
+  end if;
+
+  attack_data := coalesce(target_member.attackdata, '{}'::jsonb);
+  attack_sortie := case
+    when jsonb_typeof(attack_data->'sortie') = 'number' then trunc((attack_data->>'sortie')::numeric)::integer
+    when coalesce(attack_data->>'sortie', '') ~ '^-?\d+$' then (attack_data->>'sortie')::integer
+    else 0
+  end;
+  attack_boss := case
+    when jsonb_typeof(attack_data->'boss') = 'number' then trunc((attack_data->>'boss')::numeric)::integer
+    when coalesce(attack_data->>'boss', '') ~ '^-?\d+$' then (attack_data->>'boss')::integer
+    else 0
+  end;
+  attack_lap := case
+    when jsonb_typeof(attack_data->'lap') = 'number' then trunc((attack_data->>'lap')::numeric)::integer
+    when coalesce(attack_data->>'lap', '') ~ '^-?\d+$' then (attack_data->>'lap')::integer
+    else 0
+  end;
+  attack_day := case
+    when coalesce(attack_data->>'day', '') ~ '^\d{4}-\d{2}-\d{2}' then left(attack_data->>'day', 10)::date
+    else target_member.day
+  end;
+  is_carry_over := (
+    case
+      when jsonb_typeof(attack_data->'overattack') = 'number' then trunc((attack_data->>'overattack')::numeric)::integer
+      when coalesce(attack_data->>'overattack', '') ~ '^-?\d+$' then (attack_data->>'overattack')::integer
+      else 0
+    end
+  ) = 1;
 
   if attack_boss not between 1 and 5 or attack_sortie not between 1 and 3 then
     raise exception 'Attack is not active';
   end if;
 
   if attack_day is null then
-    raise exception 'Attack day is not set';
+    attack_day := ((changed_at at time zone 'Asia/Tokyo') - interval '5 hours')::date;
   end if;
 
   if p_action = 'defeat' then
@@ -390,16 +446,30 @@ begin
     where clanid = target_member.clanid;
   end if;
 
-  attack_data := '{"day":"","sortie":0,"lap":0,"boss":0,"overattack":null,"damage":null,"message":null}'::jsonb;
+  attack_data := jsonb_build_object(
+    'day', '',
+    'sortie', 0,
+    'lap', 0,
+    'boss', 0,
+    'overattack', null,
+    'damage', null,
+    'message', null
+  );
 
   update public.clan_members
-  set name = p_name,
-      mention = p_mention,
+  set name = coalesce(nullif(p_name, ''), target_member.name),
+      mention = coalesce(nullif(p_mention, ''), target_member.mention),
+      day = attack_day,
       attacktime = attack_times,
       attackdata = attack_data,
       lastactive = changed_at,
       updated_at = changed_at
-  where memberid = target_member.memberid;
+  where clanid = target_member.clanid
+    and memberid = target_member.memberid;
+
+  if not found then
+    raise exception 'Failed to update clan member attack';
+  end if;
 
   return jsonb_build_object(
     'history_id', history_id,
@@ -416,7 +486,8 @@ revoke all on function public.finish_clan_member_attack(
   text,
   text,
   text,
-  integer
+  integer,
+  text
 ) from public, anon, authenticated;
 
 grant execute on function public.finish_clan_member_attack(
@@ -425,7 +496,8 @@ grant execute on function public.finish_clan_member_attack(
   text,
   text,
   text,
-  integer
+  integer,
+  text
 ) to service_role;
 
 create or replace function public.revert_clan_member_attack(
