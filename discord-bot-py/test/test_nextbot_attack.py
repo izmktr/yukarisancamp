@@ -608,6 +608,79 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["b"]["overtime_2"], 0)
         self.assertEqual(result["b"]["overtime_3"], 0)
 
+    def test_build_attacktime_from_histories_matches_sql(self) -> None:
+        self.assertEqual(
+            SupabaseClient.build_attacktime_from_histories(
+                [
+                    {"sortie": 1, "overtime": 50},
+                    {"sortie": 2, "overtime": 0},
+                ]
+            ),
+            [50, 0, None],
+        )
+        self.assertEqual(
+            SupabaseClient.build_attacktime_from_histories(
+                [
+                    {"sortie": 1, "overtime": 20},
+                    {"sortie": 1, "overtime": 30},
+                ]
+            ),
+            [0, None, None],
+        )
+
+    async def test_finish_attack_refreshes_attacktime_with_reference_date(self) -> None:
+        clan, member, supabase = self.create_clan()
+        message = self.create_message()
+        member.Attack(5, 1)
+        member.attackmessage = message
+        supabase.finish_clan_member_attack.return_value = {
+            "history_id": 77,
+            "attacktime": [0, None, None],
+            "attackdata": {"day": "", "sortie": 0, "lap": 0, "boss": 0},
+            "bosslaps": [1, 1, 1, 1, 2],
+        }
+        supabase.refresh_clan_member_attacktime.return_value = [50, None, None]
+        clan.RemoveReaction = AsyncMock()
+        reaction = clan.CreateAttackReaction(member, message, 5, 1, 0)
+        payload = types.SimpleNamespace(
+            message_id=message.id,
+            emoji=types.SimpleNamespace(name=clan.emojis[1]),
+        )
+
+        result = await reaction.addreaction(member, payload)
+
+        self.assertTrue(result)
+        supabase.refresh_clan_member_attacktime.assert_called_once_with(
+            123, "456", constants.reference_date()
+        )
+        self.assertEqual(member.attacktime, [50, None, None])
+
+    async def test_cancel_attack_does_not_refresh_attacktime_from_histories(self) -> None:
+        clan, member, supabase = self.create_clan()
+        message = self.create_message()
+        member.Attack(5, 1)
+        member.attackmessage = message
+        clan.TemporaryMessage = MagicMock()
+        clan.RemoveReaction = AsyncMock()
+        clan.damagecontrol[4].Remove = AsyncMock()
+        clan.damagecontrol[4].SendResult = AsyncMock()
+        supabase.finish_clan_member_attack.return_value = {
+            "history_id": None,
+            "attacktime": [None, None, None],
+            "attackdata": {"day": "", "sortie": 0, "lap": 0, "boss": 0},
+            "bosslaps": [1, 1, 1, 1, 1],
+        }
+        reaction = clan.CreateAttackReaction(member, message, 5, 1, 0)
+        payload = types.SimpleNamespace(
+            message_id=message.id,
+            emoji=types.SimpleNamespace(name=clan.emojis[9]),
+        )
+
+        result = await reaction.addreaction(member, payload)
+
+        self.assertTrue(result)
+        supabase.refresh_clan_member_attacktime.assert_not_called()
+
     def test_apply_attack_overtimes_sets_none_beyond_maxsortie(self) -> None:
         clan = Clan(clan_id=123)
         clan.ApplySupabaseMember({

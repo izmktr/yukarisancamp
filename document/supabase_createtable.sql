@@ -311,6 +311,8 @@ declare
   history_id bigint;
   changed_at timestamptz := now();
   updated_bosslaps integer[];
+  reference_day date;
+  overtime_row record;
 begin
   if p_action not in ('complete', 'defeat', 'cancel') then
     raise exception 'Invalid attack action';
@@ -400,16 +402,6 @@ begin
   );
 
   if p_action <> 'cancel' then
-    attack_times := jsonb_set(
-      attack_times,
-      array[(attack_sortie - 1)::text],
-      to_jsonb(case
-        when p_action = 'defeat' and not is_carry_over then p_overtime
-        else 0
-      end),
-      true
-    );
-
     insert into public.attack_histories (
       clanid, memberid, day, sortie, messageid, boss, attacklap,
       overtime, defeat, sortiecount, updatetime
@@ -426,6 +418,37 @@ begin
       case when is_carry_over then 1 when p_action = 'defeat' then 1 else 2 end,
       changed_at
     ) returning id into history_id;
+
+    -- attacktime は履歴の day ではなく、現在時刻の基準日（JST 5:00始まり）で再計算する
+    reference_day := ((changed_at at time zone 'Asia/Tokyo') - interval '5 hours')::date;
+    attack_times := jsonb_build_array(null, null, null);
+    for overtime_row in
+      select
+        sub.sortie,
+        max(case when sub.cnt = 1 then sub.max_overtime else 0 end) as time
+      from (
+        select
+          sortie,
+          count(sortie) as cnt,
+          max(overtime) as max_overtime
+        from public.attack_histories
+        where day = reference_day
+          and clanid = target_member.clanid
+          and memberid = target_member.memberid
+        group by clanid, memberid, day, sortie
+      ) sub
+      group by sub.sortie
+      order by sub.sortie
+    loop
+      if overtime_row.sortie between 1 and 3 then
+        attack_times := jsonb_set(
+          attack_times,
+          array[(overtime_row.sortie - 1)::text],
+          to_jsonb(overtime_row.time),
+          true
+        );
+      end if;
+    end loop;
   end if;
 
   if p_action = 'defeat' then

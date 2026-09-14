@@ -1370,6 +1370,7 @@ async function supabaseSelectAttackHistories(
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_ATTACK_HISTORIES_TABLE);
   const query = new URLSearchParams({
     select: 'id,day,clanid,memberid,sortie,boss,attacklap,overtime,defeat',
+    clanid: `eq.${member.clanid}`,
     memberid: `eq.${member.memberid}`,
     day: `eq.${day}`,
     order: 'sortie.asc,overtime.desc'
@@ -2000,16 +2001,34 @@ async function supabaseUpdateAttackHistory(
 }
 
 function buildAttacktimeFromHistories(histories: AttackHistoryRow[]): Array<number | null> {
+  const grouped = new Map<number, number[]>();
+  for (const history of histories) {
+    const overtimes = grouped.get(history.sortie) || [];
+    overtimes.push(history.overtime);
+    grouped.set(history.sortie, overtimes);
+  }
+
   return Array.from({ length: 3 }, (_, index) => {
-    const sortieHistories = histories.filter((history) => history.sortie === index + 1);
-    if (sortieHistories.length === 0) {
+    const overtimes = grouped.get(index + 1);
+    if (!overtimes || overtimes.length === 0) {
       return null;
     }
-    if (sortieHistories.length === 1) {
-      return sortieHistories[0].overtime;
+    if (overtimes.length === 1) {
+      return Math.max(...overtimes);
     }
     return 0;
   });
+}
+
+async function supabaseRefreshClanMemberAttacktime(
+  config: SupabaseConfig,
+  member: ClanMemberRow
+): Promise<Array<number | null>> {
+  const day = getBaseDate();
+  const histories = await supabaseSelectAttackHistories(config, member, day);
+  const attacktime = buildAttacktimeFromHistories(histories);
+  await supabaseUpdateClanMemberAttacktime(config, member, attacktime);
+  return attacktime;
 }
 
 async function supabaseUpdateClanMemberAttacktime(
@@ -2873,6 +2892,9 @@ app.post('/api/clan/attack/finish', ensureDiscordServerLinked, express.json(), a
     }
 
     await supabaseFinishClanMemberAttack(config, currentMember, action, overtime);
+    if (action !== 'cancel') {
+      await supabaseRefreshClanMemberAttacktime(config, currentMember);
+    }
     if (nextBossHp !== null) {
       await supabaseUpsertClanBossStateCurrentHp(
         config,
@@ -3096,9 +3118,7 @@ app.post('/api/clan/attack-history/save', ensureDiscordServerLinked, express.jso
       await supabaseUpdateAttackHistory(config, member, day, history);
     }
     for (const [, member] of actingMembers) {
-      const updatedHistories = await supabaseSelectAttackHistories(config, member, day);
-      const attacktime = buildAttacktimeFromHistories(updatedHistories);
-      await supabaseUpdateClanMemberAttacktime(config, member, attacktime);
+      await supabaseRefreshClanMemberAttacktime(config, member);
     }
     return res.json({ success: true });
   } catch (error) {
@@ -3156,9 +3176,7 @@ app.post('/api/clan/attack-history/delete', ensureDiscordServerLinked, express.j
     }
 
     await supabaseDeleteAttackHistory(config, currentMember, day, historyId);
-  const updatedHistories = await supabaseSelectAttackHistories(config, currentMember, day);
-  const attacktime = buildAttacktimeFromHistories(updatedHistories);
-  await supabaseUpdateClanMemberAttacktime(config, currentMember, attacktime);
+    await supabaseRefreshClanMemberAttacktime(config, currentMember);
     return res.json({ success: true });
   } catch (error) {
     console.error('Failed to delete attack history:', error);

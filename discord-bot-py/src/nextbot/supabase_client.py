@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from typing import Any, cast
+from typing import Any, Optional, cast
 from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -490,6 +490,83 @@ class SupabaseClient:
                 rec[f"overtime_{sortie}"] = max(overtimes) if len(overtimes) == 1 else 0
 
         return list(outer.values())
+
+    @staticmethod
+    def build_attacktime_from_histories(rows: list[dict[str, Any]]) -> list[Optional[int]]:
+        grouped: dict[int, list[int]] = {}
+        for row in rows:
+            sortie = row.get("sortie")
+            if not isinstance(sortie, int) or isinstance(sortie, bool):
+                continue
+            overtime = row.get("overtime")
+            overtime_value = overtime if isinstance(overtime, int) and not isinstance(overtime, bool) else 0
+            grouped.setdefault(sortie, []).append(overtime_value)
+
+        attacktime: list[Optional[int]] = [None, None, None]
+        for sortie in sorted(grouped):
+            if sortie not in (1, 2, 3):
+                continue
+            overtimes = grouped[sortie]
+            attacktime[sortie - 1] = max(overtimes) if len(overtimes) == 1 else 0
+        return attacktime
+
+    def refresh_clan_member_attacktime(
+        self,
+        clan_id: int | str,
+        member_id: int | str,
+        day: str,
+    ) -> list[Optional[int]]:
+        query = urlencode(
+            {
+                "select": "sortie,overtime",
+                "clanid": f"eq.{clan_id}",
+                "memberid": f"eq.{member_id}",
+                "day": f"eq.{day}",
+            }
+        )
+        request = Request(
+            f"{self.url}/rest/v1/attack_histories?{query}",
+            headers={
+                "apikey": self.secret_key,
+                "Authorization": f"Bearer {self.secret_key}",
+            },
+        )
+        with urlopen(request, timeout=10) as response:
+            raw_rows: object = json.load(response)
+
+        history_rows = [
+            cast(dict[str, Any], row)
+            for row in (raw_rows if isinstance(raw_rows, list) else [])
+            if isinstance(row, dict)
+        ]
+        attacktime = self.build_attacktime_from_histories(history_rows)
+
+        update_query = urlencode(
+            {
+                "clanid": f"eq.{clan_id}",
+                "memberid": f"eq.{member_id}",
+            }
+        )
+        payload = json.dumps(
+            {
+                "attacktime": attacktime,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ).encode("utf-8")
+        update_request = Request(
+            f"{self.url}/rest/v1/clan_members?{update_query}",
+            data=payload,
+            method="PATCH",
+            headers={
+                "apikey": self.secret_key,
+                "Authorization": f"Bearer {self.secret_key}",
+                "Content-Type": "application/json",
+                "Prefer": "return=minimal",
+            },
+        )
+        with urlopen(update_request, timeout=10):
+            pass
+        return attacktime
 
     def update_discord_clan_member_attack(
         self,

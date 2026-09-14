@@ -169,6 +169,23 @@ class Clan(MessageRouter):
         rows = await asyncio.to_thread(self.supabase.get_clan_members, self.clan_id)
         self.LoadSupabaseMembers(rows)
 
+    async def _refresh_attacktime_after_history_insert(
+        self,
+        member: ClanMember,
+        result: dict[str, Any],
+    ) -> dict[str, Any]:
+        if self.supabase is None or self.clan_id is None:
+            return result
+        attacktime = await asyncio.to_thread(
+            self.supabase.refresh_clan_member_attacktime,
+            self.clan_id,
+            member.id,
+            constants.reference_date(),
+        )
+        if not isinstance(attacktime, list):
+            return result
+        return {**result, "attacktime": attacktime}
+
     def LoadSupabaseBossStates(
         self,
         states: list[dict[str, Any]],
@@ -365,6 +382,12 @@ class Clan(MessageRouter):
                 error_label = '攻撃のキャンセルに失敗しました' if action == 'cancel' else '攻撃の更新に失敗しました'
                 self.TemporaryMessage(message.channel, f'{error_label}: {exc}')
                 return False
+
+            if action != "cancel":
+                try:
+                    result = await self._refresh_attacktime_after_history_insert(member, result)
+                except Exception as exc:
+                    print(f"attacktime の再計算に失敗しました: {exc}")
 
             apply_rpc_result(member, result)
             raw_history_id = result.get("history_id")
