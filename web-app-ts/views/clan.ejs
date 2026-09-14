@@ -36,7 +36,7 @@
                 ? Number(activeAttackMembers[0].attacklap)
                 : '-';
         %>
-        <section class="clan-attack-active-panel" aria-labelledby="clan-attack-active-title-<%= bossNumber %>" data-acting-member-id="<%= operableAttackersForBoss.length > 0 ? operableAttackersForBoss[0].memberid : '' %>">
+        <section class="clan-attack-active-panel" aria-labelledby="clan-attack-active-title-<%= bossNumber %>" data-boss-index="<%= bossNumber %>" data-boss-hp="<%= Number.isFinite(activeBossHpValue) ? Math.trunc(activeBossHpValue) : '' %>" data-acting-member-id="<%= operableAttackersForBoss.length > 0 ? operableAttackersForBoss[0].memberid : '' %>">
             <div class="clan-attack-active-header">
                 <h2 id="clan-attack-active-title-<%= bossNumber %>">攻撃中</h2>
                 <div class="clan-active-boss-hp-block" data-boss-index="<%= bossNumber %>">
@@ -62,33 +62,7 @@
 
             <div class="clan-attack-member-list">
                 <% activeAttackMembers.forEach((member) => { %>
-                    <%
-                        const damageValue = Number(member.damage);
-                        const hasDamageValue = member.damage !== null
-                            && member.damage !== undefined
-                            && Number.isFinite(damageValue);
-                        const attackMessageText = typeof member.attackmessage === 'string'
-                            ? member.attackmessage.trim()
-                            : '';
-                        const sortieIndex = Number(member.sortie) - 1;
-                        const carryTimeValue = Array.isArray(member.attacktime)
-                            ? Number(member.attacktime[sortieIndex])
-                            : NaN;
-                        const carryTimeText = Number(member.overattack) === 1 && Number.isInteger(carryTimeValue)
-                            ? ` [持:${carryTimeValue}]`
-                            : '';
-                    %>
-                    <div class="clan-attack-member-row" data-member-id="<%= member.memberid %>">
-                        <strong><%= (member.name || 'Unknown') + carryTimeText %></strong>
-                        <span class="clan-attack-member-row-text">
-                            ：<%= Number(member.damage || 0).toLocaleString('ja-JP') %>
-                            <% if (attackMessageText) { %>
-                                、<%= attackMessageText %>
-                            <% } else if (!hasDamageValue) { %>
-                                、メッセージなし
-                            <% } %>
-                        </span>
-                    </div>
+                    <%- include('partials/clan-attack-member-row', { member, attackingMembers: activeAttackMembers, bossHp: activeBossHpValue }) %>
                 <% }); %>
             </div>
 
@@ -136,41 +110,15 @@
                 ? allMembers.filter((member) => Number(member.attackboss) === bossNumber)
                 : [];
         %>
-        <section class="clan-attack-active-panel clan-attack-active-panel-other" aria-labelledby="clan-attack-active-title-other-<%= bossNumber %>" style="display: none;">
+        <section class="clan-attack-active-panel clan-attack-active-panel-other" aria-labelledby="clan-attack-active-title-other-<%= bossNumber %>" data-boss-index="<%= bossNumber %>" data-boss-hp="<%= Number.isFinite(activeBossHpValue) ? Math.trunc(activeBossHpValue) : '' %>" style="display: none;">
             <div class="clan-attack-active-header">
                 <h2 id="clan-attack-active-title-other-<%= bossNumber %>">攻撃中</h2>
-                <p><strong><%= activeAttackMembers.length > 0 && Number.isInteger(Number(activeAttackMembers[0].attacklap)) ? Number(activeAttackMembers[0].attacklap) : '-' %>周目</strong>：<%= activeBossName %>、HP <%= activeBossHp %></p>
+                <p><strong><%= activeAttackMembers.length > 0 && Number.isInteger(Number(activeAttackMembers[0].attacklap)) ? Number(activeAttackMembers[0].attacklap) : '-' %>周目</strong>：<%= activeBossName %>、HP <span class="clan-active-boss-hp-display" data-boss-index="<%= bossNumber %>"><%= activeBossHp %></span></p>
             </div>
 
             <div class="clan-attack-member-list">
                 <% activeAttackMembers.forEach((member) => { %>
-                    <%
-                        const damageValue = Number(member.damage);
-                        const hasDamageValue = member.damage !== null
-                            && member.damage !== undefined
-                            && Number.isFinite(damageValue);
-                        const attackMessageText = typeof member.attackmessage === 'string'
-                            ? member.attackmessage.trim()
-                            : '';
-                        const sortieIndex = Number(member.sortie) - 1;
-                        const carryTimeValue = Array.isArray(member.attacktime)
-                            ? Number(member.attacktime[sortieIndex])
-                            : NaN;
-                        const carryTimeText = Number(member.overattack) === 1 && Number.isInteger(carryTimeValue)
-                            ? ` [持:${carryTimeValue}]`
-                            : '';
-                    %>
-                    <div class="clan-attack-member-row" data-member-id="<%= member.memberid %>">
-                        <strong><%= (member.name || 'Unknown') + carryTimeText %></strong>
-                        <span class="clan-attack-member-row-text">
-                            ：<%= Number(member.damage || 0).toLocaleString('ja-JP') %>
-                            <% if (attackMessageText) { %>
-                                、<%= attackMessageText %>
-                            <% } else if (!hasDamageValue) { %>
-                                、メッセージなし
-                            <% } %>
-                        </span>
-                    </div>
+                    <%- include('partials/clan-attack-member-row', { member, attackingMembers: activeAttackMembers, bossHp: activeBossHpValue }) %>
                 <% }); %>
             </div>
         </section>
@@ -441,7 +389,70 @@
     <% } %>
 </div>
 
+<script src="/scripts/attackStatus.js"></script>
 <script>
+    function parseClanBossHpText(text) {
+        const value = Number(String(text || '').replace(/,/g, '').trim());
+        return Number.isFinite(value) ? value : NaN;
+    }
+
+    function readClanAttackPanelBossHp(panel) {
+        if (!panel) {
+            return NaN;
+        }
+        const display = panel.querySelector('.clan-active-boss-hp-display');
+        if (display) {
+            const displayHp = parseClanBossHpText(display.textContent);
+            if (Number.isFinite(displayHp)) {
+                return displayHp;
+            }
+        }
+        return parseClanBossHpText(panel.getAttribute('data-boss-hp'));
+    }
+
+    function collectClanAttackPanelMembers(panel) {
+        return Array.from(panel.querySelectorAll('.clan-attack-member-row')).map((row) => ({
+            memberid: String(row.getAttribute('data-member-id') || ''),
+            name: String(row.getAttribute('data-name') || ''),
+            damage: Number(row.getAttribute('data-damage')),
+            overattack: Number(row.getAttribute('data-overattack'))
+        }));
+    }
+
+    function refreshClanAttackPanelStatuses(panel) {
+        if (!panel || !window.ClanAttackStatus || typeof window.ClanAttackStatus.buildClanAttackMemberStatus !== 'function') {
+            return;
+        }
+        const bossHp = readClanAttackPanelBossHp(panel);
+        const members = collectClanAttackPanelMembers(panel);
+        Array.from(panel.querySelectorAll('.clan-attack-member-row')).forEach((row, index) => {
+            const statusElement = row.querySelector('.clan-attack-member-status');
+            if (!statusElement) {
+                return;
+            }
+            const statusText = window.ClanAttackStatus.buildClanAttackMemberStatus(members[index], members, bossHp);
+            statusElement.textContent = statusText ? ` ${statusText}` : '';
+        });
+    }
+
+    function refreshClanAttackStatusesForBoss(bossIndex) {
+        Array.from(document.querySelectorAll(`.clan-attack-active-panel[data-boss-index="${bossIndex}"]`))
+            .forEach(refreshClanAttackPanelStatuses);
+    }
+
+    function updateClanAttackMemberRowText(row, damage, message, hasDamageValue) {
+        const textElement = row ? row.querySelector('.clan-attack-member-row-text') : null;
+        if (!textElement) {
+            return;
+        }
+        const damageValue = Number.isFinite(Number(damage)) ? Number(damage) : 0;
+        const messageText = typeof message === 'string' ? message.trim() : '';
+        const suffix = messageText
+            ? `、${messageText}`
+            : (hasDamageValue ? '' : '、メッセージなし');
+        textElement.textContent = `：${damageValue.toLocaleString('ja-JP')}${suffix}`;
+    }
+
     async function replaceBossLabelsFromClanBattleSettings() {
         const labelElements = Array.from(document.querySelectorAll('.boss-name-label[data-boss-index]'));
         if (labelElements.length === 0) {
@@ -852,14 +863,15 @@
                     }
 
                     const payload = await response.json().catch(() => null);
-                    const memberRow = document.querySelector(`.clan-attack-member-row[data-member-id="${memberId}"] .clan-attack-member-row-text`);
+                    const memberRow = document.querySelector(`.clan-attack-member-row[data-member-id="${memberId}"]`);
                     if (memberRow && payload) {
+                        const hasDamageValue = payload.damage !== null && payload.damage !== undefined;
                         const updatedDamage = Number(payload.damage) || 0;
                         const updatedMessage = typeof payload.message === 'string' ? payload.message.trim() : '';
-                        const suffix = updatedMessage
-                            ? `、${updatedMessage}`
-                            : (payload.damage === null || payload.damage === undefined ? '、メッセージなし' : '');
-                        memberRow.textContent = `：${updatedDamage.toLocaleString('ja-JP')}${suffix}`;
+                        memberRow.setAttribute('data-damage', String(hasDamageValue ? updatedDamage : 0));
+                        updateClanAttackMemberRowText(memberRow, updatedDamage, updatedMessage, hasDamageValue);
+                        const panel = memberRow.closest('.clan-attack-active-panel');
+                        refreshClanAttackPanelStatuses(panel);
                     }
 
                     if (messageInput) {
@@ -1257,8 +1269,16 @@
                 if (hpInput && hpInput.style.display === 'none') {
                     hpInput.value = String(Math.trunc(rowCurrentHp));
                 }
+                const panel = hpDisplay.closest('.clan-attack-active-panel');
+                if (panel) {
+                    panel.setAttribute('data-boss-hp', String(Math.trunc(rowCurrentHp)));
+                }
                 applied = true;
             });
+
+            if (applied) {
+                refreshClanAttackStatusesForBoss(rowBossIndex);
+            }
 
             return applied;
         };
@@ -1292,8 +1312,7 @@
 
             const panelBossIndexes = memberRows.map((memberRow) => {
                 const panel = memberRow.closest('.clan-attack-active-panel');
-                const bossIndexElement = panel ? panel.querySelector('[data-boss-index]') : null;
-                return bossIndexElement ? Number(bossIndexElement.getAttribute('data-boss-index')) : NaN;
+                return panel ? Number(panel.getAttribute('data-boss-index')) : NaN;
             });
             if (panelBossIndexes.some((bossIndex) => bossIndex !== attackBoss)) {
                 return false;
@@ -1317,8 +1336,12 @@
                 ? ` [持:${carryTimeValue}]`
                 : '';
             const displayName = `${row.name || 'Unknown'}${carryTimeText}`;
+            const panelsToRefresh = new Set();
 
             memberRows.forEach((memberRow) => {
+                memberRow.setAttribute('data-name', String(row.name || 'Unknown'));
+                memberRow.setAttribute('data-damage', String(Number.isFinite(damageValue) ? Math.trunc(damageValue) : 0));
+                memberRow.setAttribute('data-overattack', Number(attackData.overattack) === 1 ? '1' : '0');
                 const nameElement = memberRow.querySelector('strong');
                 const textElement = memberRow.querySelector('.clan-attack-member-row-text');
                 if (nameElement) {
@@ -1327,7 +1350,12 @@
                 if (textElement) {
                     textElement.textContent = rowText;
                 }
+                const panel = memberRow.closest('.clan-attack-active-panel');
+                if (panel) {
+                    panelsToRefresh.add(panel);
+                }
             });
+            panelsToRefresh.forEach((panel) => refreshClanAttackPanelStatuses(panel));
 
             return true;
         };

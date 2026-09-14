@@ -21,6 +21,7 @@ import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { randomInt } from 'crypto';
 import { getBaseDate } from './utils/baseDate';
 import { decrypt, encrypt } from './utils/encrypt';
+import { buildClanAttackMemberStatus } from './utils/attackStatus';
 
 // Firebase Admin SDK 初期化
 let adminDb: Firestore | null = null;
@@ -193,6 +194,7 @@ async function ensureAdmin(req: express.Request, res: express.Response, next: ex
 
 const app = express();
 const port = 3000;
+app.locals.buildClanAttackMemberStatus = buildClanAttackMemberStatus;
 
 function getFirebaseConfigValue(key: string, fallback: string): string {
   const value = process.env[key];

@@ -1,0 +1,33 @@
+<%
+    const damageValue = Number(member.damage);
+    const hasDamageValue = member.damage !== null
+        && member.damage !== undefined
+        && Number.isFinite(damageValue);
+    const attackMessageText = typeof member.attackmessage === 'string'
+        ? member.attackmessage.trim()
+        : '';
+    const sortieIndex = Number(member.sortie) - 1;
+    const carryTimeValue = Array.isArray(member.attacktime)
+        ? Number(member.attacktime[sortieIndex])
+        : NaN;
+    const carryTimeText = Number(member.overattack) === 1 && Number.isInteger(carryTimeValue)
+        ? ` [持:${carryTimeValue}]`
+        : '';
+    const statusText = typeof buildClanAttackMemberStatus === 'function'
+        ? buildClanAttackMemberStatus(member, attackingMembers, bossHp)
+        : '';
+%>
+<div
+    class="clan-attack-member-row"
+    data-member-id="<%= member.memberid %>"
+    data-name="<%= member.name || 'Unknown' %>"
+    data-damage="<%= hasDamageValue ? Math.trunc(damageValue) : 0 %>"
+    data-overattack="<%= Number(member.overattack) === 1 ? 1 : 0 %>"
+>
+    <strong><%= (member.name || 'Unknown') + carryTimeText %></strong>
+    <span class="clan-attack-member-detail">
+        <span class="clan-attack-member-row-text">
+            ：<%= Number(member.damage || 0).toLocaleString('ja-JP') %><% if (attackMessageText) { %>、<%= attackMessageText %><% } else if (!hasDamageValue) { %>、メッセージなし<% } %>
+        </span><span class="clan-attack-member-status"><% if (statusText) { %> <%= statusText %><% } %></span>
+    </span>
+</div>

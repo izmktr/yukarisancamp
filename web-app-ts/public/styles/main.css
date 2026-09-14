@@ -529,6 +529,11 @@ body {
     overflow-wrap: anywhere;
 }
 
+.clan-attack-member-status {
+    color: #8a4b12;
+    font-weight: 600;
+}
+
 .clan-attack-message-label {
     display: block;
     margin-top: 1rem;

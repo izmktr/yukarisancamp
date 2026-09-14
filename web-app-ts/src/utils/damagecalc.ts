@@ -1,7 +1,7 @@
 const MAX_TIME = 90;
 const BONUS_TIME = 20;
 
-function remainTime(damage: number, remainhp: number): number {
+export function remainTime(damage: number, remainhp: number): number {
     if (damage <= 0) return 0;
 
     const d = MAX_TIME  - Math.floor(MAX_TIME * remainhp / damage) + BONUS_TIME;
