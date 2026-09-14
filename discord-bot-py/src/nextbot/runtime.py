@@ -308,6 +308,10 @@ class NextBotApp:
             if clan.guild is not None:
                 await clan.OnMessageHandled(clan.guild)
 
+    async def _reset_lastmessage(self) -> None:
+        for clan in self._clans.values():
+            await clan.ResetLastMessage()
+
     async def _broadcast_notice(self, text: str) -> None:
         for clan in self._clans.values():
             await clan.SendNotice(text)
@@ -320,6 +324,10 @@ class NextBotApp:
                 print(f"bosslaps のリセットに失敗しました: {clan.clan_id}: {exc}")
             if clan.guild is not None:
                 await clan.OnMessageHandled(clan.guild)
+
+    async def _request_result(self, shtime: datetime.datetime) -> None:
+        for clan in self._clans.values():
+            await clan.RequestResult(shtime)
 
     async def _on_minute_tick(
         self,
@@ -334,6 +342,7 @@ class NextBotApp:
             except Exception as exc:
                 print(f"setting_clanbattle の再読み込みに失敗しました: {exc}")
             await self._reset_all_member_attacktimes()
+            await self._reset_lastmessage()
 
         start_date = self._setting_date(self.clanbattle_setting, "startDate")
         end_date = self._setting_date(self.clanbattle_setting, "endDate")
@@ -359,6 +368,8 @@ class NextBotApp:
                 await self._broadcast_notice(constants.CLANBATTLE_LAST_DAY_MESSAGE)
             if constants.crossed_scheduled_time(last_run, end_midnight, now):
                 await self._broadcast_notice(constants.CLANBATTLE_END_MESSAGE)
+
+        await self._request_result(now)
 
     def run(self) -> None:
         self.client.run(self.token)

@@ -402,7 +402,7 @@ class Clan(MessageRouter):
             else:
                 for attacking_member in self.members.values():
                     if attacking_member.IsAttack() and attacking_member.boss == boss:
-                        attacking_member.reportlimit = datetime.datetime.now() + datetime.timedelta(minutes=5)
+                        attacking_member.reportlimit = constants.now_jst() + datetime.timedelta(minutes=5)
                 await self.OnChangeBoss(boss)
 
             if message.guild is not None:
@@ -931,6 +931,16 @@ class Clan(MessageRouter):
             await asyncio.to_thread(self.supabase.update_clan_bosslaps, self.clan_id, bosslaps)
         if self.supabase_data is not None:
             self.supabase_data["bosslaps"] = bosslaps
+
+    async def ResetLastMessage(self) -> None:
+        self.lastmessage = None
+
+    async def RequestResult(self, shtime: datetime.datetime) -> None:
+        for member in self.members.values():
+            if member.reportlimit is not None and member.reportlimit < shtime:
+                member.reportlimit = None
+                message = '%s 凸結果の報告をお願いします' % member.mention
+                await self.SendNotice(message)
 
     async def SendNotice(self, text: str) -> None:
         guild = self.guild
