@@ -2,6 +2,7 @@ from __future__ import annotations
 import asyncio
 from functools import cmp_to_key
 from typing import TYPE_CHECKING
+import math
 
 import discord
 from . import constants
@@ -105,9 +106,9 @@ class DamageControl():
         max = 90
         bonus = 20
 
-        if damage <= 0: return 0
+        if damage < remainhp: return 0
 
-        d = max  - (max * remainhp // damage) + bonus + 1
+        d = max  - math.floor(max * remainhp / damage) + bonus
         if max < d: return max
         return d
 
