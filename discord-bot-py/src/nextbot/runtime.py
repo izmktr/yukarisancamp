@@ -9,7 +9,7 @@ from supabase import create_async_client
 
 from . import constants
 from .clan import Clan
-from .one_shot_scheduler import OneShotScheduler, parse_scheduled_time
+from .one_shot_scheduler import MinuteScheduler
 from .supabase_client import SupabaseClient
 
 
@@ -21,7 +21,6 @@ class NextBotApp:
         supabase_secret_key: str,
         yukalink_common_key: str,
         input_channel_name: str = "凸報告",
-        scheduled_run_at: str | None = None,
     ) -> None:
         intents = discord.Intents.default()
         intents.message_content = True
@@ -32,9 +31,9 @@ class NextBotApp:
         self.yukalink_common_key = yukalink_common_key
         self.clanbattle_setting: dict[str, Any] | None = None
         self.input_channel_name = input_channel_name
-        self.scheduled_run_at = scheduled_run_at
         self._clans: dict[int, Clan] = {}
-        self._one_shot_scheduler: OneShotScheduler | None = None
+        self._minute_scheduler: MinuteScheduler | None = None
+        self._last_scheduled_run: datetime.datetime | None = None
         self._realtime_client: Any | None = None
         self._realtime_channel: Any | None = None
         self._register_events()
@@ -222,14 +221,11 @@ class NextBotApp:
 
             await self._subscribe_supabase_updates()
 
-            
-
-            # スケジュールされた実行時間が設定されている場合、OneShotScheduler を開始
-            if self.scheduled_run_at and self._one_shot_scheduler is None:
-                run_at = parse_scheduled_time(self.scheduled_run_at)
-                self._one_shot_scheduler = OneShotScheduler(run_at, self._run_one_shot_callback)
-                self._one_shot_scheduler.start()
-                print("daily schedule enabled at " + run_at.strftime("%H:%M:%S"))
+            if self._minute_scheduler is None:
+                self._last_scheduled_run = constants.now_jst()
+                self._minute_scheduler = MinuteScheduler(self._run_minute_callback)
+                self._minute_scheduler.start()
+                print("minute schedule enabled")
 
         @self.client.event
         async def on_guild_join(guild: discord.Guild) -> None:
@@ -268,8 +264,101 @@ class NextBotApp:
             if clan is not None:
                 await clan.OnRawReactionRemove(payload)
 
-    async def _run_one_shot_callback(self) -> None:
-        print("one-shot callback called")
+    async def _run_minute_callback(self) -> None:
+        now = constants.now_jst()
+        last_run = self._last_scheduled_run
+        if last_run is None:
+            self._last_scheduled_run = now
+            return
+        try:
+            await self._on_minute_tick(last_run, now)
+        finally:
+            self._last_scheduled_run = now
+
+    @staticmethod
+    def _setting_date(setting: dict[str, Any] | None, key: str) -> datetime.date | None:
+        if setting is None:
+            return None
+        raw_value = setting.get(key)
+        if isinstance(raw_value, datetime.datetime):
+            return constants.as_jst(raw_value).date()
+        if isinstance(raw_value, datetime.date):
+            return raw_value
+        if isinstance(raw_value, str) and len(raw_value) >= 10:
+            try:
+                return datetime.date.fromisoformat(raw_value[:10])
+            except ValueError:
+                return None
+        return None
+
+    async def _reload_clanbattle_setting(self) -> None:
+        setting = await asyncio.to_thread(self.supabase.get_clanbattle_setting)
+        self.clanbattle_setting = setting
+        for clan in self._clans.values():
+            clan.clanbattle_setting = setting
+        print(f"setting_clanbattle を再読み込みしました: {setting}")
+
+    async def _reset_all_member_attacktimes(self) -> None:
+        for clan in self._clans.values():
+            clan.ResetMemberAttacktimes()
+            try:
+                await clan.ResetMemberAttacktimesInDatabase()
+            except Exception as exc:
+                print(f"attacktime のリセットに失敗しました: {clan.clan_id}: {exc}")
+            if clan.guild is not None:
+                await clan.OnMessageHandled(clan.guild)
+
+    async def _broadcast_notice(self, text: str) -> None:
+        for clan in self._clans.values():
+            await clan.SendNotice(text)
+
+    async def _reset_all_bosslaps(self) -> None:
+        for clan in self._clans.values():
+            try:
+                await clan.ResetBosslaps()
+            except Exception as exc:
+                print(f"bosslaps のリセットに失敗しました: {clan.clan_id}: {exc}")
+            if clan.guild is not None:
+                await clan.OnMessageHandled(clan.guild)
+
+    async def _on_minute_tick(
+        self,
+        last_run: datetime.datetime,
+        now: datetime.datetime,
+    ) -> None:
+        now = constants.as_jst(now)
+        today_five = constants.scheduled_datetime(now.date(), 5, 0)
+        if constants.crossed_scheduled_time(last_run, today_five, now):
+            try:
+                await self._reload_clanbattle_setting()
+            except Exception as exc:
+                print(f"setting_clanbattle の再読み込みに失敗しました: {exc}")
+            await self._reset_all_member_attacktimes()
+
+        start_date = self._setting_date(self.clanbattle_setting, "startDate")
+        end_date = self._setting_date(self.clanbattle_setting, "endDate")
+
+        if start_date is not None:
+            eve_five = constants.scheduled_datetime(
+                start_date - datetime.timedelta(days=1), 5, 0
+            )
+            start_five = constants.scheduled_datetime(start_date, 5, 0)
+            if constants.crossed_scheduled_time(last_run, eve_five, now):
+                await self._broadcast_notice(constants.CLANBATTLE_EVE_MESSAGE)
+                await self._reset_all_bosslaps()
+            if constants.crossed_scheduled_time(last_run, start_five, now):
+                await self._broadcast_notice(constants.CLANBATTLE_START_MESSAGE)
+                await self._reset_all_bosslaps()
+
+        if end_date is not None:
+            last_day_five = constants.scheduled_datetime(end_date, 5, 0)
+            end_midnight = constants.scheduled_datetime(
+                end_date + datetime.timedelta(days=1), 0, 0
+            )
+            if constants.crossed_scheduled_time(last_run, last_day_five, now):
+                await self._broadcast_notice(constants.CLANBATTLE_LAST_DAY_MESSAGE)
+            if constants.crossed_scheduled_time(last_run, end_midnight, now):
+                await self._broadcast_notice(constants.CLANBATTLE_END_MESSAGE)
 
     def run(self) -> None:
         self.client.run(self.token)

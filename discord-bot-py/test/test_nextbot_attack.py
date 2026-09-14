@@ -753,6 +753,107 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result, (clan, payload["data"]["old_record"], {}))
 
+    def test_crossed_scheduled_time_detects_window(self) -> None:
+        last_run = datetime.datetime(2026, 7, 24, 4, 59, 10, tzinfo=constants.JST)
+        target = datetime.datetime(2026, 7, 24, 5, 0, tzinfo=constants.JST)
+        now = datetime.datetime(2026, 7, 24, 5, 0, 20, tzinfo=constants.JST)
+
+        self.assertTrue(constants.crossed_scheduled_time(last_run, target, now))
+        self.assertFalse(constants.crossed_scheduled_time(now, target, now + datetime.timedelta(minutes=1)))
+        self.assertFalse(
+            constants.crossed_scheduled_time(
+                datetime.datetime(2026, 7, 24, 5, 0, tzinfo=constants.JST),
+                target,
+                now,
+            )
+        )
+
+    def _create_scheduled_app(
+        self,
+        attacktime: list[int | None] | None = None,
+        start_date: str = "2026-07-25",
+        end_date: str = "2026-07-30",
+    ) -> tuple[NextBotApp, Clan, ClanMember, MagicMock]:
+        clan, member, supabase = self.create_clan(attacktime)
+        channel = MagicMock()
+        channel.send = AsyncMock()
+        clan.guild = MagicMock()
+        clan.guild.name = "test guild"
+        clan.FindChannel = MagicMock(return_value=channel)
+        clan.OnMessageHandled = AsyncMock()
+        app = NextBotApp.__new__(NextBotApp)
+        app.supabase = supabase
+        app.supabase.get_clanbattle_setting.return_value = {
+            "startDate": start_date,
+            "endDate": end_date,
+        }
+        app.clanbattle_setting = {"startDate": start_date, "endDate": end_date}
+        app._clans = {123: clan}
+        return app, clan, member, channel
+
+    async def test_five_am_reloads_setting_and_resets_attacktime(self) -> None:
+        app, clan, member, channel = self._create_scheduled_app([20, 0, None])
+        app.supabase.get_clanbattle_setting.return_value = {
+            "startDate": "2026-07-25",
+            "endDate": "2026-07-30",
+        }
+
+        await app._on_minute_tick(
+            datetime.datetime(2026, 7, 20, 4, 59, 30, tzinfo=constants.JST),
+            datetime.datetime(2026, 7, 20, 5, 0, 10, tzinfo=constants.JST),
+        )
+
+        app.supabase.get_clanbattle_setting.assert_called_once_with()
+        app.supabase.reset_clan_members_attacktime.assert_called_once_with(123)
+        self.assertEqual(member.attacktime, [None, None, None])
+        self.assertEqual(clan.clanbattle_setting["startDate"], "2026-07-25")
+        channel.send.assert_not_awaited()
+
+    async def test_clanbattle_eve_sends_notice_and_resets_bosslaps(self) -> None:
+        app, clan, _member, channel = self._create_scheduled_app()
+        clan.supabase_data = {"bosslaps": [3, 2, 1, 1, 1]}
+
+        await app._on_minute_tick(
+            datetime.datetime(2026, 7, 24, 4, 59, 30, tzinfo=constants.JST),
+            datetime.datetime(2026, 7, 24, 5, 0, 10, tzinfo=constants.JST),
+        )
+
+        channel.send.assert_awaited_with(constants.CLANBATTLE_EVE_MESSAGE)
+        app.supabase.update_clan_bosslaps.assert_called_with(123, [1, 1, 1, 1, 1])
+        self.assertEqual(clan.supabase_data["bosslaps"], [1, 1, 1, 1, 1])
+
+    async def test_clanbattle_start_sends_notice_and_resets_bosslaps(self) -> None:
+        app, _clan, _member, channel = self._create_scheduled_app()
+
+        await app._on_minute_tick(
+            datetime.datetime(2026, 7, 25, 4, 59, 30, tzinfo=constants.JST),
+            datetime.datetime(2026, 7, 25, 5, 0, 10, tzinfo=constants.JST),
+        )
+
+        channel.send.assert_awaited_with(constants.CLANBATTLE_START_MESSAGE)
+        app.supabase.update_clan_bosslaps.assert_called_with(123, [1, 1, 1, 1, 1])
+
+    async def test_clanbattle_last_day_sends_notice(self) -> None:
+        app, _clan, _member, channel = self._create_scheduled_app()
+
+        await app._on_minute_tick(
+            datetime.datetime(2026, 7, 30, 4, 59, 30, tzinfo=constants.JST),
+            datetime.datetime(2026, 7, 30, 5, 0, 10, tzinfo=constants.JST),
+        )
+
+        channel.send.assert_awaited_with(constants.CLANBATTLE_LAST_DAY_MESSAGE)
+        app.supabase.update_clan_bosslaps.assert_not_called()
+
+    async def test_clanbattle_end_sends_notice_at_next_midnight(self) -> None:
+        app, _clan, _member, channel = self._create_scheduled_app()
+
+        await app._on_minute_tick(
+            datetime.datetime(2026, 7, 30, 23, 59, 30, tzinfo=constants.JST),
+            datetime.datetime(2026, 7, 31, 0, 0, 10, tzinfo=constants.JST),
+        )
+
+        channel.send.assert_awaited_with(constants.CLANBATTLE_END_MESSAGE)
+
 
 if __name__ == "__main__":
     unittest.main()

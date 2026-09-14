@@ -918,6 +918,35 @@ class Clan(MessageRouter):
         self.TemporaryMessage(message.channel, '設定を再読み込みしました')
         return True
 
+    def ResetMemberAttacktimes(self) -> None:
+        for clan_member in self.members.values():
+            clan_member.attacktime = [None] * constants.MAX_SORTIE
+
+    async def ResetMemberAttacktimesInDatabase(self) -> None:
+        if self.supabase is None or self.clan_id is None:
+            return
+        await asyncio.to_thread(self.supabase.reset_clan_members_attacktime, self.clan_id)
+
+    async def ResetBosslaps(self) -> None:
+        bosslaps = [1] * constants.BOSSNUMBER
+        if self.supabase is not None and self.clan_id is not None:
+            await asyncio.to_thread(self.supabase.update_clan_bosslaps, self.clan_id, bosslaps)
+        if self.supabase_data is not None:
+            self.supabase_data["bosslaps"] = bosslaps
+
+    async def SendNotice(self, text: str) -> None:
+        guild = self.guild
+        if guild is None:
+            return
+        channel = self.FindChannel(guild, self.input_channel_name)
+        if channel is None:
+            print(f"通知チャンネル '{self.input_channel_name}' が見つかりません: {guild.name}")
+            return
+        try:
+            await channel.send(text)
+        except (discord.Forbidden, discord.HTTPException) as exc:
+            print(f"通知の送信に失敗しました: {guild.name}: {exc}")
+
     def DiscordData(self) -> dict[str, Any]:
         return {
             'damagecontrol': [dc.ChannelId() for dc in self.damagecontrol]

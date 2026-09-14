@@ -2,6 +2,8 @@
 
 import datetime
 
+JST = datetime.timezone(datetime.timedelta(hours=9))
+
 # Number of bosses in one lap.
 BOSSNUMBER = 5
 
@@ -24,13 +26,48 @@ def is_valid_sortie(sortie: int) -> bool:
     return 0 < sortie <= MAX_SORTIE
 
 # 基準日
+def now_jst() -> datetime.datetime:
+    return datetime.datetime.now(JST)
+
+
+def as_jst(value: datetime.datetime) -> datetime.datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=JST)
+    return value.astimezone(JST)
+
+
+def scheduled_datetime(day: datetime.date, hour: int, minute: int = 0) -> datetime.datetime:
+    return datetime.datetime(day.year, day.month, day.day, hour, minute, tzinfo=JST)
+
+
+def crossed_scheduled_time(
+    last_run: datetime.datetime,
+    target: datetime.datetime,
+    now: datetime.datetime,
+) -> bool:
+    return as_jst(last_run) < as_jst(target) <= as_jst(now)
+
+
 def reference_date(now: datetime.datetime | None = None) -> str:
     # 5:00～翌日の4:59までを1日とする基準日
-    jst = datetime.timezone(datetime.timedelta(hours=9))
     if now is None:
-        now = datetime.datetime.now(jst)
-    elif now.tzinfo is None:
-        now = now.replace(tzinfo=jst)
+        now = now_jst()
     else:
-        now = now.astimezone(jst)
+        now = as_jst(now)
     return (now - datetime.timedelta(hours=5)).date().isoformat()
+
+
+CLANBATTLE_EVE_MESSAGE = (
+    "おはようございます\n"
+    "明日よりクランバトルです。状況報告に名前が出ていない人は、"
+    "今日中にこのチャンネルで「register」または「登録」と発言してください。"
+)
+CLANBATTLE_START_MESSAGE = (
+    "おはようございます\n"
+    "いよいよクランバトルの開始です。頑張りましょう。"
+)
+CLANBATTLE_LAST_DAY_MESSAGE = (
+    "おはようございます\n"
+    "今日がクランバトル最終日です。24時が終了時刻ですので早めに攻撃を終わらせましょう。"
+)
+CLANBATTLE_END_MESSAGE = "クランバトル終了です。お疲れさまでした。"

@@ -14,7 +14,6 @@ class NextBotConfig:
     supabase_secret_key: str
     yukalink_common_key: str
     input_channel_name: str = "凸報告"
-    scheduled_run_at: str | None = None
 
     @classmethod
     def from_env(cls, env_file_name: str = ".env.local") -> "NextBotConfig":
@@ -42,12 +41,10 @@ class NextBotConfig:
             )
 
         input_channel_name = os.getenv("NEXTBOT_INPUT_CHANNEL", "").strip() or "凸報告"
-        scheduled_run_at = os.getenv("NEXTBOT_RUN_AT", "").strip() or None
         return cls(
             token=token,
             supabase_url=supabase_url,
             supabase_secret_key=supabase_secret_key,
             yukalink_common_key=yukalink_common_key,
             input_channel_name=input_channel_name,
-            scheduled_run_at=scheduled_run_at,
         )
