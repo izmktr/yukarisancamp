@@ -182,8 +182,6 @@ class Clan(MessageRouter):
             member.id,
             constants.reference_date(),
         )
-        if not isinstance(attacktime, list):
-            return result
         return {**result, "attacktime": attacktime}
 
     def LoadSupabaseBossStates(
