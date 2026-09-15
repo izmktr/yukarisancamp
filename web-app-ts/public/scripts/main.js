@@ -699,6 +699,33 @@ function getClanBattleDefaultDates(baseDate = new Date()) {
     };
 }
 
+function getClanBattleDatesForYearMonth(yearmonth) {
+    if (!/^\d{6}$/.test(yearmonth)) {
+        return { startDate: '', endDate: '' };
+    }
+
+    const year = Number(yearmonth.slice(0, 4));
+    const monthIndex = Number(yearmonth.slice(4, 6)) - 1;
+    const lastDay = new Date(year, monthIndex + 1, 0);
+    const lastDayNumber = lastDay.getDate();
+
+    const startDate = new Date(lastDay);
+    startDate.setDate(lastDayNumber - 6);
+
+    const endDate = new Date(lastDay);
+    endDate.setDate(lastDayNumber - 1);
+
+    return {
+        startDate: formatDateAsIsoLocal(startDate),
+        endDate: formatDateAsIsoLocal(endDate)
+    };
+}
+
+function getDisplayedClanBattleYearMonth() {
+    const yearmonthElement = document.getElementById('cb-yearmonth');
+    return yearmonthElement ? (yearmonthElement.textContent || '').trim() : '';
+}
+
 function applyClanBattleDateDefaults(state) {
     const defaults = getClanBattleDefaultDates();
     return {
@@ -816,7 +843,7 @@ function collectClanBattleStateFromForm() {
     }
 
     return {
-        yearmonth: yearmonthElement.textContent || '',
+        yearmonth: (yearmonthElement.textContent || '').trim(),
         bossname,
         bossHp,
         startDate: startDateInput.value,
@@ -836,6 +863,40 @@ function updateClanBattleSaveButtonState() {
         : false;
 
     saveButton.disabled = !hasChanged;
+}
+
+function updateClanBattleRefreshDatesButtonState() {
+    const refreshButton = document.getElementById('cb-refresh-dates-button');
+    if (!refreshButton) {
+        return;
+    }
+
+    const displayedYearMonth = getDisplayedClanBattleYearMonth();
+    refreshButton.disabled = !displayedYearMonth || displayedYearMonth === getBaseYearMonth();
+}
+
+function applyCurrentClanBattleDatesToForm() {
+    const yearmonthElement = document.getElementById('cb-yearmonth');
+    const startDateInput = document.getElementById('cb-start-date');
+    const endDateInput = document.getElementById('cb-end-date');
+    if (!yearmonthElement || !startDateInput || !endDateInput) {
+        return;
+    }
+
+    const yearmonth = getBaseYearMonth();
+    const dates = getClanBattleDatesForYearMonth(yearmonth);
+    yearmonthElement.textContent = yearmonth;
+    startDateInput.value = dates.startDate;
+    endDateInput.value = dates.endDate;
+
+    const formState = collectClanBattleStateFromForm();
+    if (formState) {
+        currentClanBattleState = cloneClanBattleState(formState);
+    }
+
+    updateClanBattleSaveButtonState();
+    updateClanBattleRefreshDatesButtonState();
+    renderClanBattleStatus('日付を画面上で更新しました。保存ボタンで反映されます。', '');
 }
 
 function renderClanBattleState(state) {
@@ -864,6 +925,7 @@ function renderClanBattleState(state) {
     currentClanBattleState = cloneClanBattleState(state);
     currentClanBattleOriginalState = cloneClanBattleState(state);
     updateClanBattleSaveButtonState();
+    updateClanBattleRefreshDatesButtonState();
     renderClanBattleStatus('', '');
 }
 
@@ -938,10 +1000,12 @@ async function saveClanBattleSettings() {
 
         renderClanBattleStatus('クラバト設定を保存しました。', 'success');
         updateClanBattleSaveButtonState();
+        updateClanBattleRefreshDatesButtonState();
     } catch (error) {
         console.error('クラバト設定の保存に失敗しました:', error);
         renderClanBattleStatus('保存に失敗しました。時間をおいて再試行してください。', 'error');
         updateClanBattleSaveButtonState();
+        updateClanBattleRefreshDatesButtonState();
     }
 }
 
@@ -961,6 +1025,7 @@ async function renderClanBattleSettings(user) {
         currentClanBattleState = null;
         currentClanBattleOriginalState = null;
         currentClanBattleDocId = '';
+        updateClanBattleRefreshDatesButtonState();
         return;
     }
 
@@ -981,6 +1046,7 @@ async function renderClanBattleSettings(user) {
 
 function initializeClanBattleSettingsPage() {
     const saveButton = document.getElementById('cb-save-button');
+    const refreshDatesButton = document.getElementById('cb-refresh-dates-button');
     if (!saveButton) {
         return;
     }
@@ -988,6 +1054,7 @@ function initializeClanBattleSettingsPage() {
     const onInputChanged = () => {
         renderClanBattleStatus('', '');
         updateClanBattleSaveButtonState();
+        updateClanBattleRefreshDatesButtonState();
     };
 
     for (let i = 1; i <= CLAN_BATTLE_BOSS_COUNT; i += 1) {
@@ -1009,6 +1076,10 @@ function initializeClanBattleSettingsPage() {
     if (endDateInput) {
         endDateInput.addEventListener('input', onInputChanged);
     }
+
+    refreshDatesButton?.addEventListener('click', () => {
+        applyCurrentClanBattleDatesToForm();
+    });
 
     saveButton.addEventListener('click', async () => {
         await saveClanBattleSettings();
