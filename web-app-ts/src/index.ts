@@ -196,19 +196,40 @@ const app = express();
 const port = 3000;
 app.locals.buildClanAttackMemberStatus = buildClanAttackMemberStatus;
 
-function getFirebaseConfigValue(key: string, fallback: string): string {
+function requireEnv(key: string): string {
   const value = process.env[key];
-  return value && value.trim().length > 0 ? value : fallback;
+  if (!value || value.trim().length === 0) {
+    throw new Error(`${key} が設定されていません。web-app-ts/.env.local を確認してください`);
+  }
+  return value.trim();
+}
+
+function optionalEnv(key: string): string {
+  const value = process.env[key];
+  return value && value.trim().length > 0 ? value.trim() : '';
+}
+
+const SESSION_SECRET_MIN_LENGTH = 32;
+
+function getSessionSecret(): string {
+  const secret = requireEnv('SESSION_SECRET');
+  if (secret === 'yukarisan-secret') {
+    throw new Error('SESSION_SECRET に旧既定値は使えません。新しい乱数を設定してください');
+  }
+  if (secret.length < SESSION_SECRET_MIN_LENGTH) {
+    throw new Error(`SESSION_SECRET は ${SESSION_SECRET_MIN_LENGTH} 文字以上にしてください`);
+  }
+  return secret;
 }
 
 const firebaseConfig = {
-  apiKey: getFirebaseConfigValue('FIREBASE_API_KEY', 'AIzaSyDcD3rAJd8ayXudkYatnEdnzEga-V32rVQ'),
-  authDomain: getFirebaseConfigValue('FIREBASE_AUTH_DOMAIN', 'yukarisan-f3b06.firebaseapp.com'),
-  projectId: getFirebaseConfigValue('FIREBASE_PROJECT_ID', 'yukarisan-f3b06'),
-  storageBucket: getFirebaseConfigValue('FIREBASE_STORAGE_BUCKET', 'yukarisan-f3b06.firebasestorage.app'),
-  messagingSenderId: getFirebaseConfigValue('FIREBASE_MESSAGING_SENDER_ID', '995628919608'),
-  appId: getFirebaseConfigValue('FIREBASE_APP_ID', '1:995628919608:web:42683b4de1c4de6d5fefcd'),
-  measurementId: getFirebaseConfigValue('FIREBASE_MEASUREMENT_ID', 'G-PL9YLWJY76')
+  apiKey: requireEnv('FIREBASE_API_KEY'),
+  authDomain: requireEnv('FIREBASE_AUTH_DOMAIN'),
+  projectId: requireEnv('FIREBASE_PROJECT_ID'),
+  storageBucket: requireEnv('FIREBASE_STORAGE_BUCKET'),
+  messagingSenderId: requireEnv('FIREBASE_MESSAGING_SENDER_ID'),
+  appId: requireEnv('FIREBASE_APP_ID'),
+  measurementId: optionalEnv('FIREBASE_MEASUREMENT_ID')
 };
 
 app.locals.firebaseConfig = firebaseConfig;
@@ -217,11 +238,14 @@ app.locals.supabasePublicConfig = {
   publishableKey: process.env.SUPABASE_PUBLISHABLE_KEY || ''
 };
 
-// セッションミドルウェア追加
 app.use(session({
-  secret: 'yukarisan-secret',
+  secret: getSessionSecret(),
   resave: false,
-  saveUninitialized: true
+  saveUninitialized: true,
+  cookie: {
+    httpOnly: true,
+    sameSite: 'lax'
+  }
 }));
 
 // EJSレイアウトの設定

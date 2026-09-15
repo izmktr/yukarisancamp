@@ -8,6 +8,7 @@ Discordボットを同じPM2で常時起動する場合は [`pm2-discord-bot-set
 
 - Node.js / npm がインストール済みであること
 - リポジトリを `git clone` 済みで、`web-app-ts/` ディレクトリで作業すること
+- `web-app-ts/.env.local` に `SESSION_SECRET`（32文字以上の乱数）と Firebase / Supabase の値が設定済みであること。ソースコード側にフォールバック値はない
 
 ## 1. PM2のインストール
 

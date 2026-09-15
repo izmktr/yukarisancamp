@@ -28,6 +28,7 @@
 
 web-app-ts/.env.local の設定値が、対象 Firebase プロジェクトと一致していることを確認します。
 
+- SESSION_SECRET（32文字以上の乱数。ソースに直書きしない）
 - FIREBASE_API_KEY
 - FIREBASE_AUTH_DOMAIN
 - FIREBASE_PROJECT_ID
