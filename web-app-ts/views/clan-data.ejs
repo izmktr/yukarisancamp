@@ -158,12 +158,16 @@
                 <% for (let bossid = 0; bossid < 5; bossid += 1) { %>
                   <% const cellItems = historyList.filter((item) => getHistoryLoopNumber(item) === loopNumber && getBossColumnIndex(item) === bossid).sort((left, right) => Number(left.sortie) - Number(right.sortie) || Number(left.overtime) - Number(right.overtime)); %>
                   <td class="bosshistory-cell" data-boss-index="<%= bossid %>">
+                    <div class="bosshistory-mobile-boss-label">
+                      <span class="boss-name-label" data-boss-index="<%= bossid %>">ボス<%= bossid + 1 %></span>
+                    </div>
                     <% cellItems.forEach((history) => { %>
                       <% const memberName = memberNameMap.get(String(history.memberid || '')) || 'Unknown'; %>
+                      <% const hasKnownMemberName = memberName !== 'Unknown'; %>
                       <% const optionText = history.defeat === true ? ` [討伐:${Number(history.overtime ?? 0)}]` : Number(history.overtime) > 0 ? ` [持:${Number(history.overtime)}秒]` : ' [持]'; %>
                       <% const entryText = `${Number(history.sortie) + 1}凸 ${memberName}${optionText}`; %>
                       <% const fadedClass = String(history.day ?? '') !== latestVisibleHistoryDate ? 'history-old-day' : ''; %>
-                      <div class="bosshistory-entry <%= fadedClass %>"><%= entryText %></div>
+                      <div class="bosshistory-entry <%= fadedClass %>" data-has-player-name="<%= hasKnownMemberName ? '1' : '0' %>"><%= entryText %></div>
                     <% }); %>
                     <% if (cellItems.length === 0) { %>
                       <div class="bosshistory-empty">-</div>
@@ -262,11 +266,11 @@
 <script>
   function replaceBossLabelsFromClanBattleSettings() {
     const labelElements = Array.from(document.querySelectorAll('.boss-name-label[data-boss-index]'));
-    if (labelElements.length === 0) return;
+    if (labelElements.length === 0) return Promise.resolve();
 
-    fetch('/api/clanbattle-settings/current', { method: 'GET', cache: 'no-store' })
+    return fetch('/api/clanbattle-settings/current', { method: 'GET', cache: 'no-store' })
       .then((response) => {
-        if (!response.ok) return;
+        if (!response.ok) return null;
         return response.json();
       })
       .then((payload) => {
@@ -285,6 +289,151 @@
       });
   }
 
+  function isBossHistoryShowAllEnabled() {
+    const toggleButton = document.getElementById('bosshistory-show-all-btn');
+    if (!(toggleButton instanceof HTMLButtonElement)) {
+      return false;
+    }
+    return toggleButton.getAttribute('aria-pressed') === 'true';
+  }
+
+  function initBossHistoryMobileFilter() {
+    if (!window.matchMedia || !window.matchMedia('(max-width: 768px)').matches) {
+      return;
+    }
+
+    const filterContainer = document.querySelector('.bosshistory-mobile-filter');
+    const filterButtons = Array.from(document.querySelectorAll('.bosshistory-filter-btn[data-boss-filter]'));
+    const selectedBossLine = document.querySelector('.bosshistory-mobile-selected-boss');
+    const historyRows = Array.from(document.querySelectorAll('.bosshistory-table tbody tr'));
+
+    if (!filterContainer || filterButtons.length === 0 || historyRows.length === 0) {
+      return;
+    }
+
+    const getBossName = (bossIndex) => {
+      const label = document.querySelector(`.bosshistory-table thead .boss-name-label[data-boss-index="${bossIndex}"]`);
+      const text = label ? String(label.textContent || '').trim() : '';
+      if (text.length > 0) {
+        return text;
+      }
+      return `ボス${Number(bossIndex) + 1}`;
+    };
+
+    const setFilter = (bossFilter) => {
+      const showAll = isBossHistoryShowAllEnabled();
+      const isAll = bossFilter === 'all';
+
+      filterButtons.forEach((button) => {
+        button.classList.toggle('is-active', button.getAttribute('data-boss-filter') === bossFilter);
+      });
+
+      if (selectedBossLine) {
+        if (isAll) {
+          selectedBossLine.textContent = '';
+          selectedBossLine.classList.remove('is-visible');
+        } else {
+          selectedBossLine.textContent = getBossName(bossFilter);
+          selectedBossLine.classList.add('is-visible');
+        }
+      }
+
+      const rowStates = [];
+
+      historyRows.forEach((row) => {
+        const cells = Array.from(row.querySelectorAll('.bosshistory-cell[data-boss-index]'));
+        let hasVisibleEntryInRow = false;
+
+        cells.forEach((cell) => {
+          const cellBossIndex = String(cell.getAttribute('data-boss-index'));
+          const showCell = isAll || cellBossIndex === bossFilter;
+          cell.style.display = showCell ? '' : 'none';
+
+          const cellBossLabel = cell.querySelector('.bosshistory-mobile-boss-label');
+          if (cellBossLabel) {
+            cellBossLabel.style.display = isAll ? '' : 'none';
+          }
+
+          const entries = Array.from(cell.querySelectorAll('.bosshistory-entry'));
+          if (isAll || !showCell) {
+            entries.forEach((entry) => {
+              entry.style.display = '';
+            });
+            if (showCell && entries.length > 0) {
+              hasVisibleEntryInRow = true;
+            }
+            return;
+          }
+
+          let hasVisibleEntryInCell = false;
+          entries.forEach((entry) => {
+            const hasPlayerName = entry.getAttribute('data-has-player-name') === '1';
+            entry.style.display = hasPlayerName ? '' : 'none';
+            if (hasPlayerName) {
+              hasVisibleEntryInCell = true;
+            }
+          });
+
+          if (hasVisibleEntryInCell) {
+            hasVisibleEntryInRow = true;
+          }
+        });
+
+        rowStates.push({
+          row,
+          hasVisibleEntryInRow,
+          loopNumber: Number(row.getAttribute('data-loop-number') || '0'),
+          hiddenByDefault: row.getAttribute('data-hidden-by-default') === '1'
+        });
+      });
+
+      if (isAll) {
+        rowStates.forEach(({ row, hiddenByDefault }) => {
+          const shouldShowRow = showAll || !hiddenByDefault;
+          row.style.display = shouldShowRow ? '' : 'none';
+        });
+        return;
+      }
+
+      const highestLoopWithPlayer = rowStates.reduce((max, state) => {
+        if (!state.hasVisibleEntryInRow) {
+          return max;
+        }
+        return Math.max(max, state.loopNumber);
+      }, -1);
+
+      rowStates.forEach(({ row, hasVisibleEntryInRow, loopNumber, hiddenByDefault }) => {
+        const shouldShowByFilter = highestLoopWithPlayer >= 0 && (hasVisibleEntryInRow || loopNumber <= highestLoopWithPlayer);
+        const shouldShowByLoopToggle = showAll || !hiddenByDefault;
+        const shouldShowRow = shouldShowByFilter && shouldShowByLoopToggle;
+        row.style.display = shouldShowRow ? '' : 'none';
+      });
+    };
+
+    filterContainer.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+      const button = target.closest('.bosshistory-filter-btn[data-boss-filter]');
+      if (!(button instanceof HTMLElement)) {
+        return;
+      }
+      const bossFilter = String(button.getAttribute('data-boss-filter') || 'all');
+      setFilter(bossFilter);
+    });
+
+    document.addEventListener('bosshistory:showall-changed', () => {
+      const activeButton = filterContainer.querySelector('.bosshistory-filter-btn.is-active[data-boss-filter]');
+      const currentFilter = activeButton instanceof HTMLElement
+        ? String(activeButton.getAttribute('data-boss-filter') || 'all')
+        : 'all';
+      setFilter(currentFilter);
+    });
+
+    setFilter('all');
+  }
+
   function initBossHistoryLoopToggle() {
     const toggleButton = document.getElementById('bosshistory-show-all-btn');
     const historyRows = Array.from(document.querySelectorAll('.bosshistory-row[data-hidden-by-default]'));
@@ -292,20 +441,52 @@
 
     let showAll = false;
     const applyState = () => {
+      const isMobile = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
+
       historyRows.forEach((row) => {
         const hiddenByDefault = row.getAttribute('data-hidden-by-default') === '1';
         const shouldHide = !showAll && hiddenByDefault;
-        row.style.display = shouldHide ? 'none' : '';
+        row.classList.toggle('bosshistory-row-hidden-by-default', shouldHide);
+
+        if (!isMobile) {
+          row.style.display = shouldHide ? 'none' : 'table-row';
+        }
       });
+
       toggleButton.textContent = showAll ? '絞り込む' : '全て表示';
       toggleButton.classList.toggle('is-active', showAll);
       toggleButton.setAttribute('aria-pressed', showAll ? 'true' : 'false');
+      document.dispatchEvent(new CustomEvent('bosshistory:showall-changed'));
     };
     toggleButton.addEventListener('click', () => {
       showAll = !showAll;
       applyState();
     });
     applyState();
+  }
+
+  function applyMembersMobileEmptyFieldVisibility(isMobile) {
+    const optionalCells = Array.from(document.querySelectorAll('.member-mobile-optional-cell[data-mobile-hide-empty="1"]'));
+
+    optionalCells.forEach((cell) => {
+      if (!(cell instanceof HTMLElement)) {
+        return;
+      }
+
+      if (!isMobile) {
+        cell.style.display = '';
+        return;
+      }
+
+      const historyEntries = Array.from(cell.querySelectorAll('.member-history-entry'));
+      const hasMeaningfulHistory = historyEntries.some((entry) => {
+        const text = String(entry.textContent || '').trim();
+        return text.length > 0 && text !== '-';
+      });
+      const textContent = String(cell.textContent || '').trim();
+      const hasContent = hasMeaningfulHistory || (historyEntries.length === 0 && textContent.length > 0 && textContent !== '-');
+      cell.style.display = hasContent ? 'grid' : 'none';
+    });
   }
 
   function initMembersAttackCountToggle() {
@@ -315,11 +496,17 @@
 
     let showAll = false;
     const applyState = () => {
+      const isMobile = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
+
       memberRows.forEach((row) => {
         const displayAttackCount = Number(row.getAttribute('data-display-attack-count') || '0');
         const shouldHide = !showAll && displayAttackCount >= 3;
-        row.style.display = shouldHide ? 'none' : '';
+        row.classList.toggle('member-row-hidden-by-default', shouldHide);
+        row.style.display = shouldHide ? 'none' : (isMobile ? 'block' : 'table-row');
       });
+
+      applyMembersMobileEmptyFieldVisibility(isMobile);
+
       toggleButton.textContent = showAll ? '絞り込む' : '全て表示';
       toggleButton.classList.toggle('is-active', showAll);
       toggleButton.setAttribute('aria-pressed', showAll ? 'true' : 'false');
@@ -329,6 +516,19 @@
       applyState();
     });
     applyState();
+
+    if (window.matchMedia) {
+      const mediaQuery = window.matchMedia('(max-width: 768px)');
+      const handleViewportChange = () => {
+        applyState();
+      };
+
+      if (typeof mediaQuery.addEventListener === 'function') {
+        mediaQuery.addEventListener('change', handleViewportChange);
+      } else if (typeof mediaQuery.addListener === 'function') {
+        mediaQuery.addListener(handleViewportChange);
+      }
+    }
   }
 
   function initMemberHistoryToggle() {
@@ -354,9 +554,10 @@
     applyState();
   }
 
-  document.addEventListener('DOMContentLoaded', () => {
-    replaceBossLabelsFromClanBattleSettings();
+  document.addEventListener('DOMContentLoaded', async () => {
+    await replaceBossLabelsFromClanBattleSettings();
     initBossHistoryLoopToggle();
+    initBossHistoryMobileFilter();
     initMembersAttackCountToggle();
     initMemberHistoryToggle();
   });
@@ -585,18 +786,26 @@
     color: #53627a;
   }
 
-  .bosshistory-mobile-filter {
-    display: none;
-    gap: 0.4rem;
-    flex-wrap: wrap;
-    margin-bottom: 0.75rem;
+  .bosshistory-loop {
+    font-weight: 700;
+    color: #244d74;
   }
 
+  .bosshistory-mobile-boss-label {
+    display: none;
+  }
+
+  .bosshistory-mobile-filter,
   .bosshistory-mobile-selected-boss {
     display: none;
-    margin-bottom: 0.75rem;
-    color: #1f4f79;
-    font-weight: 700;
+  }
+
+  .member-row-hidden-by-default {
+    display: none;
+  }
+
+  .bosshistory-row-hidden-by-default {
+    display: none;
   }
 
   .bosscount-display {
@@ -630,16 +839,259 @@
   }
 
   @media (max-width: 768px) {
+    .clandata-header {
+      padding: 14px;
+      margin-bottom: 16px;
+    }
+
+    .clandata-content {
+      gap: 16px;
+    }
+
+    .clandata-section {
+      padding: 14px;
+    }
+
+    .clandata-section h3 {
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      font-size: 1rem;
+    }
+
+    .clandata-section-header {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .clandata-members-header h3,
+    .clandata-bosshistory-header h3,
+    .clandata-memberhistory-header h3 {
+      margin-bottom: 0;
+      padding-bottom: 0;
+      border-bottom: none;
+    }
+
+    .members-show-all-btn,
+    .bosshistory-show-all-btn,
+    .memberhistory-toggle-btn {
+      align-self: flex-end;
+    }
+
+    .clandata-members-header,
+    .clandata-bosshistory-header,
+    .clandata-memberhistory-header {
+      flex-direction: row;
+      align-items: center;
+    }
+
+    .members-attack-summary {
+      margin-bottom: 10px;
+      font-size: 13px;
+    }
+
+    .bosscount-display {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .bosscount-item {
+      padding: 8px;
+    }
+
+    .bosscount-item p {
+      font-size: 13px;
+      line-height: 1.3;
+    }
+
+    .members-table,
+    .members-table thead,
+    .members-table tbody,
+    .members-table tr,
+    .members-table th,
+    .members-table td {
+      display: block;
+      width: 100%;
+    }
+
+    .members-table {
+      min-width: 0;
+      border: 0;
+      background: transparent;
+    }
+
+    .members-table thead {
+      display: none;
+    }
+
+    .members-table tbody tr {
+      border: 1px solid #d8e6f5;
+      border-radius: 10px;
+      background: #f9fcff;
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+
+    .members-table tbody tr:last-child {
+      margin-bottom: 0;
+    }
+
+    .members-table tbody tr:nth-child(even),
+    .members-table tbody tr:hover {
+      background: #f9fcff;
+    }
+
+    .members-table td {
+      border: 0;
+      border-bottom: 1px solid #e9eef5;
+      padding: 8px 10px;
+      display: grid;
+      grid-template-columns: 68px 1fr;
+      gap: 8px;
+      align-items: start;
+      white-space: normal;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .members-table td:last-child {
+      border-bottom: 0;
+    }
+
+    .members-table td:nth-child(1)::before { content: '名前'; }
+    .members-table td:nth-child(2)::before { content: '攻撃数'; }
+    .members-table td:nth-child(3)::before { content: '履歴'; }
+
+    .members-table td::before {
+      font-weight: 700;
+      color: #2f5d88;
+      white-space: nowrap;
+    }
+
+    .member-name-content {
+      gap: 6px;
+    }
+
+    .member-history-cell {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .member-history-entry {
+      margin-bottom: 3px;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      grid-column: 2;
+    }
+
+    .bosshistory-table,
+    .bosshistory-table thead,
+    .bosshistory-table tbody,
+    .bosshistory-table tr,
+    .bosshistory-table th,
+    .bosshistory-table td {
+      display: block;
+      width: 100%;
+    }
+
+    .bosshistory-table {
+      min-width: 0;
+      border: 0;
+      background: transparent;
+    }
+
+    .bosshistory-table thead {
+      display: none;
+    }
+
     .bosshistory-mobile-filter {
-      display: flex;
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .bosshistory-filter-btn {
+      border: 1px solid #c8d7ea;
+      background: #f7fbff;
+      color: #2f5d88;
+      border-radius: 999px;
+      font-size: 12px;
+      line-height: 1;
+      font-weight: 700;
+      padding: 8px 0;
+      cursor: pointer;
+    }
+
+    .bosshistory-filter-btn.is-active {
+      border-color: #0b5ed7;
+      background: #0b5ed7;
+      color: #ffffff;
+    }
+
+    .bosshistory-mobile-selected-boss {
+      display: none;
+      margin-bottom: 8px;
+      font-size: 13px;
+      line-height: 1.35;
+      color: #244d74;
+      font-weight: 700;
     }
 
     .bosshistory-mobile-selected-boss.is-visible {
       display: block;
     }
 
-    .member-mobile-optional-cell {
-      display: none;
+    .bosshistory-table tbody tr {
+      border: 1px solid #d8e6f5;
+      border-radius: 10px;
+      background: #ffffff;
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+
+    .bosshistory-table tbody tr:last-child {
+      margin-bottom: 0;
+    }
+
+    .bosshistory-table td {
+      border: 0;
+      border-bottom: 1px solid #e9eef5;
+      padding: 8px 10px;
+      font-size: 13px;
+      line-height: 1.45;
+      min-width: 0;
+    }
+
+    .bosshistory-table td:last-child {
+      border-bottom: 0;
+    }
+
+    .bosshistory-loop {
+      width: 100%;
+      text-align: left;
+      background: #f3f8ff;
+      color: #244d74;
+      font-weight: 700;
+      border-bottom: 1px solid #d8e6f5;
+    }
+
+    .bosshistory-loop::before {
+      content: '周回: ';
+    }
+
+    .bosshistory-mobile-boss-label {
+      display: block;
+      font-weight: 700;
+      color: #2f5d88;
+      margin-bottom: 2px;
+    }
+
+    .bosshistory-entry {
+      white-space: normal;
+      margin-bottom: 3px;
     }
   }
 </style>
