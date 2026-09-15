@@ -211,14 +211,25 @@ function renderSettings(user, profile) {
     }
     discordServerValue.textContent = getLinkedDisplayValue(profile.discordServerName || profile.discordServer);
     if (discordLinkButton) {
-        discordLinkButton.hidden = Boolean(profile.discordServer);
-        discordLinkButton.disabled = false;
+        discordLinkButton.hidden = Boolean(profile.discordServer) || isDevLoginSession();
+        discordLinkButton.disabled = isDevLoginSession();
     }
     if (discordUnlinkButton) {
-        discordUnlinkButton.hidden = !profile.discordServer;
-        discordUnlinkButton.disabled = false;
+        discordUnlinkButton.hidden = !profile.discordServer || isDevLoginSession();
+        discordUnlinkButton.disabled = isDevLoginSession();
     }
     createdAtValue.textContent = new Date(profile.createdAt).toLocaleString('ja-JP');
+    if (isDevLoginSession()) {
+        displayNameInput.disabled = true;
+        const saveButton = document.getElementById('settings-save-button');
+        if (saveButton) {
+            saveButton.disabled = true;
+        }
+        renderSettingsStatus('開発ログイン中です。プロフィール保存・Discord連携は使えません。', '');
+        return;
+    }
+
+    displayNameInput.disabled = false;
     renderSettingsStatus('', '');
     updateSettingsSaveButtonState();
 }
@@ -1102,20 +1113,97 @@ function getMissingFirebaseConfigKeys(config) {
 }
 
 function getServerSessionState() {
-    const defaultState = { isLoggedIn: false, isAdmin: false };
+    const defaultState = {
+        isLoggedIn: false,
+        isAdmin: false,
+        isDevLogin: false,
+        hasDiscordServer: false,
+        userName: '',
+        googleUserId: '',
+        discordServer: '',
+        devLoginAvailable: false
+    };
     if (!window.__SERVER_SESSION__) {
         return defaultState;
     }
     return {
         isLoggedIn: Boolean(window.__SERVER_SESSION__.isLoggedIn),
-        isAdmin: Boolean(window.__SERVER_SESSION__.isAdmin)
+        isAdmin: Boolean(window.__SERVER_SESSION__.isAdmin),
+        isDevLogin: Boolean(window.__SERVER_SESSION__.isDevLogin),
+        hasDiscordServer: Boolean(window.__SERVER_SESSION__.hasDiscordServer),
+        userName: typeof window.__SERVER_SESSION__.userName === 'string' ? window.__SERVER_SESSION__.userName : '',
+        googleUserId: typeof window.__SERVER_SESSION__.googleUserId === 'string' ? window.__SERVER_SESSION__.googleUserId : '',
+        discordServer: typeof window.__SERVER_SESSION__.discordServer === 'string' ? window.__SERVER_SESSION__.discordServer : '',
+        devLoginAvailable: Boolean(window.__SERVER_SESSION__.devLoginAvailable)
     };
+}
+
+function isDevLoginSession() {
+    const session = getServerSessionState();
+    return session.isLoggedIn && session.isDevLogin;
+}
+
+function createDevLoginAuthUser(session = getServerSessionState()) {
+    return {
+        uid: session.googleUserId || 'dev-local-user',
+        email: 'dev@localhost',
+        displayName: session.userName || '開発ユーザー',
+        getIdToken: async () => {
+            throw new Error('開発ログインでは Firebase トークンを取得できません');
+        }
+    };
+}
+
+function createDevLoginProfile(user, session = getServerSessionState()) {
+    return normalizeUserProfile(user, {
+        displayName: session.userName || '開発ユーザー',
+        discordServer: session.discordServer || null,
+        discordServerName: session.discordServer || null,
+        createdAt: Date.now(),
+        ownedCharacters: []
+    });
+}
+
+function applyDevLoginClientState() {
+    if (!isDevLoginSession()) {
+        return false;
+    }
+
+    const session = getServerSessionState();
+    currentAuthUser = createDevLoginAuthUser(session);
+    currentUserProfile = createDevLoginProfile(currentAuthUser, session);
+    currentProfileLoadErrorMessage = '';
+    renderAuthState(currentAuthUser, currentUserProfile);
+    renderSettings(currentAuthUser, currentUserProfile);
+    void renderClanBattleSettings(currentAuthUser);
+    return true;
 }
 
 function shouldReloadAfterSessionSync(role) {
     const serverState = getServerSessionState();
     const latestIsAdmin = role === 'admin';
     return !serverState.isLoggedIn || serverState.isAdmin !== latestIsAdmin;
+}
+
+function renderLoggedOutAuthButtons(authButtons) {
+    const session = getServerSessionState();
+    const devMenu = session.devLoginAvailable
+        ? `
+            <details class="dev-login-menu">
+                <summary class="btn btn-login">開発ログイン</summary>
+                <div class="dev-login-menu-panel">
+                    <a href="/dev/login?role=user">一般ユーザー</a>
+                    <a href="/dev/login?role=admin">admin</a>
+                    <a href="/dev/login?role=admin&amp;withDiscord=1">admin + クラン</a>
+                </div>
+            </details>
+        `
+        : '';
+
+    authButtons.innerHTML = `
+        <button class="btn btn-login" onclick="loginWithGoogle()">Googleでログイン</button>
+        ${devMenu}
+    `;
 }
 
 function renderAuthState(user, profile = null) {
@@ -1126,16 +1214,15 @@ function renderAuthState(user, profile = null) {
 
     if (user) {
         const displayName = profile && profile.displayName ? profile.displayName : getDefaultDisplayName(user);
+        const devSuffix = isDevLoginSession() ? '（開発）' : '';
         authButtons.innerHTML = `
-            <span class="user-name">こんにちは、${escapeHtml(displayName)}さん</span>
+            <span class="user-name">こんにちは、${escapeHtml(displayName)}さん${devSuffix}</span>
             <button class="btn btn-logout" onclick="logout()">ログアウト</button>
         `;
         return;
     }
 
-    authButtons.innerHTML = `
-        <button class="btn btn-login" onclick="loginWithGoogle()">Googleでログイン</button>
-    `;
+    renderLoggedOutAuthButtons(authButtons);
 }
 
 function initializeFirebaseAuth() {
@@ -1172,6 +1259,11 @@ function initializeFirebaseAuth() {
     }
 
     auth.onAuthStateChanged(async (user) => {
+        if (!user && isDevLoginSession()) {
+            applyDevLoginClientState();
+            return;
+        }
+
         currentAuthUser = user;
         currentProfileLoadErrorMessage = '';
 
@@ -1244,12 +1336,20 @@ async function loginWithGoogle() {
 }
 
 async function logout() {
-    if (!initializeFirebaseAuth()) {
-        alert('ログアウト処理を初期化できませんでした。');
-        return;
-    }
-
     try {
+        if (isDevLoginSession()) {
+            currentAuthUser = null;
+            currentUserProfile = null;
+            hasTriggeredAuthSyncReload = false;
+            location.href = '/dev/logout';
+            return;
+        }
+
+        if (!initializeFirebaseAuth()) {
+            alert('ログアウト処理を初期化できませんでした。');
+            return;
+        }
+
         await auth.signOut();
         await fetch('/api/user/logout', { method: 'POST' });
         currentAuthUser = null;
@@ -1338,6 +1438,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setInterval(updateTime, 1000);
 
     // Firebase初期化に失敗しても画面自体は利用可能にする
+    applyDevLoginClientState();
     initializeFirebaseAuth();
     initializeSettingsPage();
     initializeClanBattleSettingsPage();

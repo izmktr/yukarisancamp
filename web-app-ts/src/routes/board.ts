@@ -717,6 +717,28 @@ function parseTimelog(text: string): ParsedArticle {
   return result;
 }
 
+function isLoopbackAddress(address: string | undefined): boolean {
+  if (!address) {
+    return false;
+  }
+  const normalized = address.trim().toLowerCase();
+  return normalized === '127.0.0.1'
+    || normalized === '::1'
+    || normalized === '::ffff:127.0.0.1'
+    || normalized.startsWith('127.');
+}
+
+function isLocalDevRequest(req: any): boolean {
+  const hostname = String(req.hostname || '').toLowerCase();
+  const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+  if (!isLocalHost) {
+    return false;
+  }
+
+  const remoteAddress = req.socket?.remoteAddress || req.ip;
+  return isLoopbackAddress(remoteAddress);
+}
+
 function getAuthViewData(req: any) {
   const userSession = req.session.user as any;
   const discordServer = typeof userSession?.discordServer === 'string' ? userSession.discordServer.trim() : '';
@@ -726,7 +748,11 @@ function getAuthViewData(req: any) {
     userName: userSession?.displayName || '',
     isAdmin: userSession?.role === 'admin',
     hasDiscordServer,
-    canSelectClanVisibility: hasDiscordServer
+    canSelectClanVisibility: hasDiscordServer,
+    isDevLogin: Boolean(userSession?.isDevLogin),
+    googleUserId: typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '',
+    discordServer,
+    devLoginAvailable: isLocalDevRequest(req)
   };
 }
 

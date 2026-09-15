@@ -78,6 +78,28 @@ function parseClanDataJson(raw: string): any {
   return JSON.parse(normalized);
 }
 
+function isLoopbackAddress(address: string | undefined): boolean {
+  if (!address) {
+    return false;
+  }
+  const normalized = address.trim().toLowerCase();
+  return normalized === '127.0.0.1'
+    || normalized === '::1'
+    || normalized === '::ffff:127.0.0.1'
+    || normalized.startsWith('127.');
+}
+
+function isLocalDevRequest(req: express.Request): boolean {
+  const hostname = String(req.hostname || '').toLowerCase();
+  const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+  if (!isLocalHost) {
+    return false;
+  }
+
+  const remoteAddress = req.socket?.remoteAddress || req.ip;
+  return isLoopbackAddress(remoteAddress);
+}
+
 function getAuthViewData(req: express.Request) {
   const userSession = req.session.user as any;
   const discordServer = typeof userSession?.discordServer === 'string' ? userSession.discordServer.trim() : '';
@@ -85,7 +107,11 @@ function getAuthViewData(req: express.Request) {
     isLoggedIn: !!userSession,
     userName: userSession?.displayName || '',
     isAdmin: userSession?.role === 'admin',
-    hasDiscordServer: discordServer.length > 0
+    hasDiscordServer: discordServer.length > 0,
+    isDevLogin: Boolean(userSession?.isDevLogin),
+    googleUserId: typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '',
+    discordServer,
+    devLoginAvailable: isLocalDevRequest(req)
   };
 }
 
@@ -3919,6 +3945,56 @@ app.post('/api/user/logout', (req, res) => {
       return res.status(500).json({ error: 'Failed to clear user session' });
     }
     return res.json({ success: true });
+  });
+});
+
+// localhost 専用の開発ログイン。本番ホストでは 404。
+app.get('/dev/login', (req, res) => {
+  if (!isLocalDevRequest(req)) {
+    return res.status(404).send('Not Found');
+  }
+
+  const role = req.query.role === 'admin' ? 'admin' : 'user';
+  const displayNameRaw = typeof req.query.displayName === 'string' ? req.query.displayName.trim() : '';
+  const displayName = displayNameRaw || (role === 'admin' ? '開発admin' : '開発ユーザー');
+
+  let discordServer = typeof req.query.discordServer === 'string' ? req.query.discordServer.trim() : '';
+  if (!discordServer && (req.query.withDiscord === '1' || req.query.withDiscord === 'true')) {
+    discordServer = (process.env.DEV_DISCORD_SERVER || '').trim();
+  }
+
+  const redirectRaw = typeof req.query.redirect === 'string' ? req.query.redirect.trim() : '';
+  const redirectTo = redirectRaw.startsWith('/') && !redirectRaw.startsWith('//') ? redirectRaw : '/info';
+
+  req.session.user = {
+    googleUserId: 'dev-local-user',
+    displayName,
+    role,
+    ...(discordServer ? { discordServer } : {}),
+    isDevLogin: true
+  };
+
+  req.session.save((saveError) => {
+    if (saveError) {
+      console.error('Failed to create local dev login session:', saveError);
+      return res.status(500).send('Failed to create local dev login session');
+    }
+    return res.redirect(redirectTo);
+  });
+});
+
+app.get('/dev/logout', (req, res) => {
+  if (!isLocalDevRequest(req)) {
+    return res.status(404).send('Not Found');
+  }
+
+  req.session.user = undefined;
+  req.session.save((saveError) => {
+    if (saveError) {
+      console.error('Failed to clear local dev login session:', saveError);
+      return res.status(500).send('Failed to clear local dev login session');
+    }
+    return res.redirect('/info');
   });
 });
 

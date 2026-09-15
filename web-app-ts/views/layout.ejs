@@ -19,10 +19,20 @@
                 </div>
                 <div class="auth-buttons">
                     <% if (isLoggedIn) { %>
-                        <span class="user-name">こんにちは、<%= userName %>さん</span>
+                        <span class="user-name">こんにちは、<%= userName %>さん<% if (typeof isDevLogin !== 'undefined' && isDevLogin) { %>（開発）<% } %></span>
                         <button class="btn btn-logout" onclick="logout()">ログアウト</button>
                     <% } else { %>
                         <button class="btn btn-login" onclick="loginWithGoogle()">Googleでログイン</button>
+                        <% if (typeof devLoginAvailable !== 'undefined' && devLoginAvailable) { %>
+                            <details class="dev-login-menu">
+                                <summary class="btn btn-login">開発ログイン</summary>
+                                <div class="dev-login-menu-panel">
+                                    <a href="/dev/login?role=user">一般ユーザー</a>
+                                    <a href="/dev/login?role=admin">admin</a>
+                                    <a href="/dev/login?role=admin&amp;withDiscord=1">admin + クラン</a>
+                                </div>
+                            </details>
+                        <% } %>
                     <% } %>
                 </div>
             </div>
@@ -63,7 +73,12 @@
         window.__SERVER_SESSION__ = {
             isLoggedIn: <%- JSON.stringify(!!isLoggedIn) %>,
             isAdmin: <%- JSON.stringify(!!isAdmin) %>,
-            hasDiscordServer: <%- JSON.stringify(!!hasDiscordServer) %>
+            hasDiscordServer: <%- JSON.stringify(!!hasDiscordServer) %>,
+            isDevLogin: <%- JSON.stringify(typeof isDevLogin !== 'undefined' && !!isDevLogin) %>,
+            userName: <%- JSON.stringify(typeof userName !== 'undefined' ? userName : '') %>,
+            googleUserId: <%- JSON.stringify(typeof googleUserId !== 'undefined' ? googleUserId : '') %>,
+            discordServer: <%- JSON.stringify(typeof discordServer !== 'undefined' ? discordServer : '') %>,
+            devLoginAvailable: <%- JSON.stringify(typeof devLoginAvailable !== 'undefined' && !!devLoginAvailable) %>
         };
     </script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>

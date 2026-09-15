@@ -13,6 +13,7 @@ declare module 'express-session' {
       displayName: string;
       role: 'admin' | 'user';
       discordServer?: string;
+      isDevLogin?: boolean;
     };
   }
 }
