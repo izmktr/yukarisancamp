@@ -195,13 +195,20 @@
                 </section>
 
                 <% if (idleOperableMembers.length > 0) { %>
+                    <%
+                        const hideStartAttackNameColumn = operableMembers.length === 1
+                            && operableMembers[0]
+                            && operableMembers[0].isSelf === true;
+                    %>
                     <section class="clandata-section clan-start-attack-section">
                         <h3>攻撃開始</h3>
                         <div class="clan-start-attack-table-wrapper">
-                            <table class="clan-start-attack-table">
+                            <table class="clan-start-attack-table<%= hideStartAttackNameColumn ? ' clan-start-attack-table-no-name' : '' %>">
                                 <thead>
                                     <tr>
-                                        <th>名前</th>
+                                        <% if (!hideStartAttackNameColumn) { %>
+                                            <th>名前</th>
+                                        <% } %>
                                         <% laps.forEach((count, idx) => { %>
                                             <%
                                                 const headerCount = Number(count);
@@ -241,7 +248,9 @@
                                             const memberCanStartAttack = memberMaxSortie < 3;
                                         %>
                                         <tr class="clan-operate-panel" data-member-id="<%= member.memberid %>">
-                                            <td class="clan-operate-panel-label"><%= member.isSelf ? '自分' : '代理操作' %>：<%= member.name || 'Unknown' %></td>
+                                            <% if (!hideStartAttackNameColumn) { %>
+                                                <td class="clan-operate-panel-label"><%= member.isSelf ? '自分' : '代理操作' %>：<%= member.name || 'Unknown' %></td>
+                                            <% } %>
                                             <% laps.forEach((count, idx) => { %>
                                                 <td class="clan-start-attack-boss-cell">
                                                     <% if (memberCanStartAttack) { %>
@@ -788,6 +797,7 @@
             }
 
             const actionButtons = [completeButton, cancelButton, ...defeatButtons];
+            let statusClearTimer = null;
             const setActionDisabled = (disabled) => {
                 actionButtons.forEach((button) => {
                     button.disabled = disabled;
@@ -797,10 +807,21 @@
                 if (!status) {
                     return;
                 }
+                if (statusClearTimer !== null) {
+                    window.clearTimeout(statusClearTimer);
+                    statusClearTimer = null;
+                }
                 status.textContent = message;
                 status.classList.remove('success', 'error');
                 if (type) {
                     status.classList.add(type);
+                }
+                if (type === 'success' && message) {
+                    statusClearTimer = window.setTimeout(() => {
+                        status.textContent = '';
+                        status.classList.remove('success', 'error');
+                        statusClearTimer = null;
+                    }, 2000);
                 }
             };
             const parseDamageAndMessage = () => {
