@@ -45,21 +45,17 @@
    pip install -r requirements.txt
    ```
 
-3. **スキーマからデータモデルを生成します:**
-   ```bash
-   datamodel-codegen --input ../schema/userProfile.schema.json --input-file-type jsonschema --output src/models.py
-   ```
-
-4. **Discordボットを起動します:**
+3. **Discordボットを起動します:**
    ```bash
    python src/main.py
    ```
 
+`src/nextbot/.env.local` に `DISCORD_TOKEN`（または `DISCORD_BOT_TOKEN`）、`SUPABASE_URL`、`SUPABASE_SECRET_KEY`、`YUKALINK_COMMON_KEY` を設定してください。
+
 ## 開発時の注意点
 
-- 環境変数 `DISCORD_TOKEN` を設定してからDiscordボットを起動してください
+- 環境変数は `discord-bot-py/src/nextbot/.env.local` に設定してからDiscordボットを起動してください
 - Webアプリケーションは通常 `http://localhost:3000` で起動します
-- スキーマファイルを変更した場合は、両方のプロジェクトで型定義/モデルの再生成が必要です
 
 ## 権限管理（admin ロール）
 
