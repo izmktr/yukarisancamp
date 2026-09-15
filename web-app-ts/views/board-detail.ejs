@@ -91,11 +91,14 @@
             <div class="board-party-grid">
                 <% partyDisplayMembers.forEach(function(member) { %>
                     <div class="board-party-card" data-party-official-name="<%= member.name %>">
-                        <% if (member.imagePath) { %>
-                            <img src="<%= member.imagePath %>" alt="<%= member.name %>" class="board-party-image" data-party-image="true" />
-                        <% } else { %>
-                            <div class="board-party-image board-party-image-missing">NO IMAGE</div>
-                        <% } %>
+                        <div class="board-party-image-wrap">
+                            <% if (member.imagePath) { %>
+                                <img src="<%= member.imagePath %>" alt="<%= member.name %>" class="board-party-image" data-party-image="true" />
+                            <% } else { %>
+                                <div class="board-party-image board-party-image-missing">NO IMAGE</div>
+                            <% } %>
+                            <img src="/images/lock.svg" alt="" class="character-unowned-lock" aria-hidden="true" />
+                        </div>
                         <div class="board-party-name" data-party-name-text="true"><%= member.name %></div>
                         <div class="board-party-stats"><%
                             const stats = [];
@@ -487,10 +490,23 @@
             });
         }
 
+        function collectUnownedOfficialNamesFromPartyState() {
+            const unownedOfficialNames = new Set();
+            partyStateByOfficialName.forEach((state, officialName) => {
+                if (state && state.owned === false) {
+                    unownedOfficialNames.add(officialName);
+                }
+            });
+            return unownedOfficialNames;
+        }
+
         function applyPartyStateToView() {
+            const unownedOfficialNames = collectUnownedOfficialNamesFromPartyState();
+
             partyStateByOfficialName.forEach((state, officialName) => {
                 const displayName = (state.nickname || '').trim() || officialName;
                 const safeDisplayName = displayName;
+                const isUnowned = unownedOfficialNames.has(officialName);
 
                 document.querySelectorAll(`.board-party-card[data-party-official-name="${CSS.escape(officialName)}"]`).forEach((card) => {
                     const nameElement = card.querySelector('[data-party-name-text="true"]');
@@ -504,7 +520,7 @@
                         imageElement.title = safeDisplayName;
                     }
 
-                    card.classList.toggle('is-unowned', !state.owned);
+                    card.classList.toggle('is-unowned', isUnowned);
                 });
 
                 document.querySelectorAll(`.ub-icon-box[data-party-slot-official-name="${CSS.escape(officialName)}"]`).forEach((iconBox) => {
@@ -513,7 +529,6 @@
                     }
 
                     iconBox.dataset.partySlotName = safeDisplayName;
-                    iconBox.classList.toggle('is-unowned', !state.owned);
 
                     const partyImage = iconBox.querySelector('img.ub-party-image');
                     if (partyImage instanceof HTMLImageElement) {
