@@ -2,6 +2,8 @@
 
 VPS(Linux, systemd利用可)上で `web-app-ts` を PM2 により常時稼働・自動再起動させるための手順。
 
+Discordボットを同じPM2で常時起動する場合は [`pm2-discord-bot-setup.md`](./pm2-discord-bot-setup.md) を参照する。`pm2 save` すればWebとボットの両方がOS再起動後に復元される。
+
 ## 前提
 
 - Node.js / npm がインストール済みであること

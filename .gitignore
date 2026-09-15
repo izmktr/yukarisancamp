@@ -24,6 +24,7 @@ Thumbs.db
 node_modules/
 web-app-ts/dist/
 web-app-ts/logs/
+discord-bot-py/logs/
 
 # firebase
 firebase.setting*
