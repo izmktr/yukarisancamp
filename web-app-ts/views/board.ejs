@@ -73,11 +73,19 @@
                                         <% for (let i = 0; i < 5; i += 1) { %>
                                             <% const member = article.partyMembers && article.partyMembers[i]; %>
                                             <% if (member && member.imagePath) { %>
-                                                <img src="<%= member.imagePath %>" alt="<%= member.name %>" title="<%= member.name %>" class="board-list-party-icon" data-party-official-name="<%= member.name %>" />
+                                                <div class="board-list-party-icon-wrap" data-party-official-name="<%= member.name %>">
+                                                    <img src="<%= member.imagePath %>" alt="<%= member.name %>" title="<%= member.name %>" class="board-list-party-icon" />
+                                                    <img src="/images/lock.svg" alt="" class="character-unowned-lock" aria-hidden="true" />
+                                                </div>
                                             <% } else if (member) { %>
-                                                <div class="board-list-party-icon board-list-party-icon-missing" data-party-official-name="<%= member.name %>"><%= member.name %></div>
+                                                <div class="board-list-party-icon-wrap" data-party-official-name="<%= member.name %>">
+                                                    <div class="board-list-party-icon board-list-party-icon-missing"><%= member.name %></div>
+                                                    <img src="/images/lock.svg" alt="" class="character-unowned-lock" aria-hidden="true" />
+                                                </div>
                                             <% } else { %>
-                                                <div class="board-list-party-icon board-list-party-icon-empty"></div>
+                                                <div class="board-list-party-icon-wrap board-list-party-icon-wrap-empty">
+                                                    <div class="board-list-party-icon board-list-party-icon-empty"></div>
+                                                </div>
                                             <% } %>
                                         <% } %>
                                     </div>
@@ -154,9 +162,30 @@
             return payload && payload.profile ? payload.profile : null;
         }
 
+        function collectUnownedOfficialNames(ownedCharacters) {
+            const unownedOfficialNames = new Set();
+            if (!Array.isArray(ownedCharacters)) {
+                return unownedOfficialNames;
+            }
+
+            ownedCharacters.forEach((entry) => {
+                if (!entry || typeof entry !== 'object') {
+                    return;
+                }
+                const officialName = typeof entry.officialName === 'string' ? entry.officialName.trim() : '';
+                if (!officialName || entry.owned !== false) {
+                    return;
+                }
+                unownedOfficialNames.add(officialName);
+            });
+
+            return unownedOfficialNames;
+        }
+
         function applyCustomNamesToBoardList(profile) {
             const ownedCharacters = profile && Array.isArray(profile.ownedCharacters) ? profile.ownedCharacters : [];
             const nicknameByOfficialName = new Map();
+            const unownedOfficialNames = collectUnownedOfficialNames(ownedCharacters);
 
             ownedCharacters.forEach((entry) => {
                 if (!entry || typeof entry !== 'object') {
@@ -170,15 +199,28 @@
                 nicknameByOfficialName.set(officialName, nickname || officialName);
             });
 
+            document.querySelectorAll('.board-list-party-icon-wrap[data-party-official-name]').forEach((wrap) => {
+                if (!(wrap instanceof HTMLElement)) {
+                    return;
+                }
+                const officialName = (wrap.dataset.partyOfficialName || '').trim();
+                const isUnowned = officialName.length > 0 && unownedOfficialNames.has(officialName);
+                wrap.classList.toggle('is-unowned', isUnowned);
+            });
+
             nicknameByOfficialName.forEach((nickname, officialName) => {
-                const selector = `[data-party-official-name="${CSS.escape(officialName)}"]`;
-                document.querySelectorAll(selector).forEach((element) => {
-                    if (element instanceof HTMLImageElement) {
-                        element.alt = nickname;
-                        element.title = nickname;
+                const selector = `.board-list-party-icon-wrap[data-party-official-name="${CSS.escape(officialName)}"]`;
+                document.querySelectorAll(selector).forEach((wrap) => {
+                    const image = wrap.querySelector('img.board-list-party-icon');
+                    if (image instanceof HTMLImageElement) {
+                        image.alt = nickname;
+                        image.title = nickname;
                         return;
                     }
-                    element.textContent = nickname;
+                    const missing = wrap.querySelector('.board-list-party-icon-missing');
+                    if (missing) {
+                        missing.textContent = nickname;
+                    }
                 });
             });
         }

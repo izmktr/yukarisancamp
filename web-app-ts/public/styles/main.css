@@ -98,6 +98,46 @@ body {
     background: rgba(255, 255, 255, 0.3);
 }
 
+.dev-login-menu {
+    position: relative;
+}
+
+.dev-login-menu > summary {
+    list-style: none;
+}
+
+.dev-login-menu > summary::-webkit-details-marker {
+    display: none;
+}
+
+.dev-login-menu-panel {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.35rem);
+    min-width: 11rem;
+    background: #ffffff;
+    border: 1px solid #d7deef;
+    border-radius: 8px;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.16);
+    padding: 0.35rem;
+    z-index: 20;
+    display: grid;
+    gap: 0.2rem;
+}
+
+.dev-login-menu-panel a {
+    color: #334155;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 600;
+    padding: 0.55rem 0.7rem;
+    border-radius: 6px;
+}
+
+.dev-login-menu-panel a:hover {
+    background: #eef2ff;
+}
+
 .btn-primary {
     background: #667eea;
     color: #ffffff;
@@ -1143,6 +1183,14 @@ body {
     align-items: center;
 }
 
+.board-list-party-icon-wrap {
+    position: relative;
+    width: 40px;
+    height: 40px;
+    overflow: hidden;
+    border-radius: 8px;
+}
+
 .board-list-party-icon {
     width: 40px;
     height: 40px;
@@ -1150,6 +1198,17 @@ body {
     object-fit: cover;
     background: #f2f5ff;
     border: 1px solid #d9e0f0;
+}
+
+.board-list-party-icon-wrap.is-unowned .board-list-party-icon {
+    filter: saturate(0.18) brightness(0.55);
+}
+
+.board-list-party-icon-wrap .character-unowned-lock {
+    width: 14px;
+    height: 14px;
+    left: 1px;
+    bottom: 1px;
 }
 
 .board-list-party-icon-missing,
@@ -1367,9 +1426,15 @@ body {
         gap: 0.25rem;
     }
 
+    .board-list-party-icon-wrap,
     .board-list-party-icon {
         width: 34px;
         height: 34px;
+    }
+
+    .board-list-party-icon-wrap .character-unowned-lock {
+        width: 12px;
+        height: 12px;
     }
 
     .board-diff-icon {
@@ -1404,8 +1469,23 @@ body {
     text-align: center;
 }
 
-.board-party-card.is-unowned {
-    opacity: 0.55;
+.board-party-image-wrap {
+    position: relative;
+    width: 100%;
+    max-width: 84px;
+    overflow: hidden;
+    border-radius: 8px;
+}
+
+.board-party-card.is-unowned .board-party-image {
+    filter: saturate(0.18) brightness(0.55);
+}
+
+.board-party-image-wrap .character-unowned-lock {
+    width: 24px;
+    height: 24px;
+    left: 2px;
+    bottom: 2px;
 }
 
 .board-party-image {
@@ -1415,6 +1495,19 @@ body {
     object-fit: cover;
     border-radius: 8px;
     background: #f6f8ff;
+}
+
+.character-unowned-lock {
+    display: none;
+    position: absolute;
+    object-fit: contain;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.board-list-party-icon-wrap.is-unowned > .character-unowned-lock,
+.board-party-card.is-unowned .character-unowned-lock {
+    display: block;
 }
 
 .board-party-image-missing,
@@ -1591,10 +1684,6 @@ body {
     color: #3f4f79;
     font-size: 0.9rem;
     font-weight: 700;
-}
-
-.ub-icon-box.is-unowned {
-    opacity: 0.5;
 }
 
 @media (max-width: 768px) {
