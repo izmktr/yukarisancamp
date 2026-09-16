@@ -542,6 +542,57 @@ app.post('/clan-management/members/delete', ensureDiscordServerLinked, async (re
   }
 });
 
+app.post('/clan-management/members/role', ensureDiscordServerLinked, async (req, res) => {
+  const config = getSupabaseConfig();
+  if (!config) {
+    res.status(503).send('Supabase is not configured');
+    return;
+  }
+
+  const userSession = req.session.user as any;
+  const googleUserId = typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '';
+  if (!googleUserId || !await canShowClanManagementTab(config, googleUserId)) {
+    res.status(403).send('クラン管理権限がありません');
+    return;
+  }
+
+  const profile = await supabaseSelectUserProfileByGoogleUserId(config, googleUserId);
+  const discordServer = profile && isNonEmptyTrimmedString(profile.discordServer) ? profile.discordServer : getSessionDiscordServer(req);
+  const clanId = normalizeDiscordServerToClanId(discordServer);
+  const body = req.body && typeof req.body === 'object' ? req.body as Record<string, unknown> : {};
+  const memberid = typeof body.memberid === 'string' ? body.memberid.trim() : '';
+  const bodyClanId = typeof body.clanid === 'string' ? body.clanid.trim() : '';
+
+  if (!clanId || bodyClanId !== clanId || !isEntityId(memberid)) {
+    res.status(400).send('不正な役職変更リクエストです');
+    return;
+  }
+
+  try {
+    const members = await supabaseSelectClanMembersByDiscordServer(config, discordServer);
+    const targetMember = members.find((member) => member.memberid === memberid);
+    if (!targetMember) {
+      res.status(404).send('クランメンバーが見つかりません');
+      return;
+    }
+    if (targetMember.role === 'leader') {
+      res.status(400).send('マスターの役職は変更できません');
+      return;
+    }
+    if (targetMember.memberid.startsWith('w')) {
+      res.status(400).send('webメンバーの役職は変更できません');
+      return;
+    }
+
+    const nextRole = targetMember.role === 'officer' ? 'member' : 'officer';
+    await supabaseUpdateClanMemberRole(config, clanId, memberid, nextRole);
+    res.redirect(`/clan-management?updatedAt=${Date.now()}`);
+  } catch (error) {
+    console.error('Failed to update clan member role:', error);
+    res.status(502).send('役職の更新に失敗しました');
+  }
+});
+
 app.post('/clan-management/members/delegations', ensureDiscordServerLinked, async (req, res) => {
   const config = getSupabaseConfig();
   if (!config) {
@@ -1542,6 +1593,38 @@ async function supabaseDeleteClanMember(
   if (!response.ok) {
     const responseText = await response.text();
     throw new Error(`Supabase delete clan member failed: ${response.status} ${responseText}`);
+  }
+}
+
+async function supabaseUpdateClanMemberRole(
+  config: SupabaseConfig,
+  clanId: string,
+  memberid: string,
+  role: ClanMemberRow['role']
+): Promise<void> {
+  const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLAN_MEMBERS_TABLE);
+  const query = new URLSearchParams({
+    clanid: `eq.${clanId}`,
+    memberid: `eq.${memberid}`
+  });
+
+  const response = await fetch(`${endpointUrl}?${query.toString()}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: config.secretKey,
+      Authorization: `Bearer ${config.secretKey}`,
+      Prefer: 'return=minimal'
+    },
+    body: JSON.stringify({
+      role,
+      updated_at: new Date().toISOString()
+    })
+  });
+
+  if (!response.ok) {
+    const responseText = await response.text();
+    throw new Error(`Supabase update clan member role failed: ${response.status} ${responseText}`);
   }
 }
 

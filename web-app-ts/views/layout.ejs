@@ -47,10 +47,10 @@
             <% if (isLoggedIn) { %>
                 <a href="/settings" class="tab <%= currentPage === 'settings' ? 'active' : '' %>">設定</a>
                 <% if (hasDiscordServer) { %>
-                    <a href="/clan" class="tab <%= currentPage === 'clan' ? 'active' : '' %>">クラン</a>
-                    <a href="/clan-data" class="tab <%= currentPage === 'clan-data' ? 'active' : '' %>">クランデータ</a>
+                    <a href="/clan" class="tab clan-tab <%= currentPage === 'clan' ? 'active' : '' %>">クラン</a>
+                    <a href="/clan-data" class="tab clan-tab <%= currentPage === 'clan-data' ? 'active' : '' %>">メンバー</a>
                     <% if (clanManagementTabVisible) { %>
-                        <a href="/clan-management" class="tab <%= currentPage === 'clan-management' ? 'active' : '' %>">クラン管理</a>
+                        <a href="/clan-management" class="tab clan-tab <%= currentPage === 'clan-management' ? 'active' : '' %>">管理</a>
                     <% } %>
                 <% } %>
             <% } %>

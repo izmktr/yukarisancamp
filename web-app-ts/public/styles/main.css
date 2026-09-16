@@ -226,6 +226,29 @@ body {
     border-radius: 8px 8px 0 0;
 }
 
+.tab.clan-tab {
+    color: #1a6ea8;
+    background: #e7f5ff;
+    border-color: #b7dff5;
+}
+
+.tab.clan-tab:hover {
+    background: #d8effc;
+    color: #0d5f96;
+    box-shadow: 0 2px 8px rgba(14, 116, 165, 0.15);
+}
+
+.tab.clan-tab.active {
+    background: #fff;
+    color: #0b7ec8;
+    border-color: #3ba7e0;
+    box-shadow: 0 -2px 8px rgba(14, 116, 165, 0.18);
+}
+
+.tab.clan-tab.active::before {
+    background: linear-gradient(90deg, #4fc3f7, #0288d1);
+}
+
 .tab.admin-tab {
     color: #8a1c1c;
     background: #fdeaea;

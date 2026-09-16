@@ -35,6 +35,32 @@
     }; %>
     <% const clanId = data.clan && typeof data.clan.clanid === 'string' ? data.clan.clanid : ''; %>
     <% const delegations = Array.isArray(data.delegations) ? data.delegations : []; %>
+    <% const memberNameById = new Map(); %>
+    <% members.forEach((member) => {
+      memberNameById.set(member.memberid, member.name || 'Unknown');
+    }); %>
+    <% const agentNamesByPrincipalId = new Map(); %>
+    <% const principalNamesByAgentId = new Map(); %>
+    <% delegations.forEach((row) => {
+      if (!row || typeof row.memberid !== 'string' || typeof row.delegateid !== 'string') {
+        return;
+      }
+      const agentName = memberNameById.get(row.memberid);
+      const principalName = memberNameById.get(row.delegateid);
+      if (agentName) {
+        if (!agentNamesByPrincipalId.has(row.delegateid)) {
+          agentNamesByPrincipalId.set(row.delegateid, []);
+        }
+        agentNamesByPrincipalId.get(row.delegateid).push(agentName);
+      }
+      if (principalName) {
+        if (!principalNamesByAgentId.has(row.memberid)) {
+          principalNamesByAgentId.set(row.memberid, []);
+        }
+        principalNamesByAgentId.get(row.memberid).push(principalName);
+      }
+    }); %>
+    <% const sortJaNames = (names) => names.slice().sort((left, right) => String(left).localeCompare(String(right), 'ja')); %>
 
     <section class="clan-management-panel">
       <div class="clan-management-header">
@@ -113,18 +139,46 @@
           <tbody>
             <% members.forEach((member) => { %>
               <% const roleBadgeClass = member.role === 'leader' ? 'is-leader' : member.role === 'officer' ? 'is-officer' : 'is-member'; %>
+              <% const agentNames = sortJaNames(agentNamesByPrincipalId.get(member.memberid) || []); %>
+              <% const principalNames = sortJaNames(principalNamesByAgentId.get(member.memberid) || []); %>
+              <% const sourceLabel = String(member.memberid || '').startsWith('w') ? 'web' : 'discord'; %>
               <tr>
                 <td class="clan-management-name-cell"><%= member.name || 'Unknown' %></td>
                 <td>
-                  <span class="clan-management-role-badge <%= roleBadgeClass %>"><%= roleLabel(member.role) || 'メンバー' %></span>
+                  <div class="clan-management-role-cell">
+                    <div class="clan-management-role-badges">
+                      <span class="clan-management-role-badge <%= roleBadgeClass %>"><%= roleLabel(member.role) || 'メンバー' %></span>
+                      <span class="clan-management-source-badge is-<%= sourceLabel %>"><%= sourceLabel %></span>
+                    </div>
+                    <% if (agentNames.length > 0 || principalNames.length > 0) { %>
+                      <div class="clan-management-delegation-chips">
+                        <% agentNames.forEach((name) => { %>
+                          <span class="clan-management-delegation-chip is-agent">代理人: <%= name %></span>
+                        <% }); %>
+                        <% principalNames.forEach((name) => { %>
+                          <span class="clan-management-delegation-chip is-principal">操作: <%= name %></span>
+                        <% }); %>
+                      </div>
+                    <% } %>
+                  </div>
                 </td>
                 <td>
-                  <button type="button" class="btn clan-management-delegate-button" data-member-id="<%= member.memberid %>">代理</button>
-                  <form method="post" action="/clan-management/members/delete" class="clan-management-delete-form" onsubmit="return confirm('このメンバーを削除します。よろしいですか？');">
-                    <input type="hidden" name="clanid" value="<%= member.clanid %>" />
-                    <input type="hidden" name="memberid" value="<%= member.memberid %>" />
-                    <button type="submit" class="btn btn-danger clan-management-delete-button">削除</button>
-                  </form>
+                  <div class="clan-management-row-actions">
+                    <button type="button" class="btn clan-management-delegate-button" data-member-id="<%= member.memberid %>">代理</button>
+                    <% if (member.role !== 'leader' && sourceLabel !== 'web') { %>
+                      <% const isOfficer = member.role === 'officer'; %>
+                      <form method="post" action="/clan-management/members/role" class="clan-management-role-form" onsubmit="return confirm('<%= isOfficer ? 'このメンバーのサブマスターを解除します。よろしいですか？' : 'このメンバーをサブマスターにします。よろしいですか？' %>');">
+                        <input type="hidden" name="clanid" value="<%= member.clanid %>" />
+                        <input type="hidden" name="memberid" value="<%= member.memberid %>" />
+                        <button type="submit" class="btn clan-management-officer-button"><%= isOfficer ? 'サブ解除' : 'サブマス' %></button>
+                      </form>
+                    <% } %>
+                    <form method="post" action="/clan-management/members/delete" class="clan-management-delete-form" onsubmit="return confirm('このメンバーを削除します。よろしいですか？');">
+                      <input type="hidden" name="clanid" value="<%= member.clanid %>" />
+                      <input type="hidden" name="memberid" value="<%= member.memberid %>" />
+                      <button type="submit" class="btn btn-danger clan-management-delete-button">削除</button>
+                    </form>
+                  </div>
                 </td>
               </tr>
             <% }); %>
@@ -381,6 +435,46 @@
     color: #0f172a;
   }
 
+  .clan-management-role-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.4rem;
+  }
+
+  .clan-management-role-badges {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .clan-management-delegation-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+  }
+
+  .clan-management-delegation-chip {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 0.28rem 0.55rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .clan-management-delegation-chip.is-agent {
+    background: rgba(8, 145, 178, 0.12);
+    color: #0e7490;
+  }
+
+  .clan-management-delegation-chip.is-principal {
+    background: rgba(124, 58, 237, 0.12);
+    color: #6d28d9;
+  }
+
   .clan-management-role-badge,
   .clan-management-source-badge {
     display: inline-flex;
@@ -413,12 +507,29 @@
   .clan-management-source-badge {
     background: rgba(15, 23, 42, 0.05);
     color: #475569;
-    text-transform: lowercase;
   }
 
-  .clan-management-delete-form {
+  .clan-management-source-badge.is-web {
+    background: rgba(14, 165, 233, 0.12);
+    color: #0369a1;
+  }
+
+  .clan-management-source-badge.is-discord {
+    background: rgba(88, 101, 242, 0.12);
+    color: #4338ca;
+  }
+
+  .clan-management-delete-form,
+  .clan-management-role-form {
     margin: 0;
     display: inline-flex;
+  }
+
+  .clan-management-row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
   }
 
   .clan-management-delete-button {
@@ -429,11 +540,18 @@
 
   .clan-management-delegate-button {
     min-width: 4rem;
-    margin-right: 0.5rem;
     border-radius: 999px;
     background: rgba(59, 130, 246, 0.12);
     color: #1d4ed8;
     border: 1px solid rgba(59, 130, 246, 0.24);
+  }
+
+  .clan-management-officer-button {
+    min-width: 5rem;
+    border-radius: 999px;
+    background: rgba(37, 99, 235, 0.12);
+    color: #1d4ed8;
+    border: 1px solid rgba(37, 99, 235, 0.24);
   }
 
   .clan-management-modal-header-actions {
