@@ -632,7 +632,7 @@ app.post('/clan-management/members/delegations', ensureDiscordServerLinked, asyn
 
     const validMemberIds = new Set(members.map((member) => member.memberid));
     const nextDelegateIds = Array.from(new Set(
-      requestedMemberIds.filter((id) => id !== targetMemberId && validMemberIds.has(id))
+      requestedMemberIds.filter((id) => id !== targetMemberId && validMemberIds.has(id) && !id.startsWith('w'))
     ));
 
     const currentDelegations = await supabaseSelectMemberDelegationsByClan(config, clanId);

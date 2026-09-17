@@ -713,7 +713,7 @@
 
       const checkedIds = delegationsByTarget.get(targetMemberId) || new Set();
       members
-        .filter((member) => member.memberid !== targetMemberId)
+        .filter((member) => member.memberid !== targetMemberId && !String(member.memberid || '').startsWith('w'))
         .forEach((member) => {
           const row = document.createElement('label');
           row.className = 'clan-management-delegation-checkbox-row';

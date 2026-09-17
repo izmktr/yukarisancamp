@@ -26,7 +26,7 @@ class ClanMember():
 
     def Attack(self, bossindex : int, sortie : int):
         self.sortie = sortie
-        self.reportlimit = datetime.datetime.now() + datetime.timedelta(minutes = 30)
+        self.reportlimit = constants.now_jst() + datetime.timedelta(minutes = 30)
         self.boss = bossindex
 
     def AttackBoss(self) -> int:

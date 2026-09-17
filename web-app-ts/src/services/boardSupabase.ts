@@ -348,7 +348,8 @@ export function boardRowToArticle(row: BoardSupabaseRow): BoardArticleLike {
     battleDate: typeof rawArticle.battleDate === 'string' && rawArticle.battleDate.trim().length > 0
       ? rawArticle.battleDate
       : row.battle_date,
-    authorid: typeof rawArticle.authorid === 'string' ? rawArticle.authorid : row.author_id,
+    author_id: row.author_id,
+    authorid: row.author_id,
     authorname: typeof rawArticle.authorname === 'string' ? rawArticle.authorname : row.author_name,
     authorName: typeof rawArticle.authorName === 'string' ? rawArticle.authorName : row.author_name,
     postTitle: typeof rawArticle.postTitle === 'string' ? rawArticle.postTitle : row.post_title,

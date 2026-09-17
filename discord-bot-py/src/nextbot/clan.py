@@ -159,9 +159,16 @@ class Clan(MessageRouter):
             member.ApplyAttackOvertimes(row)
 
     def LoadSupabaseMembers(self, rows: list[dict[str, Any]]) -> None:
-        self.members.clear()
+        member_ids: set[str] = set()
         for row in rows:
+            raw_memberid = row.get("memberid")
+            if isinstance(raw_memberid, (int, str)) and str(raw_memberid).strip():
+                member_ids.add(str(raw_memberid).strip())
             self.ApplySupabaseMember(row)
+        # Keep existing objects referenced by attack reactions and damage control.
+        for member_id in list(self.members):
+            if member_id not in member_ids:
+                del self.members[member_id]
 
     async def ReloadSupabaseMembers(self) -> None:
         if self.supabase is None or self.clan_id is None:
@@ -859,7 +866,7 @@ class Clan(MessageRouter):
 
     async def MemberReset(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
         # 自分がメンバーに入っているか
-        clan_member = self.FindMember(member.display_name)
+        clan_member = self.GetMember(member.id)
         if clan_member is None:
             self.TemporaryMessage(message.channel, 'あなたはクランのメンバーではありません')
             return False

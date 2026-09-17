@@ -694,6 +694,7 @@ class SupabaseClient:
         query = urlencode(
             {
                 "select": "attackdata",
+                "clanid": f"eq.{clan_id}",
                 "memberid": f"eq.{member_id}",
                 "limit": "1",
             }
@@ -715,7 +716,7 @@ class SupabaseClient:
 
         attackdata.update({"damage": damage, "message": message})
 
-        update_query = urlencode({"memberid": f"eq.{member_id}"})
+        update_query = urlencode({"clanid": f"eq.{clan_id}", "memberid": f"eq.{member_id}"})
         payload = json.dumps(
             {
                 "attackdata": attackdata,

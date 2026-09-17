@@ -1,8 +1,10 @@
+import { canEditArticle, canViewArticle } from '../utils/boardAccess';
 import { Request, Response, Router } from 'express';
 import {
   boardRowToArticle,
   boardRowToListItem,
   getCurrentClanBattleYearMonth,
+  getAnyBoardPostByLegacyId,
   getCurrentMonthBoardPostByLegacyId,
   listCurrentMonthBoardPosts,
   normalizeBattleDateIso,
@@ -38,10 +40,11 @@ function applyAuthorDiscordServer(article: Record<string, unknown>, sessionDisco
 }
 
 // 記事一覧取得
-router.get('/', async (_req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
     const rows = await listCurrentMonthBoardPosts();
-    res.json(rows.map((row) => boardRowToListItem(row)));
+    res.json(rows.filter((row) => canViewArticle(boardRowToArticle(row), getSessionUser(req)))
+      .map((row) => boardRowToListItem(row)));
   } catch (error) {
     console.error('Failed to load board list from Supabase:', error);
     res.status(503).json({ error: '掲示板の読み込みに失敗しました' });
@@ -52,7 +55,7 @@ router.get('/', async (_req: Request, res: Response) => {
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const row = await getCurrentMonthBoardPostByLegacyId(req.params.id);
-    if (!row) {
+    if (!row || !canViewArticle(boardRowToArticle(row), getSessionUser(req))) {
       return res.status(404).json({ error: '記事がありません' });
     }
 
@@ -66,6 +69,10 @@ router.get('/:id', async (req: Request, res: Response) => {
 // 投稿（timelogテキスト→json保存）
 router.post('/post', async (req: Request, res: Response) => {
   try {
+    const sessionUser = getSessionUser(req);
+    if (!sessionUser.googleUserId.trim()) {
+      return res.status(401).json({ error: 'ログインが必要です' });
+    }
     const { timelog } = req.body;
     const rawTimelog = typeof timelog === 'string' ? timelog : '';
     if (!rawTimelog.trim()) {
@@ -73,9 +80,12 @@ router.post('/post', async (req: Request, res: Response) => {
     }
 
     const parsed = parseTimelog(rawTimelog);
-    const sessionUser = getSessionUser(req);
     const yearmonth = await getCurrentClanBattleYearMonth();
     const legacyId = String(req.body.id || Date.now().toString());
+    const existingRow = await getAnyBoardPostByLegacyId(legacyId);
+    if (existingRow && !canEditArticle(existingRow, sessionUser)) {
+      return res.status(403).json({ error: '投稿者のみ編集可能です' });
+    }
 
     const savedRow = await upsertBoardPost({
       legacyId,
@@ -114,18 +124,30 @@ router.post('/post', async (req: Request, res: Response) => {
 // 編集保存
 router.post('/:id/edit', async (req: Request, res: Response) => {
   try {
+    const sessionUser = getSessionUser(req);
+    if (!sessionUser.googleUserId.trim()) {
+      return res.status(401).json({ error: 'ログインが必要です' });
+    }
     const articleBody = typeof req.body.article === 'string'
       ? JSON.parse(req.body.article)
       : req.body.article;
 
-    if (!articleBody || typeof articleBody !== 'object') {
+    if (!articleBody || typeof articleBody !== 'object' || Array.isArray(articleBody)) {
       return res.status(400).json({ error: 'article が必要です' });
     }
 
     const yearmonth = await getCurrentClanBattleYearMonth();
     const legacyId = String(req.params.id || articleBody.uniqueId || articleBody.legacyId || Date.now().toString());
-    const sessionUser = getSessionUser(req);
+    const existingRow = await getCurrentMonthBoardPostByLegacyId(legacyId);
+    if (!existingRow) {
+      return res.status(404).json({ error: '記事がありません' });
+    }
+    if (!canEditArticle(existingRow, sessionUser)) {
+      return res.status(403).json({ error: '投稿者のみ編集可能です' });
+    }
     const article = articleBody as Record<string, unknown>;
+    const visibility = typeof article.visibility === 'string' ? article.visibility.trim().toLowerCase() : existingRow.visibility;
+    article.visibility = visibility === 'all' || (visibility === 'clan' && sessionUser.discordServer) ? visibility : 'self';
 
     const savedRow = await upsertBoardPost({
       legacyId,
@@ -134,14 +156,14 @@ router.post('/:id/edit', async (req: Request, res: Response) => {
         ...article,
         uniqueId: legacyId,
         yearmonth,
-        authorid: typeof article.authorid === 'string' ? article.authorid : sessionUser.googleUserId,
-        authorname: typeof article.authorname === 'string' ? article.authorname : sessionUser.displayName,
-        authorName: typeof article.authorName === 'string' ? article.authorName : sessionUser.displayName
+        authorid: sessionUser.googleUserId,
+        authorname: sessionUser.displayName,
+        authorName: sessionUser.displayName
       }, sessionUser.discordServer),
       battleTimeSeconds: normalizeBattleTimeSeconds(article.battleTime),
       battleDateIso: normalizeBattleDateIso(article.battleDate),
-      authorId: typeof article.authorid === 'string' && article.authorid.trim().length > 0 ? article.authorid : sessionUser.googleUserId,
-      authorName: typeof article.authorname === 'string' && article.authorname.trim().length > 0 ? article.authorname : sessionUser.displayName
+      authorId: sessionUser.googleUserId,
+      authorName: sessionUser.displayName
     });
 
     res.json({ ok: true, id: savedRow.legacy_id || legacyId });

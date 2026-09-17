@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import datetime
+import io
 import json
 import types
 import unittest
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
+from urllib.parse import parse_qs, urlsplit
 
 import discord
 
@@ -46,6 +48,130 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
             display_name="new name",
             mention="<@456>",
         )
+
+    async def test_member_reset_uses_id_when_display_names_collide(self) -> None:
+        clan, member, supabase = self.create_clan([20, 0, None])
+        other = ClanMember("999")
+        other.name = member.name
+        other.attacktime = [0, 0, 0]
+        clan.members = {other.id: other, member.id: member}
+        clan.TemporaryMessage = MagicMock()
+        caller = types.SimpleNamespace(id=456, display_name=other.name)
+
+        self.assertTrue(await clan.MemberReset(self.create_message(), caller, ""))
+
+        supabase.reset_discord_clan_member.assert_called_once_with(123, "456")
+        self.assertEqual(supabase.delete_today_attack_histories.call_args.args[:2], (123, "456"))
+        self.assertEqual(other.attacktime, [0, 0, 0])
+        self.assertEqual(member.attacktime, [None, None, None])
+
+    async def test_member_reset_rejects_unregistered_user_with_matching_name(self) -> None:
+        clan, member, supabase = self.create_clan([20, 0, None])
+        clan.TemporaryMessage = MagicMock()
+        caller = types.SimpleNamespace(id=999, display_name=member.name)
+
+        self.assertFalse(await clan.MemberReset(self.create_message(), caller, ""))
+
+        supabase.reset_discord_clan_member.assert_not_called()
+        supabase.delete_today_attack_histories.assert_not_called()
+        self.assertEqual(member.attacktime, [20, 0, None])
+
+    async def test_member_reset_accepts_member_after_display_name_change(self) -> None:
+        clan, _, supabase = self.create_clan()
+        clan.TemporaryMessage = MagicMock()
+        self.assertTrue(await clan.MemberReset(self.create_message(), self.create_discord_member(), ""))
+        supabase.reset_discord_clan_member.assert_called_once_with(123, "456")
+
+    def test_damage_update_only_changes_target_clan(self) -> None:
+        client = SupabaseClient("https://example.invalid", "dummy")
+        rows = [
+            {"clanid": "999", "memberid": "456", "attackdata": {"boss": 5, "sortie": 3, "damage": 7}},
+            {"clanid": "123", "memberid": "456", "attackdata": {"boss": 2, "sortie": 1, "damage": 8}},
+        ]
+        untouched = json.loads(json.dumps(rows[0]))
+
+        def request(req, timeout):
+            query = parse_qs(urlsplit(req.full_url).query)
+            self.assertEqual(query.get("clanid"), ["eq.123"])
+            self.assertEqual(query.get("memberid"), ["eq.456"])
+            matched = [row for row in rows if all(
+                query.get(key, ["eq." + row[key]])[0] == "eq." + row[key]
+                for key in ("clanid", "memberid")
+            )]
+            if req.get_method() == "PATCH":
+                for row in matched:
+                    row.update(json.loads(req.data))
+                return io.BytesIO(b"")
+            return io.BytesIO(json.dumps(matched[:1]).encode())
+
+        with patch("src.nextbot.supabase_client.urlopen", side_effect=request):
+            client.update_clan_member_damage_message(123, "456", 500, "updated")
+
+        self.assertEqual(rows[0], untouched)
+        self.assertEqual(rows[1]["attackdata"]["boss"], 2)
+        self.assertEqual(rows[1]["attackdata"]["sortie"], 1)
+        self.assertEqual(rows[1]["attackdata"]["damage"], 500)
+        self.assertEqual(rows[1]["attackdata"]["message"], "updated")
+
+    async def test_member_reload_preserves_attack_reaction_and_undo(self) -> None:
+        clan, member, supabase = self.create_clan()
+        message = self.create_message()
+        member.Attack(5, 1)
+        member.attackmessage = message
+        reportlimit = member.reportlimit
+        clan.RemoveReaction = AsyncMock()
+        reaction = clan.CreateAttackReaction(member, message, 5, 1, 0)
+        clan.messagereaction[message.id] = reaction
+        supabase.get_clan_members.return_value = [{
+            "memberid": "456", "name": "updated", "mention": "<@456>",
+            "attacktime": [None, None, None], "attackdata": {"boss": 5, "sortie": 1},
+        }, {"memberid": "789", "name": "new member"}]
+        members = clan.members
+        await clan.ReloadSupabaseMembers()
+        self.assertIs(clan.members, members)
+        self.assertIs(clan.GetMember(456), member)
+        self.assertIs(member.attackmessage, message)
+        self.assertEqual(member.reportlimit, reportlimit)
+        self.assertEqual(member.name, "updated")
+        self.assertIn("789", clan.members)
+        supabase.finish_clan_member_attack.return_value = {
+            "history_id": None, "attacktime": [None, None, None],
+            "attackdata": {"boss": 0, "sortie": 0}, "bosslaps": [1] * 5,
+        }
+        payload = types.SimpleNamespace(user_id=456, message_id=message.id,
+                                        emoji=types.SimpleNamespace(name=clan.emojis[9]))
+        self.assertTrue(await clan.OnRawReactionAdd(payload))
+        supabase.finish_clan_member_attack.assert_called_once()
+        self.assertFalse(member.IsAttack())
+        self.assertTrue(await clan.OnRawReactionRemove(payload))
+        self.assertTrue(member.IsAttack())
+        supabase.update_discord_clan_member_attack.assert_called_once()
+
+    def test_member_reload_removes_absent_members_without_replacing_dictionary(self) -> None:
+        clan, member, _ = self.create_clan()
+        clan.members["removed"] = ClanMember("removed")
+        members = clan.members
+        clan.LoadSupabaseMembers([{"memberid": 456, "name": "updated"}])
+        self.assertIs(clan.members, members)
+        self.assertEqual(set(clan.members), {"456"})
+        self.assertIs(clan.GetMember(456), member)
+        self.assertIs(clan.damagecontrol[0].clanmembers, members)
+        clan.LoadSupabaseMembers([])
+        self.assertEqual(members, {})
+
+    async def test_attack_reminder_uses_jst_and_notifies_once_after_deadline(self) -> None:
+        clan, member, _ = self.create_clan()
+        now = datetime.datetime(2026, 9, 17, 12, 0, tzinfo=constants.JST)
+        clan.SendNotice = AsyncMock()
+        with patch("src.nextbot.constants.now_jst", return_value=now):
+            member.Attack(1, 1)
+        self.assertEqual(member.reportlimit, now + datetime.timedelta(minutes=30))
+        await clan.RequestResult(now + datetime.timedelta(minutes=29))
+        clan.SendNotice.assert_not_awaited()
+        await clan.RequestResult(now + datetime.timedelta(minutes=31))
+        await clan.RequestResult(now + datetime.timedelta(minutes=32))
+        clan.SendNotice.assert_awaited_once_with("<@456> 凸結果の報告をお願いします")
+        self.assertIsNone(member.reportlimit)
 
     def test_reference_date_changes_at_five_am_jst(self) -> None:
         jst = datetime.timezone(datetime.timedelta(hours=9))
@@ -132,6 +258,7 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
             "attackdata": {"day": "", "sortie": 0, "lap": 0, "boss": 0},
             "bosslaps": [1, 1, 1, 1, 2],
         }
+        supabase.refresh_clan_member_attacktime.return_value = [20, None, None]
         clan.RemoveReaction = AsyncMock()
         reaction = clan.CreateAttackReaction(member, message, 5, 1, 0)
         payload = types.SimpleNamespace(
@@ -161,6 +288,7 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
             "attackdata": {"day": "", "sortie": 0, "lap": 0, "boss": 0},
             "bosslaps": [1, 1, 1, 1, 2],
         }
+        supabase.refresh_clan_member_attacktime.return_value = [None, 0, None]
         clan.RemoveReaction = AsyncMock()
         reaction = clan.CreateAttackReaction(member, message, 5, 2, 50)
         payload = types.SimpleNamespace(

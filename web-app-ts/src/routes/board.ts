@@ -1,3 +1,4 @@
+import { canEditArticle, canViewArticle } from '../utils/boardAccess';
 import { Router } from 'express';
 import path from 'path';
 import fs from 'fs';
@@ -5,6 +6,7 @@ import {
   boardRowToArticle,
   deleteBoardPostByLegacyId,
   getCurrentClanBattleYearMonth,
+  getAnyBoardPostByLegacyId,
   getCurrentMonthBoardPostByLegacyId,
   listCurrentMonthBoardPosts,
   normalizeBattleDateIso,
@@ -181,12 +183,6 @@ function resolveArticleAuthorName(article: any): string {
   const candidateValues = [article.author_name, article.authorname, article.authorName, article.displayName, article.userName];
   const resolved = candidateValues.find((value) => typeof value === 'string' && value.trim().length > 0);
   return typeof resolved === 'string' ? resolved.trim() : '';
-}
-
-function canEditArticle(article: any, userSession: any): boolean {
-  const currentGoogleUserId = typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '';
-  const authorId = resolveArticleAuthorId(article);
-  return currentGoogleUserId.length > 0 && authorId.length > 0 && currentGoogleUserId === authorId;
 }
 
 function ensureArticleEditableByUser(article: any, req: any, res: any): boolean {
@@ -791,7 +787,6 @@ router.get('/', async (req, res) => {
   try {
     const auth = getAuthViewData(req);
     const userSession = req.session.user as any;
-    const currentGoogleUserId = typeof userSession?.googleUserId === 'string' ? userSession.googleUserId : '';
     const rows = await listCurrentMonthBoardPosts();
     const visibilityLabelByValue: Record<string, string> = {
       all: '全体',
@@ -817,9 +812,7 @@ router.get('/', async (req, res) => {
       const visibilityRaw = String(article.visibility || '').toLowerCase().trim();
       const difficultyRaw = String(article.difficulty ?? '').trim();
       const modeRaw = String(article.mode || '').toLowerCase().trim();
-      const authorId = resolveArticleAuthorId(article);
-      const isVisibleToCurrentUser = visibilityRaw === 'all'
-        || (visibilityRaw === 'self' && authorId.length > 0 && authorId === currentGoogleUserId);
+      const isVisibleToCurrentUser = canViewArticle(article, userSession);
       if (!isVisibleToCurrentUser) {
         return [];
       }
@@ -871,7 +864,7 @@ router.get('/:id/diff', async (req, res) => {
   try {
     const auth = getAuthViewData(req);
     const sourceRow = await getCurrentMonthBoardPostByLegacyId(req.params.id);
-    if (!sourceRow) {
+    if (!sourceRow || !canViewArticle(boardRowToArticle(sourceRow), req.session.user)) {
       return res.status(404).send('記事がありません');
     }
 
@@ -903,7 +896,7 @@ router.post('/:id/diff/timelog', async (req, res) => {
   try {
     const auth = getAuthViewData(req);
     const sourceRow = await getCurrentMonthBoardPostByLegacyId(req.params.id);
-    if (!sourceRow) {
+    if (!sourceRow || !canViewArticle(boardRowToArticle(sourceRow), req.session.user)) {
       return res.status(404).send('記事がありません');
     }
 
@@ -963,7 +956,7 @@ router.post('/:id/diff/article/:targetId', async (req, res) => {
   try {
     const auth = getAuthViewData(req);
     const sourceRow = await getCurrentMonthBoardPostByLegacyId(req.params.id);
-    if (!sourceRow) {
+    if (!sourceRow || !canViewArticle(boardRowToArticle(sourceRow), req.session.user)) {
       return res.status(404).send('記事がありません');
     }
 
@@ -981,7 +974,7 @@ router.post('/:id/diff/article/:targetId', async (req, res) => {
     }
 
     const targetRow = await getCurrentMonthBoardPostByLegacyId(targetId);
-    if (!targetRow) {
+    if (!targetRow || !canViewArticle(boardRowToArticle(targetRow), req.session.user)) {
       return res.status(404).send('比較先の記事がありません');
     }
 
@@ -1024,7 +1017,7 @@ router.get('/:id', async (req, res) => {
   try {
     const auth = getAuthViewData(req);
     const row = await getCurrentMonthBoardPostByLegacyId(req.params.id);
-    if (!row) {
+    if (!row || !canViewArticle(boardRowToArticle(row), req.session.user)) {
       return res.status(404).send('記事がありません');
     }
 
@@ -1155,7 +1148,7 @@ router.post('/save', async (req, res) => {
     const nowId = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
     const timelineInfoRaw = req.body.timelineInfo;
     const userSession = req.session.user as any;
-    if (!userSession) {
+    if (!userSession?.googleUserId?.trim()) {
       return res.status(403).send('Googleでログイン後に編集可能になります');
     }
 
@@ -1175,7 +1168,7 @@ router.post('/save', async (req, res) => {
       }
 
       legacyId = parsedTimelineInfo.uniqueId || legacyId;
-      const existingRow = await getCurrentMonthBoardPostByLegacyId(legacyId);
+      const existingRow = await getAnyBoardPostByLegacyId(legacyId);
       if (existingRow) {
         const existingArticle = boardRowToArticle(existingRow);
         if (!canEditArticle(existingArticle, userSession)) {
@@ -1230,7 +1223,7 @@ router.post('/save', async (req, res) => {
         article.ubTimes = parsed.ubTimes;
       }
 
-      const existingRow = await getCurrentMonthBoardPostByLegacyId(legacyId);
+      const existingRow = await getAnyBoardPostByLegacyId(legacyId);
       if (existingRow) {
         const existingArticle = boardRowToArticle(existingRow);
         if (!canEditArticle(existingArticle, userSession)) {
