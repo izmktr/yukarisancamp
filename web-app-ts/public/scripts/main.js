@@ -1001,7 +1001,16 @@ async function saveClanBattleSettings() {
         });
 
         if (!response.ok) {
-            throw new Error('Supabase save failed');
+            const rawBody = await response.text().catch(() => '');
+            let detail = rawBody;
+            try {
+                const errorBody = JSON.parse(rawBody);
+                detail = errorBody?.detail || errorBody?.error || rawBody;
+            } catch (_parseError) {
+                // keep rawBody
+            }
+            const suffix = detail ? `: ${detail}` : '';
+            throw new Error(`Supabase save failed (${response.status})${suffix}`);
         }
 
         const normalized = normalizeClanBattleState(formState.yearmonth, payloadWithDefaults);

@@ -2642,8 +2642,11 @@ async function supabaseSelectClanBattleState(config: SupabaseConfig): Promise<Cl
 
 async function supabaseUpsertClanBattleState(config: SupabaseConfig, payload: ClanBattleSettingsSavePayload): Promise<void> {
   const endpointUrl = `${config.url.replace(/\/$/, '')}/rest/v1/${encodeURIComponent(SUPABASE_CLAN_BATTLE_TABLE)}`;
+  const query = new URLSearchParams({
+    on_conflict: 'id'
+  });
 
-  const response = await fetch(endpointUrl, {
+  const response = await fetch(`${endpointUrl}?${query.toString()}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -2739,7 +2742,11 @@ app.post('/api/clanbattle-settings/save', ensureAdmin, express.json(), async (re
     return res.json({ success: true });
   } catch (error) {
     console.error('Failed to save clanbattle settings to Supabase:', error);
-    return res.status(502).json({ error: 'Failed to connect to Supabase' });
+    const detail = error instanceof Error ? error.message : String(error);
+    return res.status(502).json({
+      error: 'Failed to connect to Supabase',
+      detail: detail.slice(0, 500)
+    });
   }
 });
 
