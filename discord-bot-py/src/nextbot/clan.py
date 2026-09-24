@@ -1308,16 +1308,18 @@ class Clan(MessageRouter):
         s = ''
         minlap = self.MinLap()
 
+        bosses = range(1, constants.BOSSNUMBER + 1)
+
         s += 'ボス情報 '
-        bossmark = self.NumberMark([i + 1 for i in range(1, constants.BOSSNUMBER) if self.BossLap(i) == minlap])
-        s += '%d周 %s' % (minlap + 1, ' '.join(bossmark))
+        bossmark = self.NumberMark([bidx for bidx in bosses if self.BossLap(bidx) == minlap])
+        s += '%d周 %s' % (minlap, ' '.join(bossmark))
 
-        if (minlap + 2) not in constants.LevelUpLap:
-            bossmark = self.NumberMark([i + 1 for i in range(1, constants.BOSSNUMBER) if self.BossLap(i) == minlap + 1])
+        if (minlap + 1) not in constants.LevelUpLap:
+            bossmark = self.NumberMark([bidx for bidx in bosses if self.BossLap(bidx) == minlap + 1])
             if 0 < len(bossmark):
-                s += ' / %d周 %s' % (minlap + 2, ' '.join(bossmark))
+                s += ' / %d周 %s' % (minlap + 1, ' '.join(bossmark))
 
-        level = self.BossLap(minlap)
+        level = sum(1 for lap in constants.LevelUpLap if lap <= minlap)
         if level < len(constants.LevelUpLap):
             s += ' %d周から%d段階目' % (constants.LevelUpLap[level], level + 2)
 

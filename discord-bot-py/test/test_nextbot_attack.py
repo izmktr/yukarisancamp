@@ -167,6 +167,26 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         supabase.update_clan_bosslaps.assert_not_called()
         self.assertEqual(clan.supabase_data["bosslaps"], [1, 1, 1, 1, 1])
 
+    def test_status_boss_shows_bosslaps_as_stored(self) -> None:
+        clan, _member, _supabase = self.create_clan()
+        clan.supabase_data = {"bosslaps": [2, 2, 3, 3, 2]}
+        marks = clan.numbermarks
+
+        self.assertEqual(
+            clan.StatusBoss(),
+            f"ボス情報 2周 {marks[1]} {marks[2]} {marks[5]} / 3周 {marks[3]} {marks[4]} 7周から3段階目\n",
+        )
+
+    def test_status_boss_hides_next_lap_before_level_up(self) -> None:
+        clan, _member, _supabase = self.create_clan()
+        clan.supabase_data = {"bosslaps": [6, 7, 6, 6, 6]}
+        marks = clan.numbermarks
+
+        self.assertEqual(
+            clan.StatusBoss(),
+            f"ボス情報 6周 {marks[1]} {marks[3]} {marks[4]} {marks[5]} 7周から3段階目\n",
+        )
+
     async def test_setmember_rejects_non_administrator(self) -> None:
         clan, _member, supabase = self.create_clan()
         clan.TemporaryMessage = MagicMock()
