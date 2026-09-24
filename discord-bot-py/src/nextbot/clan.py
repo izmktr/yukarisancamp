@@ -263,7 +263,7 @@ class Clan(MessageRouter):
         return f"{bidx}:{bossname}"
 
     async def SetBossLap(self, bidx : int, lap : int) -> bool:
-        if not constants.is_valid_boss(bidx):
+        if not constants.is_valid_boss(bidx) or lap < 1:
             return False
 
         if self.supabase_data is None or self.supabase is None or self.clan_id is None:
@@ -1209,13 +1209,13 @@ class Clan(MessageRouter):
             self.TemporaryMessage(message.channel, '「undefeat 5」 のように発言してください')
             return False
 
-        newlap = max(self.BossLap(bidx) - 1, 0)
+        newlap = self.BossLap(bidx) - 1
         maxlap = max(self.BossLap(index) for index in range(1, constants.BOSSNUMBER + 1))
         if newlap < maxlap - 1:
             self.TemporaryMessage(message.channel, f'{self.BossLabel(bidx)}の周回数を減らすことはできません')
             return False
 
-        if newlap < 0:
+        if newlap < 1:
             self.TemporaryMessage(message.channel, f'{self.BossLabel(bidx)}の周回数を減らすことはできません')
             return False
         result = await self.SetBossLap(bidx, newlap)
@@ -1248,7 +1248,7 @@ class Clan(MessageRouter):
                 self.TemporaryMessage(message.channel, '周回数がおかしいデータがあります')
                 return False
 
-            bosslaps = [m if 0 <= m else overlap for m in data]
+            bosslaps = [m + 1 if 0 <= m else overlap + 1 for m in data]
 
             await asyncio.to_thread(
                 self.supabase.update_clan_bosslaps,

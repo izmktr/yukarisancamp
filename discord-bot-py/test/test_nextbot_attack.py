@@ -138,6 +138,35 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         supabase.insert_discord_clan_member_if_missing.assert_not_called()
         self.assertIn("見つかりません", clan.TemporaryMessage.call_args.args[1])
 
+    async def test_setboss_stores_input_laps_as_is(self) -> None:
+        clan, _member, supabase = self.create_clan()
+        clan.TemporaryMessage = MagicMock()
+        clan.OnChangeBoss = AsyncMock()
+
+        self.assertTrue(await clan.SetBoss(self.create_message(), MagicMock(), "1 1 2 2 2"))
+
+        supabase.update_clan_bosslaps.assert_called_once_with(123, [1, 1, 2, 2, 2])
+        self.assertEqual(clan.supabase_data["bosslaps"], [1, 1, 2, 2, 2])
+
+    async def test_setboss_fills_unappeared_boss_with_1_based_lap(self) -> None:
+        clan, _member, supabase = self.create_clan()
+        clan.TemporaryMessage = MagicMock()
+        clan.OnChangeBoss = AsyncMock()
+
+        self.assertTrue(await clan.SetBoss(self.create_message(), MagicMock(), "5 4 0 0 4"))
+
+        supabase.update_clan_bosslaps.assert_called_once_with(123, [5, 4, 6, 6, 4])
+
+    async def test_undefeat_does_not_go_below_lap_1(self) -> None:
+        clan, _member, supabase = self.create_clan()
+        clan.TemporaryMessage = MagicMock()
+        clan.OnChangeBoss = AsyncMock()
+
+        self.assertFalse(await clan.Undefeat(self.create_message(), MagicMock(), "1"))
+
+        supabase.update_clan_bosslaps.assert_not_called()
+        self.assertEqual(clan.supabase_data["bosslaps"], [1, 1, 1, 1, 1])
+
     async def test_setmember_rejects_non_administrator(self) -> None:
         clan, _member, supabase = self.create_clan()
         clan.TemporaryMessage = MagicMock()
