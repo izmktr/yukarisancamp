@@ -82,6 +82,71 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(await clan.MemberReset(self.create_message(), self.create_discord_member(), ""))
         supabase.reset_discord_clan_member.assert_called_once_with(123, "456")
 
+    @staticmethod
+    def create_role_member(member_id: int, name: str, admin: bool = False, bot: bool = False) -> types.SimpleNamespace:
+        return types.SimpleNamespace(
+            id=member_id,
+            display_name=name,
+            mention=f"<@{member_id}>",
+            bot=bot,
+            guild_permissions=types.SimpleNamespace(administrator=admin),
+        )
+
+    def create_setmember_message(self, roles: list[types.SimpleNamespace]) -> types.SimpleNamespace:
+        return types.SimpleNamespace(
+            channel=types.SimpleNamespace(name="凸報告"),
+            guild=types.SimpleNamespace(roles=roles, chunked=True, chunk=AsyncMock()),
+            role_mentions=[],
+        )
+
+    async def test_setmember_registers_all_role_members(self) -> None:
+        clan, _member, supabase = self.create_clan()
+        clan.TemporaryMessage = MagicMock()
+        clan.CheckNotAdministrator = MagicMock(return_value=False)
+        role = types.SimpleNamespace(
+            name="クランメンバー",
+            members=[
+                self.create_role_member(456, "既存"),
+                self.create_role_member(789, "新規"),
+                self.create_role_member(111, "リーダー", admin=True),
+                self.create_role_member(222, "bot", bot=True),
+            ],
+        )
+
+        async def reload() -> None:
+            for target in role.members:
+                if not target.bot:
+                    clan.members.setdefault(str(target.id), ClanMember(str(target.id)))
+
+        clan.ReloadSupabaseMembers = AsyncMock(side_effect=reload)
+
+        self.assertTrue(await clan.SetMember(self.create_setmember_message([role]), MagicMock(), "クランメンバー"))
+
+        calls = supabase.insert_discord_clan_member_if_missing.call_args_list
+        self.assertEqual([call.args[1] for call in calls], [456, 789, 111])
+        self.assertEqual([call.args[5] for call in calls], ["member", "member", "leader"])
+        self.assertEqual(clan.members["789"].name, "新規")
+        self.assertIn("3 人中 2 人", clan.TemporaryMessage.call_args.args[1])
+
+    async def test_setmember_reports_missing_role(self) -> None:
+        clan, _member, supabase = self.create_clan()
+        clan.TemporaryMessage = MagicMock()
+        clan.CheckNotAdministrator = MagicMock(return_value=False)
+
+        self.assertFalse(await clan.SetMember(self.create_setmember_message([]), MagicMock(), "存在しない"))
+
+        supabase.insert_discord_clan_member_if_missing.assert_not_called()
+        self.assertIn("見つかりません", clan.TemporaryMessage.call_args.args[1])
+
+    async def test_setmember_rejects_non_administrator(self) -> None:
+        clan, _member, supabase = self.create_clan()
+        clan.TemporaryMessage = MagicMock()
+        clan.CheckNotAdministrator = MagicMock(return_value=True)
+
+        self.assertFalse(await clan.SetMember(self.create_setmember_message([]), MagicMock(), "クランメンバー"))
+
+        supabase.insert_discord_clan_member_if_missing.assert_not_called()
+
     def test_damage_update_only_changes_target_clan(self) -> None:
         client = SupabaseClient("https://example.invalid", "dummy")
         rows = [

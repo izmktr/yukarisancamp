@@ -89,6 +89,7 @@ class Clan(MessageRouter):
                 (['output'], self.Output),
                 (['yukalink'], self.Yukalink),
                 (["register", "登録"], self.RegisterClan),
+                (['setmember'], self.SetMember),
                 (['memberdelete'], self.MemberDelete),
                 (['reset'], self.MemberReset),
                 (['dailyreset'], self.DailyReset),
@@ -828,6 +829,68 @@ class Clan(MessageRouter):
         self.TemporaryMessage(message.channel, 'クランに登録しました')
 
         return False
+
+    async def SetMember(self, message: discord.Message, member: discord.Member, opt: str) -> bool:
+        if self.CheckNotAdministrator(message):
+            self.TemporaryMessage(message.channel, 'setmember は管理者のみ実行できます')
+            return False
+
+        if self.supabase_data is None or self.supabase is None or self.clan_id is None or message.guild is None:
+            return False
+
+        role_name = opt.strip()
+        if not role_name:
+            self.TemporaryMessage(message.channel, 'setmember [ロール名] でロールが付いたメンバーを全員登録します')
+            return False
+
+        guild = message.guild
+        role = message.role_mentions[0] if message.role_mentions else discord.utils.get(guild.roles, name=role_name)
+        if role is None:
+            self.TemporaryMessage(message.channel, f'ロール「{role_name}」が見つかりません')
+            return False
+
+        if not guild.chunked:
+            await guild.chunk()
+
+        targets = [target for target in role.members if not target.bot]
+        if not targets:
+            self.TemporaryMessage(message.channel, f'ロール「{role.name}」が付いたメンバーがいません')
+            return False
+
+        existing_ids = set(self.members.keys())
+        reference_day = constants.reference_date()
+        failed: list[str] = []
+        for target in targets:
+            try:
+                await asyncio.to_thread(
+                    self.supabase.insert_discord_clan_member_if_missing,
+                    self.clan_id,
+                    target.id,
+                    target.display_name,
+                    target.mention,
+                    reference_day,
+                    "leader" if target.guild_permissions.administrator else "member",
+                )
+            except Exception as exc:
+                print(f"setmember の登録に失敗しました: {target.display_name} ({target.id}): {exc}")
+                failed.append(target.display_name)
+
+        await self.ReloadSupabaseMembers()
+
+        for target in targets:
+            clan_member = self.members.get(str(target.id))
+            if clan_member is None:
+                continue
+            clan_member.name = target.display_name
+            clan_member.mention = target.mention
+
+        added = [target for target in targets if str(target.id) not in existing_ids and str(target.id) in self.members]
+        text = f'ロール「{role.name}」のメンバー {len(targets)} 人中 {len(added)} 人を新規登録しました'
+        if failed:
+            text += f'\n登録に失敗: {", ".join(failed)}'
+        self.TemporaryMessage(message.channel, text)
+
+        return True
 
     def FindMember(self, name: str) -> ClanMember | None:
         for clan_member in self.members.values():

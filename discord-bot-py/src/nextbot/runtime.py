@@ -24,6 +24,7 @@ class NextBotApp:
     ) -> None:
         intents = discord.Intents.default()
         intents.message_content = True
+        intents.members = True
 
         self.client = discord.Client(intents=intents)
         self.token = token
