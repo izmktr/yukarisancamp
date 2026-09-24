@@ -117,7 +117,8 @@ class Clan(MessageRouter):
         self.guild = guild
 
         self.outputchannel = None
-        self.outputlock = 0                                     # メッセージ出力中のロックフラグ
+        self._status_lock = asyncio.Lock()
+        self._status_dirty = False
 
         self.damagecontrol = [DamageControl(self.members, bidx) for bidx in range(constants.BOSSNUMBER)]
                                                                 # ダメコン用
@@ -176,6 +177,25 @@ class Clan(MessageRouter):
             return
         rows = await asyncio.to_thread(self.supabase.get_clan_members, self.clan_id)
         self.LoadSupabaseMembers(rows)
+
+    def _MemberStatusSnapshot(self) -> dict[str, tuple[Any, ...]]:
+        return {
+            memberid: (
+                member.name,
+                member.mention,
+                member.taskkill,
+                tuple(member.attacktime),
+                member.boss,
+                member.sortie,
+            )
+            for memberid, member in self.members.items()
+        }
+
+    async def ResyncSupabaseMembers(self) -> None:
+        before = self._MemberStatusSnapshot()
+        await self.ReloadSupabaseMembers()
+        if before != self._MemberStatusSnapshot() and self.guild is not None:
+            await self.OnMessageHandled(self.guild)
 
     async def _refresh_attacktime_after_history_insert(
         self,
@@ -1488,36 +1508,43 @@ class Clan(MessageRouter):
         return None
 
     async def OnMessageHandled(self, guild: discord.Guild) -> None:
+        # 投稿中に来た更新要求は取りこぼさず、投稿完了後に最新状態でもう一度投稿する
+        self._status_dirty = True
+        if self._status_lock.locked():
+            return
+
+        async with self._status_lock:
+            while self._status_dirty:
+                self._status_dirty = False
+                try:
+                    await self._PostStatus(guild)
+                except Exception as exc:
+                    print(f"状況報告の更新に失敗しました: {self.clan_id}: {exc}")
+
+    async def _PostStatus(self, guild: discord.Guild) -> None:
         if self.outputchannel is None:
             self.outputchannel = self.FindChannel(guild, constants.OUTPUT_CHANNEL)
+        if self.outputchannel is None:
+            return
 
-        if self.outputchannel is not None:
-            if self.outputlock == 1: return
-            while self.outputlock != 0:
-                await asyncio.sleep(1)
-
-            if self.lastmessage is not None:
-                self.outputlock = 1
-                try:
-                    await self.lastmessage.delete()
-                except (discord.errors.NotFound, discord.errors.Forbidden):
-                    pass
-                self.lastmessage = None
-
+        if self.lastmessage is not None:
             try:
-                self.outputlock = 2
-                self.lastmessage = await self.outputchannel.send(self.Status())
-            except discord.errors.Forbidden as exc:
-                permissions = self.outputchannel.permissions_for(guild.me)
-                print(
-                    "Forbidden when sending to "
-                    f"#{self.outputchannel.name}: status={exc.status}, code={exc.code}, "
-                    f"message={exc.text}, view_channel={getattr(permissions, 'view_channel', None)}, "
-                    f"send_messages={getattr(permissions, 'send_messages', None)}"
-                )
-                self.outputchannel = None
-            finally:
-                self.outputlock = 0
+                await self.lastmessage.delete()
+            except (discord.errors.NotFound, discord.errors.Forbidden):
+                pass
+            self.lastmessage = None
+
+        try:
+            self.lastmessage = await self.outputchannel.send(self.Status())
+        except discord.errors.Forbidden as exc:
+            permissions = self.outputchannel.permissions_for(guild.me)
+            print(
+                "Forbidden when sending to "
+                f"#{self.outputchannel.name}: status={exc.status}, code={exc.code}, "
+                f"message={exc.text}, view_channel={getattr(permissions, 'view_channel', None)}, "
+                f"send_messages={getattr(permissions, 'send_messages', None)}"
+            )
+            self.outputchannel = None
 
     async def on_message(
         self,

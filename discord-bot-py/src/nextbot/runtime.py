@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+from collections.abc import Awaitable
 from typing import Any, cast
 
 import discord
@@ -37,6 +38,7 @@ class NextBotApp:
         self._last_scheduled_run: datetime.datetime | None = None
         self._realtime_client: Any | None = None
         self._realtime_channel: Any | None = None
+        self._background_tasks: set[asyncio.Task[None]] = set()
         self._register_events()
 
     def _get_clan(self, guild: discord.Guild) -> Clan:
@@ -142,14 +144,66 @@ class NextBotApp:
             clan, old_data, new_data = result
             await clan.OnSupabaseUpdateClanBossState(old_data, new_data)
 
+    def _spawn_background_task(self, coro: Awaitable[None], label: str) -> None:
+        # 参照を保持しないと実行途中のタスクがGCされることがある
+        task = asyncio.ensure_future(coro)
+        self._background_tasks.add(task)
+
+        def on_done(done: asyncio.Task[None]) -> None:
+            self._background_tasks.discard(done)
+            if not done.cancelled() and done.exception() is not None:
+                print(f"{label} の処理に失敗しました: {done.exception()!r}")
+
+        task.add_done_callback(on_done)
+
     def _schedule_realtime_clans_update(self, payload: dict[str, Any]) -> None:
-        asyncio.create_task(self._on_realtime_clans_update(payload))
+        self._spawn_background_task(self._on_realtime_clans_update(payload), "clans の Realtime 更新")
 
     def _schedule_realtime_clan_members_update(self, payload: dict[str, Any]) -> None:
-        asyncio.create_task(self._on_realtime_clan_members_update(payload))
+        self._spawn_background_task(self._on_realtime_clan_members_update(payload), "clan_members の Realtime 更新")
 
     def _schedule_realtime_clan_boss_state_update(self, payload: dict[str, Any]) -> None:
-        asyncio.create_task(self._on_realtime_clan_boss_state_update(payload))
+        self._spawn_background_task(self._on_realtime_clan_boss_state_update(payload), "clan_boss_state の Realtime 更新")
+
+    def _is_realtime_alive(self) -> bool:
+        if self._realtime_client is None or self._realtime_channel is None:
+            return False
+        # サーバ側から正常切断されるとライブラリは再接続せず、channel は JOINED のまま残る
+        listen_task = getattr(getattr(self._realtime_client, "realtime", None), "_listen_task", None)
+        if listen_task is None or listen_task.done():
+            return False
+        return bool(getattr(self._realtime_channel, "is_joined", False))
+
+    async def _close_realtime(self) -> None:
+        client = self._realtime_client
+        self._realtime_client = None
+        self._realtime_channel = None
+        if client is None:
+            return
+        try:
+            await asyncio.wait_for(client.remove_all_channels(), timeout=5)
+        except Exception as exc:
+            print(f"Supabase Realtimeの切断処理に失敗しました: {exc!r}")
+
+    async def _ensure_realtime_subscription(self) -> None:
+        if self._is_realtime_alive():
+            return
+
+        print("Supabase Realtimeの購読が切れているため再接続します")
+        await self._close_realtime()
+        try:
+            await self._subscribe_supabase_updates()
+        except Exception as exc:
+            print(f"Supabase Realtimeの再接続に失敗しました: {exc!r}")
+            await self._close_realtime()
+            return
+
+        # 切断中に取りこぼした変更を DB から取り直す
+        for clan in list(self._clans.values()):
+            try:
+                await clan.ResyncSupabaseMembers()
+            except Exception as exc:
+                print(f"clan_members の再同期に失敗しました: {clan.clan_id}: {exc!r}")
 
     async def _subscribe_supabase_updates(self) -> None:
         if self._realtime_channel is not None:
@@ -220,7 +274,11 @@ class NextBotApp:
 
             await self._load_clan_boss_states()
 
-            await self._subscribe_supabase_updates()
+            try:
+                await self._subscribe_supabase_updates()
+            except Exception as exc:
+                print(f"Supabase Realtimeの購読開始に失敗しました（1分ごとに再試行します）: {exc!r}")
+                await self._close_realtime()
 
             if self._minute_scheduler is None:
                 self._last_scheduled_run = constants.now_jst()
@@ -275,6 +333,7 @@ class NextBotApp:
             await self._on_minute_tick(last_run, now)
         finally:
             self._last_scheduled_run = now
+        await self._ensure_realtime_subscription()
 
     @staticmethod
     def _setting_date(setting: dict[str, Any] | None, key: str) -> datetime.date | None:

@@ -29,7 +29,8 @@ class DamageControl():
         self.bossname : str = ''
         self.bossindex : int = bossindex
         self.members : dict[ClanMember, DamageControlMember] = {}
-        self.outputlock : int = 0
+        self._post_lock = asyncio.Lock()
+        self._status_dirty = False
         self.clanmembers: dict[str, ClanMember] = clanmembers
 
     def ChannelId(self) -> int:
@@ -222,37 +223,53 @@ class DamageControl():
         return mes
 
     async def SendResult(self):
-        if self.active:
-            await self.SendMessage(self.Status())
+        if not self.active:
+            return
+
+        # 投稿中に来た更新要求は取りこぼさず、投稿完了後に最新状態でもう一度投稿する
+        self._status_dirty = True
+        if self._post_lock.locked():
+            return
+
+        async with self._post_lock:
+            await self._FlushStatus()
 
     async def SendFinish(self, message : str):
-        if self.active and self.lastmessage is not None:
-            await self.SendMessage(message)
-
-        self.active = False
-        self.lastmessage  = None
-        self.remainhp = 0
-        self.members.clear()
-
-    async def SendMessage(self, mes : str):
-        if self.outputlock == 1: return
-        try:
-            while self.outputlock != 0:
-                await asyncio.sleep(1)
-
-            if self.lastmessage is not None:
-                self.outputlock = 1
-                try:
-                    await self.lastmessage.delete()
-                except (discord.errors.NotFound, discord.errors.Forbidden):
-                    pass
-                self.lastmessage = None
-
+        async with self._post_lock:
             try:
-                self.outputlock = 2
-                if self.channel is not None:
-                    self.lastmessage = await self.channel.send(mes)
-            except discord.errors.Forbidden:
-                self.channel = None
-        finally:
-            self.outputlock = 0
+                if self.active and self.lastmessage is not None:
+                    await self._ReplaceMessage(message)
+            except Exception as exc:
+                print(f"ダメコンの討伐メッセージ送信に失敗しました: {self.bossname}: {exc!r}")
+            finally:
+                self.active = False
+                self.lastmessage = None
+                self.remainhp = 0
+                self.members.clear()
+
+            await self._FlushStatus()
+
+    async def _FlushStatus(self):
+        while self._status_dirty:
+            self._status_dirty = False
+            if not self.active:
+                continue
+            try:
+                await self._ReplaceMessage(self.Status())
+            except Exception as exc:
+                print(f"ダメコンの更新に失敗しました: {self.bossname}: {exc!r}")
+
+    async def _ReplaceMessage(self, mes : str):
+        if self.lastmessage is not None:
+            try:
+                await self.lastmessage.delete()
+            except (discord.errors.NotFound, discord.errors.Forbidden):
+                pass
+            self.lastmessage = None
+
+        if self.channel is None:
+            return
+        try:
+            self.lastmessage = await self.channel.send(mes)
+        except discord.errors.Forbidden:
+            self.channel = None

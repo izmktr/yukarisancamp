@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import datetime
 import io
 import json
@@ -14,6 +15,7 @@ import discord
 from src.nextbot import constants
 from src.nextbot.clan import Clan
 from src.nextbot.clan_member import ClanMember
+from src.nextbot.damage_control import DamageControl
 from src.nextbot.runtime import NextBotApp
 from src.nextbot.supabase_client import SupabaseClient
 
@@ -979,6 +981,168 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         await clan.OnSupabaseUpdateClanMembers(row, {})
         self.assertNotIn("456", clan.members)
         clan.OnMessageHandled.assert_awaited_once_with(guild)
+
+    @staticmethod
+    def create_status_clan() -> tuple[Clan, MagicMock]:
+        clan = Clan(guild=MagicMock())
+        channel = MagicMock()
+        channel.send = AsyncMock(return_value=MagicMock(delete=AsyncMock()))
+        clan.FindChannel = MagicMock(return_value=channel)
+        return clan, channel
+
+    async def test_status_update_during_post_is_not_dropped(self) -> None:
+        clan, channel = self.create_status_clan()
+        statuses = iter(["status-1", "status-2"])
+        clan.Status = MagicMock(side_effect=lambda: next(statuses))
+        release = asyncio.Event()
+        send_started = asyncio.Event()
+
+        async def slow_send(text: str) -> MagicMock:
+            if not send_started.is_set():
+                send_started.set()
+                await release.wait()
+            return MagicMock(delete=AsyncMock())
+
+        channel.send = AsyncMock(side_effect=slow_send)
+
+        first = asyncio.create_task(clan.OnMessageHandled(clan.guild))
+        await send_started.wait()
+        await clan.OnMessageHandled(clan.guild)
+        release.set()
+        await first
+
+        self.assertEqual([call.args[0] for call in channel.send.await_args_list], ["status-1", "status-2"])
+
+    async def test_status_update_recovers_after_delete_failure(self) -> None:
+        clan, channel = self.create_status_clan()
+        clan.Status = MagicMock(return_value="status")
+        clan.lastmessage = MagicMock(delete=AsyncMock(side_effect=RuntimeError("discord 503")))
+
+        await clan.OnMessageHandled(clan.guild)
+        channel.send.assert_not_awaited()
+
+        clan.lastmessage = None
+        await clan.OnMessageHandled(clan.guild)
+        channel.send.assert_awaited_once_with("status")
+
+    @staticmethod
+    def create_damage_control(text: list[str]) -> tuple[DamageControl, MagicMock, list[MagicMock]]:
+        dc = DamageControl({}, 0)
+        dc.active = True
+        dc.Status = MagicMock(side_effect=lambda: text[0])
+        posted: list[MagicMock] = []
+        channel = MagicMock()
+
+        async def send(mes: str) -> MagicMock:
+            post = MagicMock(delete=AsyncMock())
+            posted.append(post)
+            return post
+
+        channel.send = AsyncMock(side_effect=send)
+        dc.SetChannel(channel)
+        return dc, channel, posted
+
+    async def test_damage_control_update_during_post_is_not_dropped(self) -> None:
+        text = ["A 300"]
+        dc, channel, _posted = self.create_damage_control(text)
+        release = asyncio.Event()
+        original_send = channel.send.side_effect
+
+        async def slow_send(mes: str) -> MagicMock:
+            if channel.send.await_count == 1:
+                text[0] = "A 300 / B 500"
+                await dc.SendResult()
+                await release.wait()
+            return await original_send(mes)
+
+        channel.send.side_effect = slow_send
+        first = asyncio.create_task(dc.SendResult())
+        await asyncio.sleep(0)
+        release.set()
+        await first
+
+        self.assertEqual([call.args[0] for call in channel.send.await_args_list], ["A 300", "A 300 / B 500"])
+
+    async def test_damage_control_finish_waits_for_post_and_cleans_up(self) -> None:
+        text = ["A 300"]
+        dc, channel, posted = self.create_damage_control(text)
+        dc.Damage(ClanMember("1"), 300)
+        release = asyncio.Event()
+        original_send = channel.send.side_effect
+
+        async def slow_send(mes: str) -> MagicMock:
+            if channel.send.await_count == 1:
+                await release.wait()
+            return await original_send(mes)
+
+        channel.send.side_effect = slow_send
+        first = asyncio.create_task(dc.SendResult())
+        await asyncio.sleep(0)
+        finish = asyncio.create_task(dc.SendFinish("討伐お疲れさまです"))
+        await asyncio.sleep(0)
+        release.set()
+        await asyncio.gather(first, finish)
+
+        self.assertEqual([call.args[0] for call in channel.send.await_args_list], ["A 300", "討伐お疲れさまです"])
+        posted[0].delete.assert_awaited_once()
+        posted[1].delete.assert_not_awaited()
+        self.assertIsNone(dc.lastmessage)
+        self.assertFalse(dc.active)
+        self.assertEqual(dc.members, {})
+
+    async def test_damage_control_recovers_after_delete_failure(self) -> None:
+        dc, channel, _posted = self.create_damage_control(["status"])
+        dc.lastmessage = MagicMock(delete=AsyncMock(side_effect=RuntimeError("discord 503")))
+
+        await dc.SendResult()
+        channel.send.assert_not_awaited()
+
+        dc.lastmessage = None
+        await dc.SendResult()
+        channel.send.assert_awaited_once_with("status")
+
+    async def test_resync_members_posts_status_only_when_changed(self) -> None:
+        clan, _member, supabase = self.create_clan()
+        clan.guild = MagicMock()
+        clan.OnMessageHandled = AsyncMock()
+        row = {"clanid": "123", "memberid": "456", "name": "old name", "mention": "<@456>", "attacktime": []}
+        supabase.get_clan_members.return_value = [row]
+
+        await clan.ResyncSupabaseMembers()
+        clan.OnMessageHandled.assert_not_awaited()
+
+        supabase.get_clan_members.return_value = [{**row, "attacktime": [0, None, None]}]
+        await clan.ResyncSupabaseMembers()
+        clan.OnMessageHandled.assert_awaited_once_with(clan.guild)
+
+    async def test_dead_realtime_is_resubscribed_and_members_resynced(self) -> None:
+        app = NextBotApp.__new__(NextBotApp)
+        clan = Clan()
+        clan.ResyncSupabaseMembers = AsyncMock()
+        app._clans = {123: clan}
+        dead_listen_task = MagicMock(done=MagicMock(return_value=True))
+        old_client = MagicMock(realtime=MagicMock(_listen_task=dead_listen_task), remove_all_channels=AsyncMock())
+        app._realtime_client = old_client
+        app._realtime_channel = MagicMock(is_joined=True)
+        app._subscribe_supabase_updates = AsyncMock()
+
+        await app._ensure_realtime_subscription()
+
+        old_client.remove_all_channels.assert_awaited_once()
+        app._subscribe_supabase_updates.assert_awaited_once()
+        clan.ResyncSupabaseMembers.assert_awaited_once()
+
+    async def test_alive_realtime_is_left_as_is(self) -> None:
+        app = NextBotApp.__new__(NextBotApp)
+        app._clans = {}
+        alive_listen_task = MagicMock(done=MagicMock(return_value=False))
+        app._realtime_client = MagicMock(realtime=MagicMock(_listen_task=alive_listen_task))
+        app._realtime_channel = MagicMock(is_joined=True)
+        app._subscribe_supabase_updates = AsyncMock()
+
+        await app._ensure_realtime_subscription()
+
+        app._subscribe_supabase_updates.assert_not_awaited()
 
     def test_delete_realtime_payload_uses_old_record_clan_id(self) -> None:
         app = NextBotApp.__new__(NextBotApp)
