@@ -605,6 +605,93 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(clan.damagecontrol[1].remainhp, 200)
 
+    def create_web_attack_clan(self) -> tuple[Clan, MagicMock, MagicMock]:
+        clan, _member, supabase = self.create_clan()
+        clan.guild = MagicMock(spec=discord.Guild)
+        clan.OnMessageHandled = AsyncMock()
+        post = MagicMock(spec=discord.Message)
+        post.id = 900
+        post.delete = AsyncMock()
+        channel = MagicMock(spec=discord.TextChannel)
+        channel.send = AsyncMock(return_value=post)
+        clan.FindChannel = MagicMock(return_value=channel)
+        return clan, channel, post
+
+    @staticmethod
+    def web_member_row(boss: int, sortie: int, attacktime: list[int | None]) -> dict[str, Any]:
+        return {
+            "memberid": "456",
+            "name": "ゆかり",
+            "attacktime": attacktime,
+            "attackdata": {"boss": boss, "sortie": sortie},
+        }
+
+    async def test_web_attack_start_posts_to_input_channel(self) -> None:
+        clan, channel, post = self.create_web_attack_clan()
+
+        await clan.OnSupabaseUpdateClanMembers({}, self.web_member_row(3, 1, [None, None, None]))
+
+        clan.FindChannel.assert_called_once_with(clan.guild, "凸報告")
+        channel.send.assert_awaited_once_with("ゆかり：凸3")
+        self.assertIs(clan.webattackposts["456"][0], post)
+
+    async def test_web_carry_over_attack_posts_boss_and_sortie(self) -> None:
+        clan, channel, _post = self.create_web_attack_clan()
+
+        await clan.OnSupabaseUpdateClanMembers({}, self.web_member_row(3, 2, [0, 50, None]))
+
+        channel.send.assert_awaited_once_with("ゆかり：凸32")
+
+    async def test_web_attack_post_is_deleted_when_attack_finishes(self) -> None:
+        clan, channel, post = self.create_web_attack_clan()
+        await clan.OnSupabaseUpdateClanMembers({}, self.web_member_row(3, 1, [None, None, None]))
+
+        await clan.OnSupabaseUpdateClanMembers({}, self.web_member_row(0, 0, [0, None, None]))
+
+        post.delete.assert_awaited_once()
+        self.assertNotIn("456", clan.webattackposts)
+        channel.send.assert_awaited_once()
+
+    async def test_web_attack_update_while_attacking_does_not_post_again(self) -> None:
+        clan, channel, post = self.create_web_attack_clan()
+        await clan.OnSupabaseUpdateClanMembers({}, self.web_member_row(3, 1, [None, None, None]))
+        row = self.web_member_row(3, 1, [None, None, None])
+        row["attackdata"]["damage"] = 1000
+
+        await clan.OnSupabaseUpdateClanMembers({}, row)
+
+        channel.send.assert_awaited_once()
+        post.delete.assert_not_awaited()
+
+    async def test_attack_started_by_bot_is_not_posted(self) -> None:
+        clan, channel, _post = self.create_web_attack_clan()
+        clan._bot_attack_starting.add("456")
+
+        await clan.OnSupabaseUpdateClanMembers({}, self.web_member_row(3, 1, [None, None, None]))
+
+        channel.send.assert_not_awaited()
+        self.assertNotIn("456", clan.webattackposts)
+
+    async def test_resync_deletes_web_attack_post_after_attack_ended(self) -> None:
+        clan, _channel, post = self.create_web_attack_clan()
+        await clan.OnSupabaseUpdateClanMembers({}, self.web_member_row(3, 1, [None, None, None]))
+        clan.supabase.get_clan_members.return_value = [self.web_member_row(0, 0, [0, None, None])]
+
+        await clan.ResyncSupabaseMembers()
+
+        post.delete.assert_awaited_once()
+        self.assertNotIn("456", clan.webattackposts)
+
+    async def test_manually_deleted_web_attack_post_is_forgotten(self) -> None:
+        clan, _channel, post = self.create_web_attack_clan()
+        await clan.OnSupabaseUpdateClanMembers({}, self.web_member_row(3, 1, [None, None, None]))
+
+        self.assertFalse(await clan.OnAttackMessageDeleted(post.id))
+        await clan.OnSupabaseUpdateClanMembers({}, self.web_member_row(0, 0, [0, None, None]))
+
+        self.assertNotIn("456", clan.webattackposts)
+        post.delete.assert_not_awaited()
+
     async def test_carry_over_zero_reaction_maps_to_defeat(self) -> None:
         clan, member, supabase = self.create_clan([None, 50, None])
         message = self.create_message()

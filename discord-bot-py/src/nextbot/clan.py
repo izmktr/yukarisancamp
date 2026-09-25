@@ -107,6 +107,9 @@ class Clan(MessageRouter):
         self.stampcheck :dict[int, int] = {}                    # スタンプの二重押し防止
         self.messagereaction : dict[int, MessageReaction] = {}
                                                                 # スタンプを押したときの反応用
+        self.webattackposts: dict[str, tuple[discord.Message, int, int]] = {}
+                                                                # Webから開始した攻撃の代理投稿(メッセージ, ボス, sortie)
+        self._bot_attack_starting: set[str] = set()             # botが攻撃中への更新をDBに書き込み中のメンバー
 
         self.supabase_data: dict[str, Any] | None = None
         self.supabase_bossstate: dict[str, Any] | None = None
@@ -194,8 +197,56 @@ class Clan(MessageRouter):
     async def ResyncSupabaseMembers(self) -> None:
         before = self._MemberStatusSnapshot()
         await self.ReloadSupabaseMembers()
+        for memberid in list(self.webattackposts):
+            member = self.members.get(memberid)
+            if member is None:
+                await self._DeleteWebAttackPost(memberid)
+            else:
+                await self.SyncWebAttackPost(member, False)
         if before != self._MemberStatusSnapshot() and self.guild is not None:
             await self.OnMessageHandled(self.guild)
+
+    async def SyncWebAttackPost(self, member: ClanMember, started: bool) -> None:
+        # Webから開始した攻撃は、凸報告に代理投稿し攻撃終了時に削除する
+        tracked = self.webattackposts.get(member.id)
+        if tracked is not None and tracked[1:] != (member.boss, member.sortie):
+            await self._DeleteWebAttackPost(member.id)
+            tracked = None
+
+        if tracked is not None or not started or not member.IsAttack():
+            return
+        if member.id in self._bot_attack_starting or self.guild is None:
+            return
+        channel = self.FindChannel(self.guild, self.input_channel_name)
+        if channel is None:
+            return
+
+        boss, sortie = member.boss, member.sortie
+        text = f'{member.name}：凸{boss}{sortie if member.IsOverkill() else ""}'
+        try:
+            post = await channel.send(text)
+        except discord.HTTPException as exc:
+            print(f"Web攻撃の代理投稿に失敗しました: {member.name}: {exc!r}")
+            return
+
+        # 送信中に攻撃が終わったり、別の更新で既に投稿済みになっている場合は残さない
+        if (member.boss, member.sortie) != (boss, sortie) or member.id in self.webattackposts:
+            await self._DeleteMessageQuietly(post)
+            return
+        self.webattackposts[member.id] = (post, boss, sortie)
+
+    async def _DeleteWebAttackPost(self, memberid: str) -> None:
+        tracked = self.webattackposts.pop(memberid, None)
+        if tracked is not None:
+            await self._DeleteMessageQuietly(tracked[0])
+
+    @staticmethod
+    async def _DeleteMessageQuietly(message: discord.Message) -> None:
+        try:
+            await message.delete()
+        except discord.HTTPException as exc:
+            if not isinstance(exc, discord.NotFound):
+                print(f"メッセージの削除に失敗しました: {message.id}: {exc!r}")
 
     async def _refresh_attacktime_after_history_insert(
         self,
@@ -457,6 +508,7 @@ class Clan(MessageRouter):
             if self.supabase is None or self.clan_id is None:
                 return False
 
+            self._bot_attack_starting.add(member.id)
             try:
                 if react.action == "cancel":
                     await asyncio.to_thread(
@@ -485,6 +537,8 @@ class Clan(MessageRouter):
             except Exception as exc:
                 self.TemporaryMessage(message.channel, f'巻き戻しに失敗しました: {exc}')
                 return True
+            finally:
+                self._bot_attack_starting.discard(member.id)
 
             react.history_id = None
             react.selected_emoji = None
@@ -653,6 +707,7 @@ class Clan(MessageRouter):
             return False
 
         if self.supabase is not None and self.clan_id is not None:
+            self._bot_attack_starting.add(cmember.id)
             try:
                 await asyncio.to_thread(
                     self.supabase.update_discord_clan_member_attack,
@@ -669,6 +724,8 @@ class Clan(MessageRouter):
             except Exception as exc:
                 self.TemporaryMessage(message.channel, f'攻撃の開始に失敗しました: {exc}')
                 return False
+            finally:
+                self._bot_attack_starting.discard(cmember.id)
 
         cmember.Attack(boss, sortie)
         cmember.name = member.display_name
@@ -1353,6 +1410,11 @@ class Clan(MessageRouter):
         return handled
 
     async def OnAttackMessageDeleted(self, message_id: int) -> bool:
+        for memberid, tracked in list(self.webattackposts.items()):
+            if tracked[0].id == message_id:
+                del self.webattackposts[memberid]
+                return False
+
         reaction = self.messagereaction.get(message_id)
         if reaction is None:
             return False
@@ -1525,6 +1587,10 @@ class Clan(MessageRouter):
             if old_state != new_state and self.guild is not None:
                 await self.OnMessageHandled(self.guild)
 
+            if member is not None:
+                started = (old_state is None or old_state[5] == -1) and member.IsAttack()
+                await self.SyncWebAttackPost(member, started)
+
             if member is not None and member.IsAttack():
                 dc = self.damagecontrol[member.boss - 1]
                 dc.Damage(member, member.damage, member.message)
@@ -1539,6 +1605,7 @@ class Clan(MessageRouter):
             memberid = str(raw_memberid).strip()
             if not memberid:
                 return
+            await self._DeleteWebAttackPost(memberid)
             removed = self.members.pop(memberid, None)
             if removed is not None and self.guild is not None:
                 await self.OnMessageHandled(self.guild)
