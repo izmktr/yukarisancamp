@@ -25,6 +25,10 @@ export function buildClanAttackMemberStatus(
   }
 
   const ownDamage = toDamage(member.damage);
+  if (ownDamage <= 0) {
+    return '';
+  }
+
   const others = attackingMembers.filter((item) => String(item.memberid) !== String(member.memberid));
   const othersTotal = others.reduce((sum, item) => sum + toDamage(item.damage), 0);
 
@@ -42,7 +46,7 @@ export function buildClanAttackMemberStatus(
         name: (typeof item.name === 'string' && item.name.trim() ? item.name.trim() : 'Unknown'),
         damage: toDamage(item.damage)
       }))
-      .filter((item) => item.damage > 0)
+      .filter((item) => item.damage > 0 && item.damage >= remainHp)
       .sort((left, right) => right.damage - left.damage || left.name.localeCompare(right.name, 'ja'))
       .slice(0, 3);
 
