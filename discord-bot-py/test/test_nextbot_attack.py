@@ -661,7 +661,7 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         result = await reaction.removereaction(member, payload)
 
         self.assertTrue(result)
-        supabase.revert_clan_member_attack.assert_called_once_with("456", 79)
+        supabase.revert_clan_member_attack.assert_called_once_with("456", 79, 123)
         self.assertTrue(member.IsAttack())
         self.assertEqual((member.boss, member.sortie), (5, 1))
         self.assertEqual(clan.supabase_data["bosslaps"], [1, 1, 1, 1, 1])

@@ -477,6 +477,7 @@ class Clan(MessageRouter):
                         self.supabase.revert_clan_member_attack,
                         member.id,
                         react.history_id,
+                        self.clan_id,
                     )
                     apply_rpc_result(member, result)
                 else:

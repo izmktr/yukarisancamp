@@ -2019,6 +2019,7 @@ async function supabaseUpdateClanMemberAttackMessage(
 ): Promise<ClanMemberRow> {
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_CLAN_MEMBERS_TABLE);
   const query = new URLSearchParams({
+    clanid: `eq.${member.clanid}`,
     memberid: `eq.${member.memberid}`
   });
 
@@ -2216,7 +2217,8 @@ async function supabaseDeleteAttackHistory(
     body: JSON.stringify({
       p_memberid: member.memberid,
       p_day: day,
-      p_history_id: historyId
+      p_history_id: historyId,
+      p_clanid: member.clanid
     })
   });
 

@@ -523,9 +523,12 @@ grant execute on function public.finish_clan_member_attack(
   text
 ) to service_role;
 
+drop function if exists public.revert_clan_member_attack(text, bigint);
+
 create or replace function public.revert_clan_member_attack(
   p_memberid text,
-  p_history_id bigint
+  p_history_id bigint,
+  p_clanid text default null
 )
 returns jsonb
 language plpgsql
@@ -542,24 +545,28 @@ declare
   changed_at timestamptz := now();
   updated_bosslaps integer[];
 begin
+  -- p_clanid 未指定の古い呼び出しでは、履歴のクランで対象メンバーを特定する
+  select * into strict target_history
+  from public.attack_histories
+  where id = p_history_id
+    and memberid = p_memberid
+    and (p_clanid is null or clanid = p_clanid)
+  for update;
+
   select * into strict target_member
   from public.clan_members
-  where memberid = p_memberid
+  where clanid = target_history.clanid
+    and memberid = p_memberid
   for update;
 
   if coalesce((target_member.attackdata->>'boss')::integer, 0) <> 0 then
     raise exception 'Another attack is active';
   end if;
 
-  select * into strict target_history
-  from public.attack_histories
-  where id = p_history_id
-    and memberid = p_memberid
-  for update;
-
   if exists (
     select 1 from public.attack_histories
-    where memberid = target_history.memberid
+    where clanid = target_history.clanid
+      and memberid = target_history.memberid
       and day = target_history.day
       and id > target_history.id
   ) then
@@ -569,6 +576,7 @@ begin
   if target_history.overtime > 0 and exists (
     select 1 from public.attack_histories
     where id <> target_history.id
+      and clanid = target_history.clanid
       and memberid = target_history.memberid
       and day = target_history.day
       and sortie = target_history.sortie
@@ -579,6 +587,7 @@ begin
   select min(overtime) into restored_time
   from public.attack_histories
   where id <> target_history.id
+    and clanid = target_history.clanid
     and memberid = target_history.memberid
     and day = target_history.day
     and sortie = target_history.sortie;
@@ -631,7 +640,8 @@ begin
       attackdata = attack_data,
       lastactive = changed_at,
       updated_at = changed_at
-  where memberid = target_member.memberid;
+  where clanid = target_member.clanid
+    and memberid = target_member.memberid;
 
   return jsonb_build_object(
     'attacktime', attack_times,
@@ -641,9 +651,9 @@ begin
 end;
 $$;
 
-revoke all on function public.revert_clan_member_attack(text, bigint)
+revoke all on function public.revert_clan_member_attack(text, bigint, text)
   from public, anon, authenticated;
-grant execute on function public.revert_clan_member_attack(text, bigint)
+grant execute on function public.revert_clan_member_attack(text, bigint, text)
   to service_role;
 
 do $$
@@ -666,10 +676,11 @@ drop function if exists public.delete_clan_member_attack_history(
   bigint
 );
 
-create function public.delete_clan_member_attack_history(
+create or replace function public.delete_clan_member_attack_history(
   p_memberid text,
   p_day date,
-  p_history_id bigint
+  p_history_id bigint,
+  p_clanid text default null
 )
 returns void
 language plpgsql
@@ -677,16 +688,19 @@ security definer
 set search_path = public
 as $$
 declare
+  target_clanid text;
   removed_sortie integer;
   removed_overtime integer;
   changed_at timestamptz := now();
 begin
-  select sortie, overtime
-  into removed_sortie, removed_overtime
+  -- p_clanid 未指定の古い呼び出しでは、削除対象の履歴のクランに限定する
+  select clanid, sortie, overtime
+  into target_clanid, removed_sortie, removed_overtime
   from public.attack_histories
   where id = p_history_id
     and memberid = p_memberid
     and day = p_day
+    and (p_clanid is null or clanid = p_clanid)
   for update;
 
   if removed_sortie is null then
@@ -697,6 +711,7 @@ begin
     select 1
     from public.attack_histories
     where id <> p_history_id
+      and clanid = target_clanid
       and memberid = p_memberid
       and day = p_day
       and sortie = removed_sortie
@@ -710,14 +725,16 @@ begin
   if not exists (
     select 1
     from public.attack_histories
-    where memberid = p_memberid
+    where clanid = target_clanid
+      and memberid = p_memberid
       and day = p_day
       and sortie = removed_sortie
   ) then
     update public.attack_histories
     set sortie = sortie - 1,
         updatetime = changed_at
-    where memberid = p_memberid
+    where clanid = target_clanid
+      and memberid = p_memberid
       and day = p_day
       and sortie > removed_sortie;
   end if;
@@ -727,13 +744,15 @@ $$;
 revoke all on function public.delete_clan_member_attack_history(
   text,
   date,
-  bigint
+  bigint,
+  text
 ) from public, anon, authenticated;
 
 grant execute on function public.delete_clan_member_attack_history(
   text,
   date,
-  bigint
+  bigint,
+  text
 ) to service_role;
 
 create index if not exists attack_history_clanid_idx
