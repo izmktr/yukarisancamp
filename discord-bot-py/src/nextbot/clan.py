@@ -432,6 +432,10 @@ class Clan(MessageRouter):
                     if attacking_member.IsAttack() and attacking_member.boss == boss:
                         attacking_member.reportlimit = constants.now_jst() + datetime.timedelta(minutes=5)
                 await self.OnChangeBoss(boss)
+                try:
+                    await self.ResetBossHp(boss, member.name)
+                except Exception as exc:
+                    self.TemporaryMessage(message.channel, f'ボスHPの初期化に失敗しました: {exc}')
 
             if message.guild is not None:
                 await self.RemoveReaction(message, 0 < overtime, message.guild.me)
@@ -1242,6 +1246,10 @@ class Clan(MessageRouter):
         self.TemporaryMessage(message.channel, f'{self.BossLabel(bidx)}の周回数を{newlap}に更新しました') 
 
         await self.OnChangeBoss(bidx)
+        try:
+            await self.ResetBossHp(bidx, member.display_name)
+        except Exception as exc:
+            self.TemporaryMessage(message.channel, f'ボスHPの初期化に失敗しました: {exc}')
 
         return True
 
@@ -1611,6 +1619,32 @@ class Clan(MessageRouter):
     async def OnChangeBoss(self, boss: int) -> None:
         await self.DamageControlDefeat(boss)
 
+    def _BossHpSetting(self, boss: int) -> tuple[str, int]:
+        if self.clanbattle_setting is None:
+            return '', 0
+        raw_yearmonth = self.clanbattle_setting.get('yearmonth')
+        raw_bosshp = self.clanbattle_setting.get('bossHp')
+        yearmonth = raw_yearmonth if isinstance(raw_yearmonth, str) else ''
+        bosshp = cast(list[object], raw_bosshp) if isinstance(raw_bosshp, list) else []
+        raw_max_hp = bosshp[boss - 1] if 0 < boss <= len(bosshp) else None
+        max_hp = raw_max_hp if isinstance(raw_max_hp, int) else 0
+        return yearmonth, max_hp
+
+    async def ResetBossHp(self, boss: int, updated_by: str) -> None:
+        yearmonth, max_hp = self._BossHpSetting(boss)
+        self.damagecontrol[boss - 1].SetBossHp(max_hp)
+        if self.supabase is None or self.clan_id is None or not yearmonth:
+            return
+        await asyncio.to_thread(
+            self.supabase.update_clan_boss_state_current_hp,
+            self.clan_id,
+            yearmonth,
+            boss,
+            max_hp,
+            max_hp,
+            updated_by,
+        )
+
     async def OnMessageDamageChannel(self,  message: discord.Message, member: discord.Member) -> None:
         dc = await self.DamageChannelMessage(message, member)
         if dc is not None:
@@ -1651,13 +1685,8 @@ class Clan(MessageRouter):
             dc.RemainHp(remainhp)
 
             #supabaseに残りHPを送信
-            if self.supabase is not None and self.clan_id is not None and self.clanbattle_setting is not None:
-                raw_yearmonth = self.clanbattle_setting.get('yearmonth')
-                raw_bosshp = self.clanbattle_setting.get('bossHp')
-                yearmonth = raw_yearmonth if isinstance(raw_yearmonth, str) else ''
-                bosshp = cast(list[object], raw_bosshp) if isinstance(raw_bosshp, list) else []
-                raw_max_hp = bosshp[dc.bossindex] if dc.bossindex < len(bosshp) else None
-                max_hp = raw_max_hp if isinstance(raw_max_hp, int) else 0
+            if self.supabase is not None and self.clan_id is not None:
+                yearmonth, max_hp = self._BossHpSetting(dc.bossindex + 1)
                 if yearmonth:
                     try:
                         await asyncio.to_thread(
