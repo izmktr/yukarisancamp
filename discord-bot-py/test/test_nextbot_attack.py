@@ -311,6 +311,45 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         }
         return clan, member, supabase, message
 
+    async def test_reaction_finish_clears_report_limit(self) -> None:
+        clan, member, supabase, message = self.create_attacking_clan()
+        clan.RemoveReaction = AsyncMock()
+        supabase.refresh_clan_member_attacktime.return_value = [0, None, None]
+        self.assertIsNotNone(member.reportlimit)
+        payload = types.SimpleNamespace(user_id=456, message_id=message.id,
+                                        emoji=types.SimpleNamespace(name=clan.emojis[0]))
+
+        self.assertTrue(await clan.OnRawReactionAdd(payload))
+
+        self.assertIsNone(member.reportlimit)
+
+    async def test_realtime_attack_end_clears_report_limit(self) -> None:
+        clan, member, _supabase, _message = self.create_attacking_clan()
+
+        await clan.OnSupabaseUpdateClanMembers({}, {
+            "clanid": "123", "memberid": "456", "name": "old name", "mention": "<@456>",
+            "attacktime": [0, None, None], "attackdata": {"boss": 0, "sortie": 0},
+        })
+
+        self.assertIsNone(member.reportlimit)
+
+    async def test_request_result_skips_members_not_attacking(self) -> None:
+        clan, member, _supabase = self.create_clan()
+        clan.SendNotice = AsyncMock()
+        now = constants.now_jst()
+        member.reportlimit = now - datetime.timedelta(minutes=1)
+
+        await clan.RequestResult(now)
+
+        clan.SendNotice.assert_not_awaited()
+        self.assertIsNone(member.reportlimit)
+
+        member.Attack(5, 1)
+        member.reportlimit = now - datetime.timedelta(minutes=1)
+        await clan.RequestResult(now)
+
+        clan.SendNotice.assert_awaited_once_with("<@456> 凸結果の報告をお願いします")
+
     async def test_deleting_attack_message_cancels_attack(self) -> None:
         clan, member, supabase, message = self.create_attacking_clan()
         dc = clan.damagecontrol[4]

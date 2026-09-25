@@ -1056,6 +1056,8 @@ class Clan(MessageRouter):
 
     async def RequestResult(self, shtime: datetime.datetime) -> None:
         for member in self.members.values():
+            if member.reportlimit is not None and not member.IsAttack():
+                member.reportlimit = None
             if member.reportlimit is not None and member.reportlimit < shtime:
                 member.reportlimit = None
                 message = '%s 凸結果の報告をお願いします' % member.mention

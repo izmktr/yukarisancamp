@@ -61,6 +61,7 @@ class ClanMember():
         else:
             self.boss = 0
             self.sortie = -1
+            self.reportlimit = None
 
         damage = attackdata.get("damage", 0)
         self.damage = damage if isinstance(damage, int) else 0
