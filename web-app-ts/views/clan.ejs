@@ -28,9 +28,9 @@
                 : `ボス ${bossNumber}`;
             const activeBossHpValue = Array.isArray(data.bossHp) ? Number(data.bossHp[activeBossIndex]) : NaN;
             const activeBossHp = Number.isFinite(activeBossHpValue) ? activeBossHpValue.toLocaleString('ja-JP') : '未設定';
-            const activeAttackMembers = Array.isArray(allMembers)
+            const activeAttackMembers = sortClanAttackMembers(Array.isArray(allMembers)
                 ? allMembers.filter((member) => Number(member.attackboss) === bossNumber)
-                : [];
+                : []);
             const operableAttackersForBoss = operableMembers.filter((member) => Number(member.attackboss) === bossNumber);
             const bossLapDisplay = activeAttackMembers.length > 0 && Number.isInteger(Number(activeAttackMembers[0].attacklap))
                 ? Number(activeAttackMembers[0].attacklap)
@@ -106,9 +106,9 @@
                 : `ボス ${bossNumber}`;
             const activeBossHpValue = Array.isArray(data.bossHp) ? Number(data.bossHp[activeBossIndex]) : NaN;
             const activeBossHp = Number.isFinite(activeBossHpValue) ? activeBossHpValue.toLocaleString('ja-JP') : '未設定';
-            const activeAttackMembers = Array.isArray(allMembers)
+            const activeAttackMembers = sortClanAttackMembers(Array.isArray(allMembers)
                 ? allMembers.filter((member) => Number(member.attackboss) === bossNumber)
-                : [];
+                : []);
         %>
         <section class="clan-attack-active-panel clan-attack-active-panel-other" aria-labelledby="clan-attack-active-title-other-<%= bossNumber %>" data-boss-index="<%= bossNumber %>" data-boss-hp="<%= Number.isFinite(activeBossHpValue) ? Math.trunc(activeBossHpValue) : '' %>" style="display: none;">
             <div class="clan-attack-active-header">
@@ -428,10 +428,27 @@
         }));
     }
 
+    function sortClanAttackPanelRows(panel) {
+        const list = panel.querySelector('.clan-attack-member-list');
+        if (!list || typeof window.ClanAttackStatus.compareClanAttackMembers !== 'function') {
+            return;
+        }
+        const toSortKey = (row) => ({
+            overattack: Number(row.getAttribute('data-overattack')),
+            carrytime: row.getAttribute('data-carry-time'),
+            damage: Number(row.getAttribute('data-damage'))
+        });
+        Array.from(list.querySelectorAll('.clan-attack-member-row'))
+            .map((row, index) => ({ row, index, key: toSortKey(row) }))
+            .sort((left, right) => window.ClanAttackStatus.compareClanAttackMembers(left.key, right.key) || left.index - right.index)
+            .forEach((item) => list.appendChild(item.row));
+    }
+
     function refreshClanAttackPanelStatuses(panel) {
         if (!panel || !window.ClanAttackStatus || typeof window.ClanAttackStatus.buildClanAttackMemberStatus !== 'function') {
             return;
         }
+        sortClanAttackPanelRows(panel);
         const bossHp = readClanAttackPanelBossHp(panel);
         const members = collectClanAttackPanelMembers(panel);
         Array.from(panel.querySelectorAll('.clan-attack-member-row')).forEach((row, index) => {
@@ -1363,6 +1380,7 @@
                 memberRow.setAttribute('data-name', String(row.name || 'Unknown'));
                 memberRow.setAttribute('data-damage', String(Number.isFinite(damageValue) ? Math.trunc(damageValue) : 0));
                 memberRow.setAttribute('data-overattack', Number(attackData.overattack) === 1 ? '1' : '0');
+                memberRow.setAttribute('data-carry-time', Number.isInteger(carryTimeValue) ? String(carryTimeValue) : '');
                 const nameElement = memberRow.querySelector('strong');
                 const textElement = memberRow.querySelector('.clan-attack-member-row-text');
                 if (nameElement) {

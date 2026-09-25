@@ -22,6 +22,28 @@
         return Math.trunc(numeric);
     }
 
+    function toCarryTime(value) {
+        const numeric = Number(value);
+        return value !== null && value !== undefined && value !== '' && Number.isFinite(numeric) ? numeric : Infinity;
+    }
+
+    // 持ち越し→通常、持ち越し時間の短い順、ダメージの大きい順
+    function compareClanAttackMembers(left, right) {
+        const leftCarry = Number(left.overattack) === 1;
+        const rightCarry = Number(right.overattack) === 1;
+        if (leftCarry !== rightCarry) {
+            return leftCarry ? -1 : 1;
+        }
+        if (leftCarry) {
+            const leftTime = toCarryTime(left.carrytime);
+            const rightTime = toCarryTime(right.carrytime);
+            if (leftTime !== rightTime) {
+                return leftTime < rightTime ? -1 : 1;
+            }
+        }
+        return toDamage(right.damage) - toDamage(left.damage);
+    }
+
     function buildClanAttackMemberStatus(member, attackingMembers, bossHp) {
         if (!Number.isFinite(bossHp) || bossHp <= 0) {
             return '';
@@ -68,6 +90,7 @@
 
     root.ClanAttackStatus = {
         remainTime,
+        compareClanAttackMembers,
         buildClanAttackMemberStatus
     };
 })(window);

@@ -3,7 +3,35 @@ require('ts-node/register');
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { remainTime } = require('../src/utils/damagecalc');
-const { buildClanAttackMemberStatus } = require('../src/utils/attackStatus');
+const { buildClanAttackMemberStatus, sortClanAttackMembers } = require('../src/utils/attackStatus');
+
+test('attack members sort carry-over first, then shorter carry time, then larger damage', () => {
+  const member = (name, overattack, sortie, attacktime, damage) => ({
+    name, overattack, sortie, attacktime, damage
+  });
+  const members = [
+    member('通常小', 0, 1, [null, null, null], 100),
+    member('持越50', 1, 1, [50, null, null], 0),
+    member('通常大', 0, 2, [0, null, null], 900),
+    member('持越20小', 1, 2, [0, 20, null], 100),
+    member('持越20大', 1, 1, [20, null, null], 500),
+    member('通常未入力', 0, 1, [null, null, null], null)
+  ];
+
+  assert.deepEqual(
+    sortClanAttackMembers(members).map((item) => item.name),
+    ['持越20大', '持越20小', '持越50', '通常大', '通常小', '通常未入力']
+  );
+});
+
+test('attack member sort keeps original order for ties', () => {
+  const members = [
+    { name: 'A', overattack: 0, sortie: 1, attacktime: [null], damage: 300 },
+    { name: 'B', overattack: 0, sortie: 1, attacktime: [null], damage: 300 }
+  ];
+
+  assert.deepEqual(sortClanAttackMembers(members).map((item) => item.name), ['A', 'B']);
+});
 
 test('remainTime caps leftover at 90 seconds', () => {
   assert.equal(remainTime(100, 100), 20);
