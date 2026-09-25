@@ -27,20 +27,6 @@ class MessageRouter:
     async def OnReactionRemove(self, guild: discord.Guild, user: discord.User) -> None:
         raise NotImplementedError
 
-    def _get_bot_role_ids(
-        self,
-        message: discord.Message,
-        bot_user: discord.ClientUser | None,
-    ) -> set[int]:
-        if bot_user is None or message.guild is None:
-            return set()
-
-        bot_member = message.guild.get_member(bot_user.id)
-        if bot_member is None:
-            return set()
-
-        return {role.id for role in bot_member.roles}
-
     def _strip_bot_mention(
         self,
         message: discord.Message,
@@ -53,19 +39,13 @@ class MessageRouter:
         for mention in (f"<@{bot_user.id}>", f"<@!{bot_user.id}>"):
             content = content.replace(mention, "")
 
-        for role_id in self._get_bot_role_ids(message, bot_user):
-            content = content.replace(f"<@&{role_id}>", "")
-
         return content.strip()
 
     def _has_bot_mention(self, message: discord.Message, bot_user: discord.ClientUser | None) -> bool:
+        # bot を含むロールへのメンションは bot 宛てとみなさない
         if bot_user is None:
             return False
-        if bot_user.id in message.raw_mentions:
-            return True
-
-        bot_role_ids = self._get_bot_role_ids(message, bot_user)
-        return bool(bot_role_ids.intersection(message.raw_role_mentions))
+        return bot_user.id in message.raw_mentions
 
     def _is_target_message(self, message: discord.Message, bot_user: discord.ClientUser | None) -> bool:
         channel_name = getattr(message.channel, "name", None)

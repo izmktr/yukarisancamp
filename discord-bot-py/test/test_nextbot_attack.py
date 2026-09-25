@@ -917,6 +917,48 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(handled)
         clan.OnMessageDamageChannel.assert_not_awaited()
 
+    def create_mention_message(self, content: str, raw_mentions: list[int], raw_role_mentions: list[int]) -> MagicMock:
+        message = MagicMock(spec=discord.Message)
+        message.channel = MagicMock(spec=discord.TextChannel)
+        message.channel.name = "雑談"
+        message.content = content
+        message.guild = MagicMock(spec=discord.Guild)
+        message.raw_mentions = raw_mentions
+        message.raw_role_mentions = raw_role_mentions
+        return message
+
+    async def test_on_message_treats_direct_bot_mention_as_command(self) -> None:
+        clan = Clan(input_channel_name="凸報告")
+        handler = AsyncMock(return_value=False)
+        clan._ordered_funcList = [(["ping"], handler)]
+        bot_user = MagicMock(spec=discord.ClientUser)
+        bot_user.id = 999
+        message = self.create_mention_message("<@999> ping", [999], [])
+        member = MagicMock(spec=discord.Member)
+
+        await clan.on_message(message, member, bot_user)
+
+        handler.assert_awaited_once_with(message, member, "")
+
+    async def test_on_message_ignores_role_mention_containing_bot(self) -> None:
+        clan = Clan(input_channel_name="凸報告")
+        handler = AsyncMock(return_value=False)
+        clan._ordered_funcList = [(["ping"], handler)]
+        bot_user = MagicMock(spec=discord.ClientUser)
+        bot_user.id = 999
+        bot_role = MagicMock(spec=discord.Role)
+        bot_role.id = 555
+        bot_member = MagicMock(spec=discord.Member)
+        bot_member.roles = [bot_role]
+        message = self.create_mention_message("<@&555> ping", [], [555])
+        message.guild.get_member.return_value = bot_member
+        member = MagicMock(spec=discord.Member)
+
+        handled = await clan.on_message(message, member, bot_user)
+
+        self.assertFalse(handled)
+        handler.assert_not_awaited()
+
     async def test_register_guild_applies_loaded_discord_data(self) -> None:
         app = NextBotApp.__new__(NextBotApp)
         app.supabase = MagicMock()
