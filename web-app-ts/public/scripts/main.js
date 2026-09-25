@@ -157,6 +157,28 @@ function renderSettingsStatus(message, type) {
     }
 }
 
+const SETTINGS_PENDING_STATUS_KEY = 'settings:pendingStatus';
+
+// タブはサーバ側でセッションとクラン役職から描画しているため、連携状態が変わったら再読み込みする
+function reloadWithSettingsStatus(message) {
+    try {
+        sessionStorage.setItem(SETTINGS_PENDING_STATUS_KEY, message);
+    } catch (_error) {
+        // sessionStorage が使えない環境ではメッセージを諦める
+    }
+    location.reload();
+}
+
+function takePendingSettingsStatus() {
+    try {
+        const message = sessionStorage.getItem(SETTINGS_PENDING_STATUS_KEY) || '';
+        sessionStorage.removeItem(SETTINGS_PENDING_STATUS_KEY);
+        return message;
+    } catch (_error) {
+        return '';
+    }
+}
+
 function renderDiscordLinkStatus(message, type) {
     const status = document.getElementById('settings-discord-link-status');
     if (!status) {
@@ -230,7 +252,8 @@ function renderSettings(user, profile) {
     }
 
     displayNameInput.disabled = false;
-    renderSettingsStatus('', '');
+    const pendingStatus = takePendingSettingsStatus();
+    renderSettingsStatus(pendingStatus, pendingStatus ? 'success' : '');
     updateSettingsSaveButtonState();
 }
 
@@ -315,12 +338,8 @@ async function completeDiscordLink() {
             throw new Error(await getErrorMessageFromResponse(response, 'Discord連携に失敗しました。'));
         }
 
-        const payload = await response.json();
-        currentUserProfile = normalizeUserProfile(currentAuthUser, payload.profile);
-        renderAuthState(currentAuthUser, currentUserProfile);
-        renderSettings(currentAuthUser, currentUserProfile);
         dialog.close();
-        renderSettingsStatus('Discordと連携しました。', 'success');
+        reloadWithSettingsStatus('Discordと連携しました。');
     } catch (error) {
         console.error('Discord連携に失敗しました:', error);
         renderDiscordLinkStatus(error instanceof Error ? error.message : 'Discord連携に失敗しました。', 'error');
@@ -350,11 +369,7 @@ async function unlinkDiscord() {
             throw new Error(await getErrorMessageFromResponse(response, 'Discord連携の解除に失敗しました。'));
         }
 
-        const payload = await response.json();
-        currentUserProfile = normalizeUserProfile(currentAuthUser, payload.profile);
-        renderAuthState(currentAuthUser, currentUserProfile);
-        renderSettings(currentAuthUser, currentUserProfile);
-        renderSettingsStatus('Discord連携を解除しました。', 'success');
+        reloadWithSettingsStatus('Discord連携を解除しました。');
     } catch (error) {
         console.error('Discord連携の解除に失敗しました:', error);
         renderSettingsStatus(error instanceof Error ? error.message : 'Discord連携の解除に失敗しました。', 'error');
