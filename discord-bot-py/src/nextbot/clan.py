@@ -22,7 +22,7 @@ class MessageReaction():
         member: ClanMember,
         addreaction: Callable[[ClanMember, discord.RawReactionActionEvent], Awaitable[bool]],
         removereaction: Callable[[ClanMember, discord.RawReactionActionEvent], Awaitable[bool]],
-        deletereaction: Callable[[discord.RawMessageDeleteEvent], Awaitable[bool]],
+        deletereaction: Callable[[int], Awaitable[bool]],
     ) -> None:
         self.addreaction = addreaction
         self.removereaction = removereaction
@@ -488,9 +488,38 @@ class Clan(MessageRouter):
             return True
 
 
-        async def deletereaction(payload: discord.RawMessageDeleteEvent) -> bool:
-            if atmember.attackmessage is not None and atmember.attackmessage.id == payload.message_id:
-                atmember.Cancel()
+        async def deletereaction(message_id: int) -> bool:
+            self.messagereaction.pop(message_id, None)
+            if atmember.attackmessage is None or atmember.attackmessage.id != message_id:
+                return False
+            atmember.attackmessage = None
+
+            # スタンプで攻撃終了済みなら取り消す攻撃はない
+            if not atmember.IsAttack() or self.supabase is None:
+                return False
+
+            try:
+                result = await asyncio.to_thread(
+                    self.supabase.finish_clan_member_attack,
+                    atmember.id,
+                    atmember.name,
+                    atmember.mention,
+                    message_id,
+                    "cancel",
+                    0,
+                    self.clan_id,
+                )
+            except Exception as exc:
+                self.TemporaryMessage(
+                    message.channel,
+                    f'{atmember.name} の攻撃宣言が削除されましたが、攻撃のキャンセルに失敗しました: {exc}',
+                )
+                return False
+
+            apply_rpc_result(atmember, result)
+            await self.damagecontrol[boss - 1].Remove(atmember)
+            await self.damagecontrol[boss - 1].SendResult()
+            self.TemporaryMessage(message.channel, f'{atmember.name} の攻撃宣言が削除されたため、攻撃をキャンセルしました')
             return True
 
         react = MessageReaction(atmember, addreaction, removereaction, deletereaction)
@@ -1297,14 +1326,29 @@ class Clan(MessageRouter):
         reaction = self.messagereaction.get(payload.message_id)
         if member is None or reaction is None:
             return False
-        return await reaction.addreaction(member, payload)
+        handled = await reaction.addreaction(member, payload)
+        if handled and self.guild is not None:
+            await self.OnMessageHandled(self.guild)
+        return handled
 
     async def OnRawReactionRemove(self, payload: discord.RawReactionActionEvent) -> bool:
         member = self.GetMember(payload.user_id)
         reaction = self.messagereaction.get(payload.message_id)
         if member is None or reaction is None:
             return False
-        return await reaction.removereaction(member, payload)
+        handled = await reaction.removereaction(member, payload)
+        if handled and self.guild is not None:
+            await self.OnMessageHandled(self.guild)
+        return handled
+
+    async def OnAttackMessageDeleted(self, message_id: int) -> bool:
+        reaction = self.messagereaction.get(message_id)
+        if reaction is None:
+            return False
+        handled = await reaction.deletereaction(message_id)
+        if handled and self.guild is not None:
+            await self.OnMessageHandled(self.guild)
+        return handled
 
     def MinLap(self) -> int:
         if self.supabase_data is None:

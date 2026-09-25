@@ -315,6 +315,24 @@ class NextBotApp:
                 await clan.OnRawReactionAdd(payload)
 
         @self.client.event
+        async def on_raw_message_delete(payload: discord.RawMessageDeleteEvent) -> None:
+            if payload.guild_id is None:
+                return
+            clan = self._clans.get(payload.guild_id)
+            if clan is not None:
+                await clan.OnAttackMessageDeleted(payload.message_id)
+
+        @self.client.event
+        async def on_raw_bulk_message_delete(payload: discord.RawBulkMessageDeleteEvent) -> None:
+            if payload.guild_id is None:
+                return
+            clan = self._clans.get(payload.guild_id)
+            if clan is None:
+                return
+            for message_id in payload.message_ids:
+                await clan.OnAttackMessageDeleted(message_id)
+
+        @self.client.event
         async def on_raw_reaction_remove(payload: discord.RawReactionActionEvent) -> None:
             bot_user = self.client.user
             if payload.guild_id is None or (bot_user is not None and payload.user_id == bot_user.id):

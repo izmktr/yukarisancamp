@@ -263,6 +263,113 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(member.IsAttack())
         supabase.update_discord_clan_member_attack.assert_called_once()
 
+    async def test_reaction_finish_and_undo_update_status_report(self) -> None:
+        clan, member, supabase = self.create_clan()
+        clan.guild = MagicMock()
+        clan.OnMessageHandled = AsyncMock()
+        message = self.create_message()
+        member.Attack(5, 1)
+        member.attackmessage = message
+        clan.RemoveReaction = AsyncMock()
+        clan.messagereaction[message.id] = clan.CreateAttackReaction(member, message, 5, 1, 0)
+        supabase.finish_clan_member_attack.return_value = {
+            "history_id": 77,
+            "attacktime": [0, None, None],
+            "attackdata": {"day": "", "sortie": 0, "lap": 0, "boss": 0},
+            "bosslaps": [1, 1, 1, 1, 1],
+        }
+        supabase.refresh_clan_member_attacktime.return_value = [0, None, None]
+        supabase.revert_clan_member_attack.return_value = {
+            "attacktime": [None, None, None],
+            "attackdata": {"boss": 5, "sortie": 1},
+            "bosslaps": [1, 1, 1, 1, 1],
+        }
+        payload = types.SimpleNamespace(user_id=456, message_id=message.id,
+                                        emoji=types.SimpleNamespace(name=clan.emojis[0]))
+
+        self.assertTrue(await clan.OnRawReactionAdd(payload))
+        clan.OnMessageHandled.assert_awaited_once_with(clan.guild)
+
+        clan.OnMessageHandled.reset_mock()
+        self.assertTrue(await clan.OnRawReactionRemove(payload))
+        clan.OnMessageHandled.assert_awaited_once_with(clan.guild)
+
+    def create_attacking_clan(self) -> tuple[Clan, ClanMember, MagicMock, types.SimpleNamespace]:
+        clan, member, supabase = self.create_clan()
+        clan.guild = MagicMock()
+        clan.OnMessageHandled = AsyncMock()
+        clan.TemporaryMessage = MagicMock()
+        message = self.create_message()
+        member.Attack(5, 1)
+        member.attackmessage = message
+        clan.messagereaction[message.id] = clan.CreateAttackReaction(member, message, 5, 1, 0)
+        supabase.finish_clan_member_attack.return_value = {
+            "history_id": None,
+            "attacktime": [None, None, None],
+            "attackdata": {"day": "", "sortie": 0, "lap": 0, "boss": 0},
+            "bosslaps": [1, 1, 1, 1, 1],
+        }
+        return clan, member, supabase, message
+
+    async def test_deleting_attack_message_cancels_attack(self) -> None:
+        clan, member, supabase, message = self.create_attacking_clan()
+        dc = clan.damagecontrol[4]
+        dc.Damage(member, 300)
+        dc.SendResult = AsyncMock()
+
+        self.assertTrue(await clan.OnAttackMessageDeleted(message.id))
+
+        supabase.finish_clan_member_attack.assert_called_once_with(
+            "456", "old name", "<@456>", message.id, "cancel", 0, 123
+        )
+        self.assertFalse(member.IsAttack())
+        self.assertIsNone(member.attackmessage)
+        self.assertNotIn(message.id, clan.messagereaction)
+        self.assertNotIn(member, dc.members)
+        dc.SendResult.assert_awaited_once()
+        clan.OnMessageHandled.assert_awaited_once_with(clan.guild)
+
+    async def test_deleting_finished_attack_message_does_not_cancel(self) -> None:
+        clan, member, supabase, message = self.create_attacking_clan()
+        member.Finish(message.id)
+
+        self.assertFalse(await clan.OnAttackMessageDeleted(message.id))
+
+        supabase.finish_clan_member_attack.assert_not_called()
+        self.assertNotIn(message.id, clan.messagereaction)
+        clan.OnMessageHandled.assert_not_awaited()
+
+    async def test_deleting_attack_message_keeps_state_when_cancel_fails(self) -> None:
+        clan, member, supabase, message = self.create_attacking_clan()
+        supabase.finish_clan_member_attack.side_effect = RuntimeError("database error")
+
+        self.assertFalse(await clan.OnAttackMessageDeleted(message.id))
+
+        self.assertTrue(member.IsAttack())
+        self.assertIn("キャンセルに失敗しました", clan.TemporaryMessage.call_args.args[1])
+        clan.OnMessageHandled.assert_not_awaited()
+
+    async def test_deleting_unrelated_message_is_ignored(self) -> None:
+        clan, _member, supabase, _message = self.create_attacking_clan()
+
+        self.assertFalse(await clan.OnAttackMessageDeleted(999999))
+
+        supabase.finish_clan_member_attack.assert_not_called()
+
+    async def test_unrelated_reaction_does_not_update_status_report(self) -> None:
+        clan, member, _supabase = self.create_clan()
+        clan.guild = MagicMock()
+        clan.OnMessageHandled = AsyncMock()
+        message = self.create_message()
+        member.Attack(5, 1)
+        member.attackmessage = message
+        clan.messagereaction[message.id] = clan.CreateAttackReaction(member, message, 5, 1, 0)
+        payload = types.SimpleNamespace(user_id=456, message_id=message.id,
+                                        emoji=types.SimpleNamespace(name="\N{THUMBS UP SIGN}"))
+
+        self.assertFalse(await clan.OnRawReactionAdd(payload))
+        clan.OnMessageHandled.assert_not_awaited()
+
     def test_member_reload_removes_absent_members_without_replacing_dictionary(self) -> None:
         clan, member, _ = self.create_clan()
         clan.members["removed"] = ClanMember("removed")
