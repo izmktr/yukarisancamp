@@ -109,7 +109,7 @@ class Clan(MessageRouter):
                                                                 # スタンプを押したときの反応用
         self.webattackposts: dict[str, tuple[discord.Message, int, int]] = {}
                                                                 # Webから開始した攻撃の代理投稿(メッセージ, ボス, sortie)
-        self._bot_attack_starting: set[str] = set()             # botが攻撃中への更新をDBに書き込み中のメンバー
+        self._bot_attack_updating: set[str] = set()             # botが攻撃の開始・終了をDBに書き込み中のメンバー
 
         self.supabase_data: dict[str, Any] | None = None
         self.supabase_bossstate: dict[str, Any] | None = None
@@ -206,6 +206,17 @@ class Clan(MessageRouter):
         if before != self._MemberStatusSnapshot() and self.guild is not None:
             await self.OnMessageHandled(self.guild)
 
+    async def _OnRealtimeAttackEnded(self, member: ClanMember, boss: int, finished: bool) -> None:
+        if not constants.is_valid_boss(boss):
+            return
+        dc = self.damagecontrol[boss - 1]
+        if finished:
+            # 残りHPはWeb側が clan_boss_state に書き込み、そのRealtimeで反映される
+            await dc.Injure(member, reduce_hp=False)
+        else:
+            await dc.Remove(member)
+        await dc.SendResult()
+
     async def SyncWebAttackPost(self, member: ClanMember, started: bool) -> None:
         # Webから開始した攻撃は、凸報告に代理投稿し攻撃終了時に削除する
         tracked = self.webattackposts.get(member.id)
@@ -215,7 +226,7 @@ class Clan(MessageRouter):
 
         if tracked is not None or not started or not member.IsAttack():
             return
-        if member.id in self._bot_attack_starting or self.guild is None:
+        if member.id in self._bot_attack_updating or self.guild is None:
             return
         channel = self.FindChannel(self.guild, self.input_channel_name)
         if channel is None:
@@ -443,30 +454,34 @@ class Clan(MessageRouter):
                 self.RemoveStamp(payload.message_id)
                 return False
 
+            self._bot_attack_updating.add(member.id)
             try:
-                result = await asyncio.to_thread(
-                    self.supabase.finish_clan_member_attack,
-                    member.id,
-                    member.name,
-                    member.mention,
-                    payload.message_id,
-                    action,
-                    result_overtime,
-                    self.clan_id,
-                )
-            except Exception as exc:
-                self.RemoveStamp(payload.message_id)
-                error_label = '攻撃のキャンセルに失敗しました' if action == 'cancel' else '攻撃の更新に失敗しました'
-                self.TemporaryMessage(message.channel, f'{error_label}: {exc}')
-                return False
-
-            if action != "cancel":
                 try:
-                    result = await self._refresh_attacktime_after_history_insert(member, result)
+                    result = await asyncio.to_thread(
+                        self.supabase.finish_clan_member_attack,
+                        member.id,
+                        member.name,
+                        member.mention,
+                        payload.message_id,
+                        action,
+                        result_overtime,
+                        self.clan_id,
+                    )
                 except Exception as exc:
-                    print(f"attacktime の再計算に失敗しました: {exc}")
+                    self.RemoveStamp(payload.message_id)
+                    error_label = '攻撃のキャンセルに失敗しました' if action == 'cancel' else '攻撃の更新に失敗しました'
+                    self.TemporaryMessage(message.channel, f'{error_label}: {exc}')
+                    return False
 
-            apply_rpc_result(member, result)
+                if action != "cancel":
+                    try:
+                        result = await self._refresh_attacktime_after_history_insert(member, result)
+                    except Exception as exc:
+                        print(f"attacktime の再計算に失敗しました: {exc}")
+
+                apply_rpc_result(member, result)
+            finally:
+                self._bot_attack_updating.discard(member.id)
             raw_history_id = result.get("history_id")
             react.history_id = raw_history_id if isinstance(raw_history_id, int) else None
             react.selected_emoji = emoji
@@ -508,7 +523,7 @@ class Clan(MessageRouter):
             if self.supabase is None or self.clan_id is None:
                 return False
 
-            self._bot_attack_starting.add(member.id)
+            self._bot_attack_updating.add(member.id)
             try:
                 if react.action == "cancel":
                     await asyncio.to_thread(
@@ -538,7 +553,7 @@ class Clan(MessageRouter):
                 self.TemporaryMessage(message.channel, f'巻き戻しに失敗しました: {exc}')
                 return True
             finally:
-                self._bot_attack_starting.discard(member.id)
+                self._bot_attack_updating.discard(member.id)
 
             react.history_id = None
             react.selected_emoji = None
@@ -707,7 +722,7 @@ class Clan(MessageRouter):
             return False
 
         if self.supabase is not None and self.clan_id is not None:
-            self._bot_attack_starting.add(cmember.id)
+            self._bot_attack_updating.add(cmember.id)
             try:
                 await asyncio.to_thread(
                     self.supabase.update_discord_clan_member_attack,
@@ -725,7 +740,7 @@ class Clan(MessageRouter):
                 self.TemporaryMessage(message.channel, f'攻撃の開始に失敗しました: {exc}')
                 return False
             finally:
-                self._bot_attack_starting.discard(cmember.id)
+                self._bot_attack_updating.discard(cmember.id)
 
         cmember.Attack(boss, sortie)
         cmember.name = member.display_name
@@ -1590,6 +1605,12 @@ class Clan(MessageRouter):
             if member is not None:
                 started = (old_state is None or old_state[5] == -1) and member.IsAttack()
                 await self.SyncWebAttackPost(member, started)
+
+            if member is not None and old_state is not None and new_state is not None \
+                    and old_state[5] != -1 and not member.IsAttack() \
+                    and member.id not in self._bot_attack_updating:
+                # 完了・討伐は履歴が増えて attacktime が変わる。変わらなければキャンセル
+                await self._OnRealtimeAttackEnded(member, old_state[4], old_state[3] != new_state[3])
 
             if member is not None and member.IsAttack():
                 dc = self.damagecontrol[member.boss - 1]

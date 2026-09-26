@@ -665,7 +665,7 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_attack_started_by_bot_is_not_posted(self) -> None:
         clan, channel, _post = self.create_web_attack_clan()
-        clan._bot_attack_starting.add("456")
+        clan._bot_attack_updating.add("456")
 
         await clan.OnSupabaseUpdateClanMembers({}, self.web_member_row(3, 1, [None, None, None]))
 
@@ -716,6 +716,44 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(dc.active)
         dc.SendResult.assert_awaited_once()
+
+    async def start_realtime_attack_with_other_attacker(self) -> tuple[Clan, DamageControl, ClanMember]:
+        clan, _channel, _post = self.create_web_attack_clan()
+        dc = clan.damagecontrol[2]
+        dc.SendResult = AsyncMock()
+        row = self.web_member_row(3, 1, [None, None, None])
+        row["attackdata"]["damage"] = 1000
+        await clan.OnSupabaseUpdateClanMembers({}, row)
+        other = ClanMember("999")
+        other.Attack(3, 1)
+        dc.Damage(other, 500)
+        dc.SetBossHp(5000)
+        return clan, dc, clan.members["456"]
+
+    async def test_realtime_attack_complete_moves_member_to_finished(self) -> None:
+        clan, dc, member = await self.start_realtime_attack_with_other_attacker()
+
+        await clan.OnSupabaseUpdateClanMembers({}, self.web_member_row(0, 0, [0, None, None]))
+
+        self.assertEqual(dc.members[member].status, 1)
+        self.assertIn("通過済み", dc.Status())
+        self.assertEqual(dc.remainhp, 5000)
+
+    async def test_realtime_attack_cancel_removes_member_from_damage_control(self) -> None:
+        clan, dc, member = await self.start_realtime_attack_with_other_attacker()
+
+        await clan.OnSupabaseUpdateClanMembers({}, self.web_member_row(0, 0, [None, None, None]))
+
+        self.assertNotIn(member, dc.members)
+
+    async def test_realtime_attack_end_written_by_bot_is_ignored(self) -> None:
+        clan, dc, member = await self.start_realtime_attack_with_other_attacker()
+        clan._bot_attack_updating.add("456")
+
+        await clan.OnSupabaseUpdateClanMembers({}, self.web_member_row(0, 0, [0, None, None]))
+
+        self.assertEqual(dc.members[member].status, 0)
+        self.assertEqual(dc.members[member].damage, 1000)
 
     async def test_manually_deleted_web_attack_post_is_forgotten(self) -> None:
         clan, _channel, post = self.create_web_attack_clan()

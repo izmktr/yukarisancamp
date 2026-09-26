@@ -72,12 +72,13 @@ class DamageControl():
             del self.members[member]
             self.MemberSweep()
 
-    async def Injure(self, member : ClanMember):
+    async def Injure(self, member : ClanMember, reduce_hp : bool = True):
         if member in self.members:
             m = self.members[member]
-            self.remainhp -= m.damage
-            if self.remainhp < 0 : self.remainhp = 0
-            
+            if reduce_hp:
+                self.remainhp -= m.damage
+                if self.remainhp < 0 : self.remainhp = 0
+
             m.damage = 0
             m.status = 1
 
