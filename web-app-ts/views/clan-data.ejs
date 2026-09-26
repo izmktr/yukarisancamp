@@ -166,7 +166,7 @@
                       <% const memberName = memberNameMap.get(String(history.memberid || '')) || 'Unknown'; %>
                       <% const hasKnownMemberName = memberName !== 'Unknown'; %>
                       <% const optionText = history.defeat === true ? ` [討伐:${Number(history.overtime ?? 0)}]` : Number(history.overtime) > 0 ? ` [持:${Number(history.overtime)}秒]` : ' [持]'; %>
-                      <% const entryText = `${Number(history.sortie) + 1}凸 ${memberName}${optionText}`; %>
+                      <% const entryText = `${Number(history.sortie)}凸 ${memberName}${optionText}`; %>
                       <% const fadedClass = String(history.day ?? '') !== latestVisibleHistoryDate ? 'history-old-day' : ''; %>
                       <div class="bosshistory-entry <%= fadedClass %>" data-has-player-name="<%= hasKnownMemberName ? '1' : '0' %>"><%= entryText %></div>
                     <% }); %>
@@ -246,7 +246,7 @@
                         <% row.bossEntries[bossid].forEach((history) => { %>
                           <% const dayInfo = getIndexDayInfo(history.day); %>
                           <% const optionText = history.defeat === true ? ` [討伐:${Number(history.overtime ?? 0)}]` : Number(history.overtime) > 0 ? ` [持:${Number(history.overtime)}秒]` : ' [持]'; %>
-                          <% const entryText = `${dayInfo.indexDayLabel} ${Number(history.sortie) + 1}凸${optionText}`; %>
+                          <% const entryText = `${dayInfo.indexDayLabel} ${Number(history.sortie)}凸${optionText}`; %>
                           <% const fadedClass = String(history.day ?? '') !== latestVisibleHistoryDate ? 'history-old-day' : ''; %>
                           <div class="memberhistory-entry <%= fadedClass %>"><%= entryText %></div>
                         <% }); %>
