@@ -262,6 +262,73 @@
         <% } %>
       </div>
     </section>
+
+    <section class="clandata-section">
+      <div class="clandata-section-header clandata-maxdamage-header">
+        <h3>最大ダメージ</h3>
+        <button type="button" id="maxdamage-toggle-btn" class="memberhistory-toggle-btn" aria-pressed="false">表示する</button>
+      </div>
+      <div id="maxdamage-container" class="memberhistory-container">
+        <%
+          const maxDamageByMember = new Map();
+          relevantBossHistoryRows.forEach((history) => {
+            const memberId = String(history.memberid || '');
+            const damage = Number(history.damage);
+            if (!memberId || !Number.isFinite(damage) || damage <= 0) {
+              return;
+            }
+            const bossDamages = maxDamageByMember.get(memberId) || [0, 0, 0, 0, 0];
+            const bossId = getBossColumnIndex(history);
+            bossDamages[bossId] = Math.max(bossDamages[bossId], Math.trunc(damage));
+            maxDamageByMember.set(memberId, bossDamages);
+          });
+
+          const maxDamageRows = members
+            .map((member) => {
+              const memberId = String(member.memberid || '');
+              return {
+                memberName: member.name || 'Unknown',
+                bossDamages: maxDamageByMember.get(memberId) || [0, 0, 0, 0, 0]
+              };
+            })
+            .sort((left, right) => String(left.memberName || '').localeCompare(String(right.memberName || ''), 'ja'));
+        %>
+
+        <% if (maxDamageRows.length > 0) { %>
+          <div class="memberhistory-table-wrapper">
+            <table class="memberhistory-table">
+              <thead>
+                <tr>
+                  <th>メンバー</th>
+                  <th><span class="boss-name-label" data-boss-index="0">ボス1</span></th>
+                  <th><span class="boss-name-label" data-boss-index="1">ボス2</span></th>
+                  <th><span class="boss-name-label" data-boss-index="2">ボス3</span></th>
+                  <th><span class="boss-name-label" data-boss-index="3">ボス4</span></th>
+                  <th><span class="boss-name-label" data-boss-index="4">ボス5</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                <% maxDamageRows.forEach((row) => { %>
+                  <tr>
+                    <td class="memberhistory-member-cell"><%= row.memberName %></td>
+                    <% for (let bossid = 0; bossid < 5; bossid += 1) { %>
+                      <td class="memberhistory-cell" data-boss-index="<%= bossid %>">
+                        <span class="clan-mobile-boss-label boss-name-label" data-boss-index="<%= bossid %>"><%= formatBossName(bossid + 1) %></span>
+                        <% if (row.bossDamages[bossid] > 0) { %>
+                          <div class="memberhistory-entry"><%= row.bossDamages[bossid].toLocaleString('ja-JP') %></div>
+                        <% } %>
+                      </td>
+                    <% } %>
+                  </tr>
+                <% }); %>
+              </tbody>
+            </table>
+          </div>
+        <% } else { %>
+          <p class="memberhistory-empty">表示できるメンバーがいません</p>
+        <% } %>
+      </div>
+    </section>
   </div>
 </div>
 
@@ -533,9 +600,9 @@
     }
   }
 
-  function initMemberHistoryToggle() {
-    const toggleButton = document.getElementById('memberhistory-toggle-btn');
-    const historyContainer = document.getElementById('memberhistory-container');
+  function initCollapsibleSection(buttonId, containerId) {
+    const toggleButton = document.getElementById(buttonId);
+    const historyContainer = document.getElementById(containerId);
     if (!(toggleButton instanceof HTMLButtonElement) || !(historyContainer instanceof HTMLElement)) {
       return;
     }
@@ -561,7 +628,8 @@
     initBossHistoryLoopToggle();
     initBossHistoryMobileFilter();
     initMembersAttackCountToggle();
-    initMemberHistoryToggle();
+    initCollapsibleSection('memberhistory-toggle-btn', 'memberhistory-container');
+    initCollapsibleSection('maxdamage-toggle-btn', 'maxdamage-container');
   });
 </script>
 
@@ -852,7 +920,8 @@
 
     .clandata-members-header h3,
     .clandata-bosshistory-header h3,
-    .clandata-memberhistory-header h3 {
+    .clandata-memberhistory-header h3,
+    .clandata-maxdamage-header h3 {
       margin-bottom: 0;
       padding-bottom: 0;
       border-bottom: none;
@@ -866,7 +935,8 @@
 
     .clandata-members-header,
     .clandata-bosshistory-header,
-    .clandata-memberhistory-header {
+    .clandata-memberhistory-header,
+    .clandata-maxdamage-header {
       flex-direction: row;
       align-items: center;
     }

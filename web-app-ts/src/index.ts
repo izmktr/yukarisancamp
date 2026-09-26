@@ -789,6 +789,7 @@ type AttackHistoryRow = {
   attacklap: number | null;
   overtime: number;
   defeat: boolean;
+  damage?: number | null;
 };
 
 type ClanBossStateRow = {
@@ -1525,7 +1526,7 @@ async function supabaseSelectClanAttackHistories(
 
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_ATTACK_HISTORIES_TABLE);
   const query = new URLSearchParams({
-    select: 'id,day,clanid,memberid,sortie,sortiecount,boss,attacklap,overtime,defeat',
+    select: 'id,day,clanid,memberid,sortie,sortiecount,boss,attacklap,overtime,defeat,damage',
     clanid: `eq.${clanId}`,
     order: 'day.asc,sortie.asc,overtime.asc'
   });

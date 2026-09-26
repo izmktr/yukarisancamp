@@ -195,8 +195,12 @@ create table if not exists public.attack_histories (
   overtime integer not null,
   defeat boolean not null,
   sortiecount integer not null,
+  damage bigint null,
   updatetime timestamptz not null
 );
+
+alter table public.attack_histories
+  add column if not exists damage bigint null;
 
 do $$
 begin
@@ -307,6 +311,7 @@ declare
   attack_boss integer;
   attack_lap integer;
   attack_day date;
+  attack_damage bigint;
   is_carry_over boolean;
   history_id bigint;
   changed_at timestamptz := now();
@@ -369,6 +374,11 @@ begin
     when coalesce(attack_data->>'day', '') ~ '^\d{4}-\d{2}-\d{2}' then left(attack_data->>'day', 10)::date
     else target_member.day
   end;
+  attack_damage := case
+    when jsonb_typeof(attack_data->'damage') = 'number' then trunc((attack_data->>'damage')::numeric)::bigint
+    when coalesce(attack_data->>'damage', '') ~ '^\d+$' then (attack_data->>'damage')::bigint
+    else null
+  end;
   is_carry_over := (
     case
       when jsonb_typeof(attack_data->'overattack') = 'number' then trunc((attack_data->>'overattack')::numeric)::integer
@@ -404,7 +414,7 @@ begin
   if p_action <> 'cancel' then
     insert into public.attack_histories (
       clanid, memberid, day, sortie, messageid, boss, attacklap,
-      overtime, defeat, sortiecount, updatetime
+      overtime, defeat, sortiecount, damage, updatetime
     ) values (
       target_member.clanid,
       target_member.memberid,
@@ -416,6 +426,7 @@ begin
       case when p_action = 'defeat' and not is_carry_over then p_overtime else 0 end,
       p_action = 'defeat',
       case when is_carry_over then 1 when p_action = 'defeat' then 1 else 2 end,
+      attack_damage,
       changed_at
     ) returning id into history_id;
 
@@ -631,7 +642,7 @@ begin
     'lap', target_history.attacklap,
     'boss', target_history.boss,
     'overattack', restored_overattack,
-    'damage', 0,
+    'damage', coalesce(target_history.damage, 0),
     'message', target_history.messageid
   );
 
