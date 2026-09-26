@@ -2782,6 +2782,35 @@ tr[data-timing="true"] .ub-timing-hoshi {
     background: #fff9d9;
 }
 
+/* 選択中の行(コメント行があれば一緒に)を1つの水色の枠で囲む */
+.ub-table tbody tr.ub-selected > td {
+    position: relative;
+}
+
+.ub-table tbody tr.ub-selected > td::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: 0 solid #29b6f6;
+    pointer-events: none;
+}
+
+.ub-table tbody tr.ub-selected-first > td::after {
+    border-top-width: 3px;
+}
+
+.ub-table tbody tr.ub-selected-last > td::after {
+    border-bottom-width: 3px;
+}
+
+.ub-table tbody tr.ub-selected > td:first-child::after {
+    border-left-width: 3px;
+}
+
+.ub-table tbody tr.ub-selected > td:last-child::after {
+    border-right-width: 3px;
+}
+
 .ub-comment-cell {
     background: #fff9d9;
     padding: 0.35rem 0.45rem 0.55rem 0.45rem;

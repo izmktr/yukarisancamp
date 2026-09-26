@@ -40,6 +40,7 @@
             <h3>記事詳細の使い方</h3>
             <ul>
                 <li>表示切り替えは「すべて」「操作」「操作+1つ前」から選べます。操作行だけ確認したい場合は「操作」、行動の流れも見たい場合は「操作+1つ前」が便利です。</li>
+                <li>ユニオンバースト発動時間の表は、行をクリックすると水色の枠で選択できます。Spaceキーで次の操作行、Shift+Spaceキーで前の操作行に移動し、選択した行が画面中央に来るようにスクロールします。</li>
                 <li>サイズは「大 / 中 / 小」で切り替えできます。スマホで見切れる場合は「小」にすると全体を確認しやすくなります。</li>
                 <li>残り時間が90秒でない場合は、「入力時間」に秒数を入れて「変更」を押すと残り時間に合わせて時間が再計算されます。</li>
                 <li>「エクスポート」では現在の表示内容をテキスト化できます。</li>
@@ -1588,6 +1589,88 @@
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape' && partyCustomizeModal && !partyCustomizeModal.hidden) {
                 closePartyCustomizeModal();
+            }
+        });
+
+        const ubTableBody = document.querySelector('.ub-table tbody');
+        let selectedUbMainRow = null;
+
+        function getUbRowGroup(mainRow) {
+            const commentRow = mainRow.nextElementSibling;
+            return commentRow instanceof HTMLTableRowElement && commentRow.classList.contains('ub-comment-row')
+                ? [mainRow, commentRow]
+                : [mainRow];
+        }
+
+        function selectUbRow(mainRow) {
+            if (selectedUbMainRow) {
+                getUbRowGroup(selectedUbMainRow).forEach((row) => {
+                    row.classList.remove('ub-selected', 'ub-selected-first', 'ub-selected-last');
+                });
+            }
+            selectedUbMainRow = mainRow;
+            const group = getUbRowGroup(mainRow);
+            group.forEach((row) => row.classList.add('ub-selected'));
+            group[0].classList.add('ub-selected-first');
+            group[group.length - 1].classList.add('ub-selected-last');
+        }
+
+        function scrollUbRowGroupToCenter(mainRow) {
+            const group = getUbRowGroup(mainRow);
+            const top = group[0].getBoundingClientRect().top;
+            const bottom = group[group.length - 1].getBoundingClientRect().bottom;
+            window.scrollTo({
+                top: window.scrollY + (top + bottom) / 2 - window.innerHeight / 2,
+                behavior: 'smooth'
+            });
+        }
+
+        function findOperationRow(backward) {
+            if (!ubTableBody) {
+                return null;
+            }
+            const mainRows = Array.from(ubTableBody.querySelectorAll('tr:not(.ub-comment-row)'));
+            const selectedIndex = selectedUbMainRow ? mainRows.indexOf(selectedUbMainRow) : -1;
+            const candidates = backward
+                ? (selectedIndex < 0 ? [] : mainRows.slice(0, selectedIndex).reverse())
+                : mainRows.slice(selectedIndex + 1);
+            return candidates.find((row) => !row.hidden && isYellowMainRow(row)) || null;
+        }
+
+        if (ubTableBody) {
+            ubTableBody.addEventListener('click', (event) => {
+                const target = event.target;
+                const row = target instanceof Element ? target.closest('tr') : null;
+                if (!(row instanceof HTMLTableRowElement) || row.parentElement !== ubTableBody) {
+                    return;
+                }
+                const mainRow = row.classList.contains('ub-comment-row') ? row.previousElementSibling : row;
+                if (mainRow instanceof HTMLTableRowElement) {
+                    selectUbRow(mainRow);
+                }
+            });
+        }
+
+        document.addEventListener('keydown', (event) => {
+            if (event.code !== 'Space' || event.repeat || event.ctrlKey || event.altKey || event.metaKey) {
+                return;
+            }
+            const target = event.target;
+            if (target instanceof HTMLElement
+                && (target.isContentEditable || target.closest('input, textarea, select, dialog'))) {
+                return;
+            }
+            if ((exportModal instanceof HTMLElement && !exportModal.hidden)
+                || (partyCustomizeModal && !partyCustomizeModal.hidden)) {
+                return;
+            }
+
+            // ボタンにフォーカスが残っていても、再クリックやページ送りをさせない
+            event.preventDefault();
+            const nextRow = findOperationRow(event.shiftKey);
+            if (nextRow) {
+                selectUbRow(nextRow);
+                scrollUbRowGroupToCenter(nextRow);
             }
         });
 
