@@ -1,7 +1,7 @@
 <div class="page-content">
     <% if (isLoggedIn) { %>
     <textarea id="board-original-article-json" hidden><%- JSON.stringify(article || {}) %></textarea>
-    <input id="board-current-id" type="hidden" value="<%= typeof id !== 'undefined' ? id : '' %>" />
+    <input id="board-current-id" type="hidden" value="<%= typeof id !== 'undefined' ? id : '' %>" data-is-new="<%= typeof isNew !== 'undefined' && isNew ? 'true' : 'false' %>" />
     <% if (!(ubRows && ubRows.length > 0)) { %>
     <div class="board-edit-toolbar">
         <button type="button" id="board-save-button" class="btn btn-primary">保存</button>
@@ -602,7 +602,9 @@
         }
 
         function submitDiscard() {
-            window.location.href = getArticleDetailUrl();
+            // 新規投稿はまだ保存されていないので、取り込んだ uniqueId の記事は存在しない
+            const isNewArticle = currentIdInput instanceof HTMLInputElement && currentIdInput.dataset.isNew === 'true';
+            window.location.href = isNewArticle ? '/board' : getArticleDetailUrl();
         }
 
         function initializePostInfoFromArticle() {
