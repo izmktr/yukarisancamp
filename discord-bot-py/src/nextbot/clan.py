@@ -1593,9 +1593,9 @@ class Clan(MessageRouter):
 
             if member is not None and member.IsAttack():
                 dc = self.damagecontrol[member.boss - 1]
-                dc.Damage(member, member.damage, member.message)
+                dc.SetDamage(member, member.damage, member.message)
                 if member.damage > 0 or len(member.message) > 0:
-                    self.active = True
+                    dc.active = True
                     await dc.SendResult()
 
             return

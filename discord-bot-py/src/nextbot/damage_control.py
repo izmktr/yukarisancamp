@@ -57,6 +57,9 @@ class DamageControl():
 
     def Damage(self, member : ClanMember, damage : int, message : str = '', mark : int = 0):
         self.active = True
+        self.SetDamage(member, damage, message, mark)
+
+    def SetDamage(self, member : ClanMember, damage : int, message : str = '', mark : int = 0):
         self.members[member] = DamageControlMember(member, damage, message, mark)
 
     def MemberSweep(self):

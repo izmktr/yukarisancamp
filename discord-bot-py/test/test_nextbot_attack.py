@@ -682,6 +682,41 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         post.delete.assert_awaited_once()
         self.assertNotIn("456", clan.webattackposts)
 
+    async def test_realtime_update_without_damage_or_comment_keeps_damage_control_inactive(self) -> None:
+        clan, _channel, _post = self.create_web_attack_clan()
+        dc = clan.damagecontrol[2]
+        dc.SendResult = AsyncMock()
+
+        await clan.OnSupabaseUpdateClanMembers({}, self.web_member_row(3, 1, [None, None, None]))
+
+        self.assertFalse(dc.active)
+        self.assertIn(clan.members["456"], dc.members)
+        dc.SendResult.assert_not_awaited()
+
+    async def test_realtime_update_with_damage_activates_damage_control(self) -> None:
+        clan, _channel, _post = self.create_web_attack_clan()
+        dc = clan.damagecontrol[2]
+        dc.SendResult = AsyncMock()
+        row = self.web_member_row(3, 1, [None, None, None])
+        row["attackdata"]["damage"] = 1000
+
+        await clan.OnSupabaseUpdateClanMembers({}, row)
+
+        self.assertTrue(dc.active)
+        dc.SendResult.assert_awaited_once()
+
+    async def test_realtime_update_with_comment_activates_damage_control(self) -> None:
+        clan, _channel, _post = self.create_web_attack_clan()
+        dc = clan.damagecontrol[2]
+        dc.SendResult = AsyncMock()
+        row = self.web_member_row(3, 1, [None, None, None])
+        row["attackdata"]["message"] = "様子見"
+
+        await clan.OnSupabaseUpdateClanMembers({}, row)
+
+        self.assertTrue(dc.active)
+        dc.SendResult.assert_awaited_once()
+
     async def test_manually_deleted_web_attack_post_is_forgotten(self) -> None:
         clan, _channel, post = self.create_web_attack_clan()
         await clan.OnSupabaseUpdateClanMembers({}, self.web_member_row(3, 1, [None, None, None]))
