@@ -7,8 +7,12 @@
     <link rel="icon" type="image/png" href="/images/favicon.png">
     <link rel="apple-touch-icon" href="/images/favicon.png">
     <link rel="stylesheet" href="/styles/main.css">
+    <% const isClanWorkspace = ['clan', 'clan-data', 'clan-management'].includes(currentPage); %>
+    <% if (isClanWorkspace) { %>
+        <link rel="stylesheet" href="/styles/clan-pages.css">
+    <% } %>
 </head>
-<body>
+<body class="<%= isClanWorkspace ? 'clan-workspace-layout' : '' %>">
     <!-- ヘッダー -->
     <header class="header">
         <div class="header-content">

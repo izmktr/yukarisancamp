@@ -1,0 +1,224 @@
+/* Shared presentation for the three clan tabs. Scope overrides so other pages
+   and the existing attack / history visibility controls remain independent. */
+.clan-workspace-layout {
+    --clan-border: #dce3ee;
+    --clan-ink: #26334d;
+    --clan-muted: #5f6a80;
+    --clan-accent: #5268b4;
+    --clan-radius: 12px;
+    background: #f5f7fb;
+}
+
+.clan-workspace-layout .main-content { background: transparent; }
+.page-content.clan-workspace { padding: 24px 0; }
+.clan-workspace { color: var(--clan-ink); overflow-wrap: anywhere; }
+.clan-workspace .clan-page-header {
+    padding: 0 0 24px;
+    margin-bottom: 24px;
+    border-bottom: 1px solid var(--clan-border);
+}
+.clan-workspace .clan-page-eyebrow {
+    margin: 0 0 6px;
+    color: var(--clan-accent);
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+.clan-workspace .clan-page-header h2 {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    color: var(--clan-ink);
+    font-size: clamp(1.4rem, 3vw, 1.85rem);
+    line-height: 1.4;
+}
+.clan-workspace .clan-page-description {
+    margin: 8px 0 0;
+    color: var(--clan-muted);
+    font-size: 0.9rem;
+}
+.clan-workspace .clan-summary-card {
+    display: grid;
+    gap: 20px;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    box-shadow: none;
+    background: transparent;
+}
+.clan-workspace .clandata-content { gap: 20px; }
+.clan-workspace .clandata-section,
+.clan-workspace .clan-management-panel {
+    min-width: 0;
+    margin: 0;
+    padding: 24px;
+    border: 1px solid var(--clan-border);
+    border-radius: var(--clan-radius);
+    background: #fff;
+    box-shadow: 0 2px 6px rgb(38 51 77 / 3%);
+}
+.clan-workspace .clandata-section h3,
+.clan-workspace .clan-management-member-list-title {
+    margin: 0 0 16px;
+    padding: 0;
+    border: 0;
+    color: var(--clan-ink);
+    font-size: 1.05rem;
+    line-height: 1.5;
+}
+.clan-workspace .clandata-section-header,
+.clan-workspace .clan-bosscount-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+.clan-workspace .clandata-section-header h3,
+.clan-workspace .clan-bosscount-header h3 { margin: 0; }
+.clan-workspace .clan-bosscount-actions { flex-wrap: wrap; }
+.clan-workspace .clan-management-header { margin-bottom: 20px; align-items: center; }
+.clan-workspace .clan-management-summary { justify-content: flex-start; }
+.clan-workspace .clan-management-actions { margin: 0; }
+.clan-workspace .clan-management-table-wrapper {
+    border: 1px solid var(--clan-border);
+    border-radius: 8px;
+    background: #fff;
+}
+.clan-workspace table { color: var(--clan-ink); }
+.clan-workspace .clan-management-table { table-layout: fixed; }
+.clan-workspace .clan-management-table th,
+.clan-workspace .clan-management-table td { border-right: 0; }
+.clan-workspace .clan-management-table thead th {
+    background: #f6f8fb;
+    color: #3d4666;
+    font-weight: 600;
+}
+.clan-workspace .clan-management-row-actions { flex-wrap: wrap; }
+.clan-workspace .clan-management-delegation-chip { white-space: normal; }
+.clan-workspace .btn { box-shadow: none; }
+.clan-workspace .btn-primary:not(.clan-attack-complete-button) { background: #596dcc; color: #fff; }
+.clan-workspace .btn-primary:not(.clan-attack-complete-button):hover:not(:disabled) { background: #4458b4; }
+.clan-workspace .btn,
+.clan-workspace .members-show-all-btn,
+.clan-workspace .bosshistory-show-all-btn,
+.clan-workspace .bosshistory-filter-btn,
+.clan-workspace .memberhistory-toggle-btn {
+    min-height: 44px;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+.clan-workspace :is(button, input, select, a):focus-visible {
+    outline: 3px solid var(--clan-accent);
+    outline-offset: 3px;
+}
+.clan-workspace :is(input, select) { max-width: 100%; }
+.clan-workspace .bosscount-item { border-radius: 8px; box-shadow: none; }
+.clan-workspace .bosscount-item p { margin: 0; }
+.clan-workspace .clan-empty,
+.clan-workspace .memberhistory-empty { margin: 0; color: var(--clan-muted); }
+.clan-workspace .clan-attack-active-panel { border-radius: var(--clan-radius); }
+.clan-workspace .clan-attack-active-header h2 { border: 0; padding: 0; margin: 0; }
+.clan-workspace .clan-attack-active-header p { margin: 0; }
+.clan-workspace .clan-attack-message-input { min-width: 0; }
+.clan-workspace .clan-mobile-boss-label { display: none; }
+.clan-workspace .clan-management-modal-dialog {
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+    border-radius: var(--clan-radius);
+}
+.clan-workspace .clan-management-modal-header { flex-wrap: wrap; }
+.clan-workspace .clan-management-modal-close { width: 44px; height: 44px; }
+
+@media (max-width: 768px) {
+    .clan-workspace-layout .header-content { padding-inline: 16px; gap: 8px; }
+    .clan-workspace-layout .header-right { min-width: 0; max-width: 100%; }
+    .clan-workspace-layout .auth-buttons { flex-wrap: wrap; justify-content: center; }
+    .clan-workspace-layout .user-name { overflow-wrap: anywhere; }
+    .clan-workspace-layout .tab-content { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding-inline: 8px; }
+    .clan-workspace-layout .tab { min-height: 44px; display: flex; align-items: center; justify-content: center; }
+    .clan-workspace-layout .main-content { padding: 0 12px 24px; }
+    .page-content.clan-workspace { padding: 20px 0; }
+    .clan-workspace .clan-page-header { padding-bottom: 20px; margin-bottom: 20px; }
+    .clan-workspace .clandata-section,
+    .clan-workspace .clan-management-panel { padding: 16px; }
+    .clan-workspace .clan-summary-card,
+    .clan-workspace .clandata-content { gap: 16px; }
+    .clan-workspace :is(input:not([type="checkbox"]):not([type="hidden"]), select) { font-size: 16px; }
+    .clan-workspace .members-table td { grid-template-columns: 60px minmax(0, 1fr); }
+    .clan-workspace .member-name-content { min-width: 0; }
+    .clan-workspace .clan-management-table-wrapper { border: 0; border-radius: 0; }
+    .clan-workspace .clan-management-table,
+    .clan-workspace .clan-management-table tbody,
+    .clan-workspace .clan-management-table tr,
+    .clan-workspace .clan-management-table td { display: block; width: 100%; }
+    .clan-workspace .clan-management-table thead { display: none; }
+    .clan-workspace .clan-management-table tbody tr {
+        margin-bottom: 12px;
+        border: 1px solid var(--clan-border);
+        border-radius: 10px;
+        background: #f9fcff;
+        overflow: hidden;
+    }
+    .clan-workspace .clan-management-table tbody tr:last-child { margin-bottom: 0; }
+    .clan-workspace .clan-management-table td[data-label] {
+        display: grid;
+        grid-template-columns: 44px minmax(0, 1fr);
+        gap: 8px;
+        padding: 12px;
+    }
+    .clan-workspace .clan-management-table td + td { border-top: 1px solid var(--clan-border); }
+    .clan-workspace .clan-management-table td[data-label]::before {
+        content: attr(data-label);
+        color: var(--clan-muted);
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+    .clan-workspace .clan-management-role-cell { min-width: 0; }
+    .clan-workspace .clan-management-row-actions { gap: 8px; }
+    .clan-workspace .clan-start-attack-table,
+    .clan-workspace .clan-start-attack-table tbody { display: block; min-width: 0; width: 100%; }
+    .clan-workspace .clan-start-attack-table thead { display: none; }
+    .clan-workspace .clan-start-attack-table tbody tr {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        padding-bottom: 16px;
+    }
+    .clan-workspace .clan-start-attack-table tbody tr:last-child { padding-bottom: 0; }
+    .clan-workspace .clan-start-attack-table td {
+        display: block;
+        padding: 10px;
+        border: 1px solid var(--clan-border);
+        border-radius: 8px;
+        text-align: center;
+    }
+    .clan-workspace .clan-start-attack-table .clan-operate-panel-label {
+        grid-column: 1 / -1;
+        border: 0;
+        padding: 0;
+        text-align: left;
+    }
+    .clan-workspace .clan-mobile-boss-label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: var(--clan-muted);
+    }
+    .clan-workspace .memberhistory-table,
+    .clan-workspace .memberhistory-table tbody,
+    .clan-workspace .memberhistory-table tr,
+    .clan-workspace .memberhistory-table td { display: block; width: 100%; min-width: 0; }
+    .clan-workspace .memberhistory-table thead { display: none; }
+    .clan-workspace .memberhistory-table tr { border: 1px solid var(--clan-border); border-radius: 10px; margin-bottom: 12px; }
+    .clan-workspace .memberhistory-member-cell { background: #f6f8fb; }
+    .clan-workspace .memberhistory-table td:last-child { border-bottom: 0; }
+    /* Editing needs room for lap, boss and carry-over fields. Scroll only the
+       history table, never the entire page. */
+    .clan-workspace .clan-attack-history-table { min-width: 640px; }
+    .clan-workspace .clan-history-state-editor { grid-template-columns: minmax(0, 1fr) auto; }
+    .clan-workspace .clan-history-defeat-input { grid-column: 1 / -1; }
+    .clan-workspace .clan-defeat-buttons { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); width: 100%; }
+    .clan-workspace .clan-defeat-buttons > .btn { min-width: 0; padding-inline: 4px; }
+}

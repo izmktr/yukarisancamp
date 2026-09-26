@@ -1,6 +1,6 @@
-<div class="page-content clan-page" id="clan-page" data-base-date="<%= clanPageData && clanPageData.baseDate ? clanPageData.baseDate : '' %>">
+<div class="page-content clan-page clan-workspace" id="clan-page" data-base-date="<%= clanPageData && clanPageData.baseDate ? clanPageData.baseDate : '' %>">
     <% const data = clanPageData || { discordServer: '', clan: null, members: [], currentMember: null, operableMembers: [], attackHistories: [], bossNames: [], bossHp: [], baseDate: '', refreshToken: 'none:0', loadError: '' }; %>
-    <h2><%= data.clan && data.clan.name ? data.clan.name : '未登録' %></h2>
+    <%- include('partials/clan-page-header', { pageLabel: 'クラン', clanName: data.clan && data.clan.name ? data.clan.name : '未登録', description: 'ボスの進行状況を確認し、攻撃を記録します。' }) %>
     <%
         const allMembers = Array.isArray(data.members) ? data.members : [];
         const operableMembers = Array.isArray(data.operableMembers) ? data.operableMembers : [];
@@ -253,6 +253,7 @@
                                             <% } %>
                                             <% laps.forEach((count, idx) => { %>
                                                 <td class="clan-start-attack-boss-cell">
+                                                    <span class="clan-mobile-boss-label boss-name-label" data-boss-index="<%= idx %>">ボス <%= idx + 1 %></span>
                                                     <% if (memberCanStartAttack) { %>
                                                         <button
                                                             type="button"

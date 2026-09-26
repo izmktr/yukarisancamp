@@ -1,9 +1,9 @@
-<div class="page-content clan-management-page">
+<div class="page-content clan-management-page clan-workspace">
   <% const data = clanManagementData || { clan: null, members: [], loadError: '' }; %>
+  <%- include('partials/clan-page-header', { pageLabel: '管理', clanName: data.clan && data.clan.name ? data.clan.name : '未登録', description: 'メンバーの追加・役職変更・代理設定を行います。' }) %>
   <% if (data.loadError) { %>
     <div class="settings-firebase-error"><%= data.loadError %></div>
   <% } else { %>
-    <% const clanName = data.clan && typeof data.clan.name === 'string' && data.clan.name.trim().length > 0 ? data.clan.name.trim() : '未登録'; %>
     <% const members = Array.isArray(data.members) ? [...data.members] : []; %>
     <% const leaderCount = members.filter((member) => member.role === 'leader').length; %>
     <% const officerCount = members.filter((member) => member.role === 'officer').length; %>
@@ -64,23 +64,17 @@
 
     <section class="clan-management-panel">
       <div class="clan-management-header">
-        <div>
-          <p class="clan-management-eyebrow">クラン管理</p>
-          <h2 class="clan-management-clan-name"><%= clanName %></h2>
-          <p class="clan-management-description">メンバーの役職確認と削除を行います。</p>
-        </div>
         <div class="clan-management-summary">
-          <span class="clan-management-summary-chip"><strong><%= memberCount %></strong> members</span>
-          <span class="clan-management-summary-chip is-leader"><strong><%= leaderCount %></strong> master</span>
-          <span class="clan-management-summary-chip is-officer"><strong><%= officerCount %></strong> sub</span>
+          <span class="clan-management-summary-chip">メンバー <strong><%= memberCount %></strong>人</span>
+          <span class="clan-management-summary-chip is-leader">マスター <strong><%= leaderCount %></strong>人</span>
+          <span class="clan-management-summary-chip is-officer">サブマスター <strong><%= officerCount %></strong>人</span>
         </div>
-      </div>
-
-      <div class="clan-management-actions">
-        <form method="post" action="/clan-management/members/add" id="clan-management-add-form" class="clan-management-add-form">
-          <input type="hidden" name="name" id="clan-management-add-name" />
-          <button type="button" id="clan-management-add-button" class="btn btn-primary clan-management-add-button">メンバー追加</button>
-        </form>
+        <div class="clan-management-actions">
+          <form method="post" action="/clan-management/members/add" id="clan-management-add-form" class="clan-management-add-form">
+            <input type="hidden" name="name" id="clan-management-add-name" />
+            <button type="button" id="clan-management-add-button" class="btn btn-primary clan-management-add-button">メンバー追加</button>
+          </form>
+        </div>
       </div>
 
       <div class="clan-management-modal" id="clan-management-modal" aria-hidden="true">
@@ -143,8 +137,8 @@
               <% const principalNames = sortJaNames(principalNamesByAgentId.get(member.memberid) || []); %>
               <% const sourceLabel = String(member.memberid || '').startsWith('w') ? 'web' : 'discord'; %>
               <tr>
-                <td class="clan-management-name-cell"><%= member.name || 'Unknown' %></td>
-                <td>
+                <td class="clan-management-name-cell" data-label="名前"><%= member.name || 'Unknown' %></td>
+                <td data-label="役職">
                   <div class="clan-management-role-cell">
                     <div class="clan-management-role-badges">
                       <span class="clan-management-role-badge <%= roleBadgeClass %>"><%= roleLabel(member.role) || 'メンバー' %></span>
@@ -162,7 +156,7 @@
                     <% } %>
                   </div>
                 </td>
-                <td>
+                <td data-label="操作">
                   <div class="clan-management-row-actions">
                     <button type="button" class="btn clan-management-delegate-button" data-member-id="<%= member.memberid %>">代理</button>
                     <% if (member.role !== 'leader' && sourceLabel !== 'web') { %>
@@ -182,6 +176,9 @@
                 </td>
               </tr>
             <% }); %>
+            <% if (members.length === 0) { %>
+              <tr><td colspan="3">メンバーはまだ登録されていません。</td></tr>
+            <% } %>
           </tbody>
         </table>
       </div>
@@ -209,26 +206,6 @@
     align-items: flex-start;
     margin-bottom: 1.25rem;
     flex-wrap: wrap;
-  }
-
-  .clan-management-eyebrow {
-    margin: 0 0 0.35rem;
-    color: #64748b;
-    font-size: 0.82rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-  }
-
-  .clan-management-clan-name {
-    margin: 0;
-    font-size: clamp(1.4rem, 2vw, 2rem);
-    line-height: 1.2;
-    color: #0f172a;
-  }
-
-  .clan-management-description {
-    margin: 0.45rem 0 0;
-    color: #64748b;
   }
 
   .clan-management-summary {
