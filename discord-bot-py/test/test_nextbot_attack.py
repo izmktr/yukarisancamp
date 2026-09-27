@@ -591,6 +591,35 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
 
         supabase.update_clan_boss_state_current_hp.assert_not_called()
 
+    async def test_complete_reaction_saves_reduced_boss_hp(self) -> None:
+        clan, member, supabase = self.create_clan()
+        clan.clanbattle_setting = {"yearmonth": "202609", "bossHp": [100, 200, 300, 400, 500]}
+        clan.damagecontrol[4].SetBossHp(500)
+        clan.damagecontrol[4].Damage(member, 120)
+        message = self.create_message()
+        member.Attack(5, 1)
+        member.attackmessage = message
+        supabase.finish_clan_member_attack.return_value = {
+            "history_id": 77,
+            "attacktime": [None, None, None],
+            "attackdata": {"day": "", "sortie": 0, "lap": 0, "boss": 0},
+            "bosslaps": [1, 1, 1, 1, 1],
+        }
+        supabase.refresh_clan_member_attacktime.return_value = [None, None, None]
+        clan.RemoveReaction = AsyncMock()
+        reaction = clan.CreateAttackReaction(member, message, 5, 1, 0)
+        payload = types.SimpleNamespace(
+            message_id=message.id,
+            emoji=types.SimpleNamespace(name=clan.emojis[0]),
+        )
+
+        self.assertTrue(await reaction.addreaction(member, payload))
+
+        self.assertEqual(clan.damagecontrol[4].remainhp, 380)
+        supabase.update_clan_boss_state_current_hp.assert_called_once_with(
+            123, "202609", 5, 380, 500, "old name"
+        )
+
     async def test_defeat_command_resets_boss_hp_to_max(self) -> None:
         clan, _member, supabase = self.create_clan()
         clan.clanbattle_setting = {"yearmonth": "202609", "bossHp": [100, 200, 300, 400, 500]}
@@ -690,7 +719,7 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         await clan.OnSupabaseUpdateClanMembers({}, self.web_member_row(3, 1, [None, None, None]))
 
         self.assertFalse(dc.active)
-        self.assertIn(clan.members["456"], dc.members)
+        self.assertNotIn(clan.members["456"], dc.members)
         dc.SendResult.assert_not_awaited()
 
     async def test_realtime_update_with_damage_activates_damage_control(self) -> None:
@@ -716,6 +745,66 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(dc.active)
         dc.SendResult.assert_awaited_once()
+
+    async def test_x_damage_input_saves_skull_in_comment(self) -> None:
+        clan, member, _supabase = self.create_clan()
+        member.Attack(3, 1)
+        channel = object()
+        dc = clan.damagecontrol[2]
+        dc.SetChannel(cast(discord.TextChannel, channel))
+
+        for content, damage, comment in [("x", 0, "\u2620"), ("x500 遅れます", 500, "\u2620遅れます")]:
+            message = types.SimpleNamespace(content=content, channel=channel)
+            result = await clan.DamageChannelMessage(cast(discord.Message, message), cast(discord.Member, self.create_discord_member()))
+
+            self.assertIs(result, dc)
+            self.assertEqual(dc.members[member].damage, damage)
+            self.assertEqual(dc.members[member].message, comment)
+
+    async def test_skull_comments_survive_realtime_echo_for_multiple_members(self) -> None:
+        clan, _channel, _post = self.create_web_attack_clan()
+        dc = clan.damagecontrol[2]
+        dc.SendResult = AsyncMock()
+        dc.SetBossHp(5000)
+        other = ClanMember("999")
+        other.name = "きりたん"
+        other.Attack(3, 1)
+        clan.members[other.id] = other
+        dc.Damage(other, 0, "\u2620")
+        row = self.web_member_row(3, 1, [None, None, None])
+        row["attackdata"]["damage"] = 0
+        row["attackdata"]["message"] = "\u2620"
+
+        await clan.OnSupabaseUpdateClanMembers({}, row)
+
+        status = dc.Status()
+        self.assertIn("ゆかり", status)
+        self.assertEqual(status.count("\u2620"), 2)
+
+    async def test_realtime_attack_without_report_stays_unreported(self) -> None:
+        clan, _channel, _post = self.create_web_attack_clan()
+        dc = clan.damagecontrol[2]
+        dc.SendResult = AsyncMock()
+        dc.SetBossHp(5000)
+        other = ClanMember("999")
+        other.name = "きりたん"
+        other.Attack(3, 1)
+        clan.members[other.id] = other
+        dc.Damage(other, 500)
+
+        await clan.OnSupabaseUpdateClanMembers({}, self.web_member_row(3, 1, [None, None, None]))
+
+        member = clan.members["456"]
+        self.assertNotIn(member, dc.members)
+        self.assertIn("未報告 ゆかり", dc.Status())
+
+    async def test_realtime_cleared_report_returns_member_to_unreported(self) -> None:
+        clan, dc, member = await self.start_realtime_attack_with_other_attacker()
+
+        await clan.OnSupabaseUpdateClanMembers({}, self.web_member_row(3, 1, [None, None, None]))
+
+        self.assertNotIn(member, dc.members)
+        self.assertIn("未報告", dc.Status())
 
     async def start_realtime_attack_with_other_attacker(self) -> tuple[Clan, DamageControl, ClanMember]:
         clan, _channel, _post = self.create_web_attack_clan()

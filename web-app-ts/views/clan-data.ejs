@@ -12,6 +12,7 @@
   <% const getBossColumnIndex = (history) => { const bossNumber = Number(history.boss); if (!Number.isFinite(bossNumber)) { return 0; } return Math.max(0, bossNumber - 1); }; %>
   <% const getHistoryLoopNumber = (history) => { const lapValue = Number(history.attacklap); if (!Number.isFinite(lapValue)) { return 1; } return Math.max(1, lapValue); }; %>
   <% const formatHistoryText = (history) => { const sortie = Number(history.sortie); const attackLap = Number(history.attacklap); const overtime = Number(history.overtime || 0); const isDefeat = history.defeat === true; const sortieCount = Number(history.sortiecount ?? (isDefeat ? 1 : 2)); const bossName = formatBossName(history.boss); const baseText = `${sortie}凸 ${Number.isFinite(attackLap) ? attackLap : 0}周 ${bossName}`; if (sortieCount === 2) return baseText; if (sortieCount === 1 && overtime > 0) return `${baseText} 討伐:${overtime}秒`; if (sortieCount === 1 && overtime === 0 && isDefeat) return `${baseText} 持討伐:0秒`; return `${baseText} 持`; }; %>
+  <% const formatHistoryOptionText = (history) => { if (history.defeat === true) return ` [討伐:${Number(history.overtime ?? 0)}]`; if (Number(history.sortiecount) !== 1) return ''; return Number(history.overtime) > 0 ? ` [持:${Number(history.overtime)}秒]` : ' [持]'; }; %>
   <% const getIndexDayInfo = (dayValue) => { const day = String(dayValue ?? ''); if (!day) return { indexDay: 'x', indexDayLabel: 'x日目', value: Number.MAX_SAFE_INTEGER }; if (clanBattleStartDate && clanBattleEndDate && day >= clanBattleStartDate && day <= clanBattleEndDate) { const start = new Date(`${clanBattleStartDate}T00:00:00`); const current = new Date(`${day}T00:00:00`); const diffDays = Math.round((current.getTime() - start.getTime()) / 86400000); const indexDay = diffDays + 1; return { indexDay: String(indexDay), indexDayLabel: `${indexDay}日目`, value: indexDay }; } return { indexDay: 'x', indexDayLabel: 'x日目', value: Number.MAX_SAFE_INTEGER }; }; %>
   <% const normalizeBossHistoryRow = (history) => { const day = String(history.day ?? ''); const indexInfo = getIndexDayInfo(day); return { ...history, day, indexDay: indexInfo.indexDay, indexDayLabel: indexInfo.indexDayLabel, indexDayValue: indexInfo.value, isCurrentDay: day === currentDate }; }; %>
   <% const memberHistoryMap = new Map(); %>
@@ -165,7 +166,7 @@
                     <% cellItems.forEach((history) => { %>
                       <% const memberName = memberNameMap.get(String(history.memberid || '')) || 'Unknown'; %>
                       <% const hasKnownMemberName = memberName !== 'Unknown'; %>
-                      <% const optionText = history.defeat === true ? ` [討伐:${Number(history.overtime ?? 0)}]` : Number(history.overtime) > 0 ? ` [持:${Number(history.overtime)}秒]` : ' [持]'; %>
+                      <% const optionText = formatHistoryOptionText(history); %>
                       <% const entryText = `${Number(history.sortie)}凸 ${memberName}${optionText}`; %>
                       <% const fadedClass = String(history.day ?? '') !== latestVisibleHistoryDate ? 'history-old-day' : ''; %>
                       <div class="bosshistory-entry <%= fadedClass %>" data-has-player-name="<%= hasKnownMemberName ? '1' : '0' %>"><%= entryText %></div>
@@ -245,7 +246,7 @@
                         <span class="clan-mobile-boss-label boss-name-label" data-boss-index="<%= bossid %>"><%= formatBossName(bossid + 1) %></span>
                         <% row.bossEntries[bossid].forEach((history) => { %>
                           <% const dayInfo = getIndexDayInfo(history.day); %>
-                          <% const optionText = history.defeat === true ? ` [討伐:${Number(history.overtime ?? 0)}]` : Number(history.overtime) > 0 ? ` [持:${Number(history.overtime)}秒]` : ' [持]'; %>
+                          <% const optionText = formatHistoryOptionText(history); %>
                           <% const entryText = `${dayInfo.indexDayLabel} ${Number(history.sortie)}凸${optionText}`; %>
                           <% const fadedClass = String(history.day ?? '') !== latestVisibleHistoryDate ? 'history-old-day' : ''; %>
                           <div class="memberhistory-entry <%= fadedClass %>"><%= entryText %></div>

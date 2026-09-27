@@ -1321,6 +1321,10 @@ function normalizeAttackHistoryRow(raw: unknown): AttackHistoryRow | null {
     return null;
   }
 
+  const damageNumber = source.damage === null || source.damage === undefined || source.damage === ''
+    ? null
+    : Number(source.damage);
+
   return {
     id: Math.trunc(id),
     day: dayValue,
@@ -1331,7 +1335,8 @@ function normalizeAttackHistoryRow(raw: unknown): AttackHistoryRow | null {
     boss: Math.trunc(boss),
     attacklap: attacklap === null ? null : Math.trunc(attacklap),
     overtime: Math.trunc(overtime),
-    defeat: source.defeat
+    defeat: source.defeat,
+    damage: damageNumber !== null && Number.isFinite(damageNumber) ? Math.trunc(damageNumber) : null
   };
 }
 
