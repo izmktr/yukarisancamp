@@ -1064,6 +1064,73 @@ body {
     color: #253d84;
 }
 
+.board-article-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+.board-article-menu {
+    position: relative;
+}
+
+.board-article-menu-button {
+    min-width: 44px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+}
+
+.board-article-menu-list {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: 100;
+    min-width: 10rem;
+    padding: 0.3rem;
+    background: #ffffff;
+    border: 1px solid #d8e0f2;
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(20, 32, 66, 0.18);
+}
+
+.board-article-menu-list[hidden] {
+    display: none;
+}
+
+.board-article-menu-list form {
+    margin: 0;
+}
+
+.board-article-menu-item {
+    display: block;
+    width: 100%;
+    padding: 0.55rem 0.8rem;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: #2f3b62;
+    font: inherit;
+    font-size: 0.92rem;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.board-article-menu-item:hover,
+.board-article-menu-item:focus-visible {
+    background: #eef3ff;
+}
+
+.board-article-menu-item.is-danger {
+    color: #c62828;
+}
+
+.board-article-menu-item.is-danger:hover,
+.board-article-menu-item.is-danger:focus-visible {
+    background: #fdecea;
+}
+
 .board-help-panel {
     margin: 0 0 1rem 0;
     padding: 0.85rem 1rem;
@@ -1967,6 +2034,52 @@ body {
 
 .ub-table-wrapper.ub-icon-size-small {
     --ub-icon-scale: 0.44;
+}
+
+.ub-format-tabs {
+    display: flex;
+    gap: 2px;
+    margin-top: 0.6rem;
+    border-bottom: 2px solid #667eea;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.ub-format-tab {
+    flex-shrink: 0;
+    padding: 0.5rem 1.1rem;
+    border: 1px solid #d8e0f2;
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    background: #f7f9ff;
+    color: #4a5783;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.ub-format-tab.is-active {
+    background: #667eea;
+    border-color: #667eea;
+    color: #ffffff;
+}
+
+[data-ub-formats][hidden] {
+    display: none !important;
+}
+
+.ub-text-view {
+    margin: 0.75rem 0 0;
+    padding: 0.8rem 1rem;
+    border: 1px solid #d8e0f2;
+    border-radius: 10px;
+    background: #f7f9ff;
+    color: #26334d;
+    font-family: inherit;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
 }
 
 .ub-toolbar {
@@ -3239,8 +3352,12 @@ tr[data-timing="true"] .ub-timing-hoshi {
         gap: 0.6rem;
     }
 
-    .board-help-toggle-btn {
+    .board-article-actions {
         width: 100%;
+    }
+
+    .board-help-toggle-btn {
+        flex: 1;
     }
 
     .board-export-modal-dialog {

@@ -34,15 +34,36 @@
         </p>
         <div class="board-page-title-row">
             <h2><%= article.postTitle || '記事詳細' %></h2>
-            <button id="board-help-toggle" type="button" class="btn board-help-toggle-btn" aria-controls="board-help-panel" aria-expanded="false">使い方</button>
+            <div class="board-article-actions">
+                <button id="board-help-toggle" type="button" class="btn board-help-toggle-btn" aria-controls="board-help-panel" aria-expanded="false">使い方</button>
+                <% if (canEdit) { %>
+                    <a href="/board/<%= id %>/edit" class="btn btn-primary">編集</a>
+                <% } %>
+                <div class="board-article-menu">
+                    <button type="button" id="board-article-menu-button" class="btn board-article-menu-button" aria-haspopup="menu" aria-expanded="false" aria-controls="board-article-menu-list" aria-label="その他の操作">⋯</button>
+                    <div id="board-article-menu-list" class="board-article-menu-list" role="menu" hidden>
+                        <a href="/board/<%= id %>/diff" class="board-article-menu-item" role="menuitem">差分</a>
+                        <% if (ubRows && ubRows.length > 0) { %>
+                            <button type="button" id="board-export-open-button" class="board-article-menu-item" role="menuitem">エクスポート</button>
+                        <% } %>
+                        <% if (canEdit) { %>
+                            <form method="post" action="/board/<%= id %>/delete" onsubmit="return confirm('この記事を削除します。よろしいですか？');">
+                                <button type="submit" class="board-article-menu-item is-danger" role="menuitem">削除</button>
+                            </form>
+                        <% } %>
+                    </div>
+                </div>
+            </div>
         </div>
         <section id="board-help-panel" class="board-help-panel" hidden>
             <h3>記事詳細の使い方</h3>
             <ul>
+                <li>ユニオンバースト発動時間は「表」「テキスト」のタブで表示形式を切り替えできます。テキストは表示切り替えと残り時間を反映し、「コピー」でクリップボードにコピーできます。</li>
                 <li>表示切り替えは「すべて」「操作」「操作+1つ前」から選べます。操作行だけ確認したい場合は「操作」、行動の流れも見たい場合は「操作+1つ前」が便利です。</li>
                 <li>ユニオンバースト発動時間の表は、行をクリックすると水色の枠で選択できます。Spaceキーで次の操作行、Shift+Spaceキーで前の操作行に移動し、選択した行が画面中央に来るようにスクロールします。</li>
                 <li>サイズは「大 / 中 / 小」で切り替えできます。スマホで見切れる場合は「小」にすると全体を確認しやすくなります。</li>
                 <li>残り時間が90秒でない場合は、「入力時間」に秒数を入れて「変更」を押すと残り時間に合わせて時間が再計算されます。</li>
+                <li>タイトル右の「⋯」から「差分」「エクスポート」「削除」を選べます。</li>
                 <li>「エクスポート」では現在の表示内容をテキスト化できます。</li>
                 <li>「差分」では別のTLとの差分確認ができます。どこでずれているかを調べる事ができます。</li>
                 <li>「カスタム」で編成キャラの表示名変更と所持チェックができます。ログインしていれば、内容を保存します。</li>
@@ -133,39 +154,37 @@
         <% if (ubRows && ubRows.length > 0) { %>
             <% const partySlots = (partyMembers && partyMembers.length > 0) ? partyMembers.slice().reverse() : []; %>
             <% const DETAIL_COMMENT_COLSPAN = 7; %>
+            <div class="ub-format-tabs" role="tablist" aria-label="表示形式">
+                <button type="button" class="ub-format-tab is-active" role="tab" aria-selected="true" data-ub-format="table">表</button>
+                <button type="button" class="ub-format-tab" role="tab" aria-selected="false" data-ub-format="text">テキスト</button>
+            </div>
             <div class="ub-toolbar">
                 <div class="ub-toolbar-main">
                     <div class="ub-control-panel">
-                        <div class="ub-display-toggle" role="group" aria-label="表示切り替え">
+                        <div class="ub-display-toggle" role="group" aria-label="表示切り替え" data-ub-formats="table text">
                             <button type="button" class="ub-display-toggle-btn is-active" data-display-mode="all">すべて</button>
                             <button type="button" class="ub-display-toggle-btn" data-display-mode="operation">操作</button>
                             <button type="button" class="ub-display-toggle-btn" data-display-mode="operation-plus-prev">操作+1つ前</button>
                         </div>
-                        <div class="ub-size-toggle" role="group" aria-label="サイズ">
+                        <div class="ub-size-toggle" role="group" aria-label="サイズ" data-ub-formats="table">
                             <span class="ub-size-toggle-label">サイズ</span>
                             <button type="button" class="ub-size-toggle-btn is-active" data-icon-size="large">大</button>
                             <button type="button" class="ub-size-toggle-btn" data-icon-size="medium">中</button>
                             <button type="button" class="ub-size-toggle-btn" data-icon-size="small">小</button>
                         </div>
-                        <div class="ub-time-adjust" role="group" aria-label="残り時間の調整">
+                        <div class="ub-time-adjust" role="group" aria-label="残り時間の調整" data-ub-formats="table text">
                             <span class="ub-time-adjust-label">残り時間</span>
                             <input type="text" id="ub-time-adjust-input" class="ub-time-adjust-input" inputmode="numeric" value="<%= battleTimeSeconds > 0 ? battleTimeSeconds : '' %>" data-battle-time="<%= battleTimeSeconds %>" aria-label="入力時間" />
                             <button type="button" id="ub-time-adjust-button" class="ub-time-adjust-button">変更</button>
                         </div>
                     </div>
                 </div>
-                <div class="ub-toolbar-actions">
-                    <button type="button" id="board-export-open-button" class="btn">エクスポート</button>
-                    <button type="button" class="btn" onclick="location.href='/board/<%= id %>/diff'">差分</button>
-                    <% if (canEdit) { %>
-                    <a href="/board/<%= id %>/edit" class="btn btn-primary">編集</a>
-                    <form method="post" action="/board/<%= id %>/delete" onsubmit="return confirm('この記事を削除します。よろしいですか？');">
-                        <button type="submit" class="btn btn-danger">削除</button>
-                    </form>
-                    <% } %>
+                <div class="ub-toolbar-actions" data-ub-formats="text">
+                    <button type="button" id="ub-text-copy-button" class="btn">コピー</button>
                 </div>
             </div>
-            <div class="ub-table-wrapper">
+            <pre id="ub-text-view" class="ub-text-view" data-ub-formats="text" hidden></pre>
+            <div class="ub-table-wrapper" data-ub-formats="table">
                 <table class="ub-table">
                     <thead>
                         <tr>
@@ -309,6 +328,14 @@
         const EXPORT_OPTION_UPPERCASE_SWITCH_KEY = 'boardExportUppercaseSwitch';
         const BOARD_DISPLAY_MODE_COOKIE_KEY = 'boardDetailDisplayMode';
         const BOARD_ICON_SIZE_COOKIE_KEY = 'boardDetailIconSize';
+        const BOARD_UB_FORMAT_COOKIE_KEY = 'boardDetailUbFormat';
+        const UB_FORMAT_TABLE = 'table';
+        const UB_FORMAT_TEXT = 'text';
+        let currentUbFormat = UB_FORMAT_TABLE;
+        const ubTextView = document.getElementById('ub-text-view');
+        const ubTextCopyButton = document.getElementById('ub-text-copy-button');
+        const articleMenuButton = document.getElementById('board-article-menu-button');
+        const articleMenuList = document.getElementById('board-article-menu-list');
         let currentBattleTimeSeconds = 0;
         let currentInputSeconds = 0;
         let currentIconSize = ICON_SIZE_LARGE;
@@ -867,6 +894,7 @@
                 exportShowOnOffOption.addEventListener('change', () => {
                     setCookieValue(EXPORT_OPTION_SHOW_ONOFF_KEY, exportShowOnOffOption.checked ? '1' : '0');
                     refreshExportText();
+                    refreshUbTextView();
                 });
             }
 
@@ -875,6 +903,7 @@
                 exportUppercaseSwitchOption.addEventListener('change', () => {
                     setCookieValue(EXPORT_OPTION_UPPERCASE_SWITCH_KEY, exportUppercaseSwitchOption.checked ? '1' : '0');
                     refreshExportText();
+                    refreshUbTextView();
                 });
             }
         }
@@ -992,7 +1021,8 @@
 
             visibleRows.forEach((row) => {
                 const timeText = getRenderedTimeText(row);
-                const ubText = getDecodedUbText(row);
+                const decodedUbText = getDecodedUbText(row);
+                const ubText = row.dataset.timing === 'true' && decodedUbText ? `★${decodedUbText}` : decodedUbText;
                 const commentText = getRowCommentText(row);
                 const isOperationRow = isYellowMainRow(row);
 
@@ -1084,6 +1114,52 @@
                 console.error('コピーに失敗しました:', error);
                 alert('コピーに失敗しました。');
             }
+        }
+
+        function isValidUbFormat(format) {
+            return format === UB_FORMAT_TABLE || format === UB_FORMAT_TEXT;
+        }
+
+        function refreshUbTextView() {
+            if (!(ubTextView instanceof HTMLElement) || currentUbFormat !== UB_FORMAT_TEXT) {
+                return;
+            }
+            ubTextView.textContent = buildTimelineTextLines().join('\n');
+        }
+
+        function setActiveUbFormat(format) {
+            currentUbFormat = isValidUbFormat(format) ? format : UB_FORMAT_TABLE;
+            document.querySelectorAll('.ub-format-tab').forEach((tab) => {
+                const isActive = tab.dataset.ubFormat === currentUbFormat;
+                tab.classList.toggle('is-active', isActive);
+                tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            });
+            document.querySelectorAll('[data-ub-formats]').forEach((element) => {
+                const formats = String(element.dataset.ubFormats || '').split(/\s+/);
+                element.hidden = !formats.includes(currentUbFormat);
+            });
+            refreshUbTextView();
+        }
+
+        async function copyUbText() {
+            if (!(ubTextView instanceof HTMLElement)) {
+                return;
+            }
+            try {
+                await navigator.clipboard.writeText(ubTextView.textContent || '');
+                alert('クリップボードにコピーしました。');
+            } catch (error) {
+                console.error('コピーに失敗しました:', error);
+                alert('コピーに失敗しました。');
+            }
+        }
+
+        function setArticleMenuOpen(isOpen) {
+            if (!(articleMenuButton instanceof HTMLElement) || !(articleMenuList instanceof HTMLElement)) {
+                return;
+            }
+            articleMenuList.hidden = !isOpen;
+            articleMenuButton.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
         }
 
         function downloadExportText() {
@@ -1429,6 +1505,7 @@
             if (exportModal instanceof HTMLElement && !exportModal.hidden) {
                 refreshExportText();
             }
+            refreshUbTextView();
         }
 
         function applyIconSize(sizeMode) {
@@ -1505,7 +1582,43 @@
 
         if (exportOpenButton) {
             exportOpenButton.addEventListener('click', () => {
+                setArticleMenuOpen(false);
                 openExportModal();
+            });
+        }
+
+        if (articleMenuButton instanceof HTMLElement && articleMenuList instanceof HTMLElement) {
+            articleMenuButton.addEventListener('click', () => {
+                setArticleMenuOpen(articleMenuList.hidden);
+            });
+            document.addEventListener('click', (event) => {
+                const target = event.target;
+                if (target instanceof Node && !articleMenuButton.contains(target) && !articleMenuList.contains(target)) {
+                    setArticleMenuOpen(false);
+                }
+            });
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && !articleMenuList.hidden) {
+                    setArticleMenuOpen(false);
+                    articleMenuButton.focus();
+                }
+            });
+        }
+
+        document.querySelectorAll('.ub-format-tab').forEach((tab) => {
+            tab.addEventListener('click', () => {
+                const format = tab.dataset.ubFormat;
+                if (!isValidUbFormat(format || '')) {
+                    return;
+                }
+                setActiveUbFormat(format);
+                setCookieValue(BOARD_UB_FORMAT_COOKIE_KEY, format);
+            });
+        });
+
+        if (ubTextCopyButton) {
+            ubTextCopyButton.addEventListener('click', () => {
+                copyUbText();
             });
         }
 
@@ -1547,6 +1660,7 @@
         initializeBoardDetailToggleStates();
         updateSetBubbles();
         applyRowFilter();
+        setActiveUbFormat(getCookieValue(BOARD_UB_FORMAT_COOKIE_KEY));
 
         if (partyStateByOfficialName.size === 0) {
             const defaultMap = buildDefaultPartyStateMap();
@@ -1661,7 +1775,8 @@
                 return;
             }
             if ((exportModal instanceof HTMLElement && !exportModal.hidden)
-                || (partyCustomizeModal && !partyCustomizeModal.hidden)) {
+                || (partyCustomizeModal && !partyCustomizeModal.hidden)
+                || currentUbFormat !== UB_FORMAT_TABLE) {
                 return;
             }
 
