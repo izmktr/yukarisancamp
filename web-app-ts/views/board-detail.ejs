@@ -58,7 +58,7 @@
         <section id="board-help-panel" class="board-help-panel" hidden>
             <h3>記事詳細の使い方</h3>
             <ul>
-                <li>ユニオンバースト発動時間は「表」「テキスト」のタブで表示形式を切り替えできます。テキストは表示切り替えと残り時間を反映し、「コピー」でクリップボードにコピーできます。</li>
+                <li>ユニオンバースト発動時間は「表」「テキスト」のタブで表示形式を切り替えできます。テキストは表示切り替えと残り時間を反映し、「コピー」でクリップボードにコピーできます。「ON/OFF表示」「切替を大文字」はエクスポートのオプションと連動します。</li>
                 <li>表示切り替えは「すべて」「操作」「操作+1つ前」から選べます。操作行だけ確認したい場合は「操作」、行動の流れも見たい場合は「操作+1つ前」が便利です。</li>
                 <li>ユニオンバースト発動時間の表は、行をクリックすると水色の枠で選択できます。Spaceキーで次の操作行、Shift+Spaceキーで前の操作行に移動し、選択した行が画面中央に来るようにスクロールします。</li>
                 <li>「操作表示」をオンにすると、UBと編成の間に「操作」列が入り、その行で切り替えるキャラ（OFF→ON、ON→OFF、Autoの順）だけをアイコンで表示します。編成は◯（ON）×（OFF）で表示し、切り替えるキャラは赤枠で強調します。</li>
@@ -175,6 +175,10 @@
                         </div>
                         <div class="ub-compact-toggle" data-ub-formats="table">
                             <button type="button" id="ub-compact-toggle-button" class="ub-compact-toggle-btn" aria-pressed="false">操作表示</button>
+                        </div>
+                        <div class="ub-compact-toggle" role="group" aria-label="テキストオプション" data-ub-formats="text">
+                            <button type="button" class="ub-compact-toggle-btn" aria-pressed="false" data-export-option-target="board-export-option-show-onoff">ON/OFF表示</button>
+                            <button type="button" class="ub-compact-toggle-btn" aria-pressed="false" data-export-option-target="board-export-option-uppercase-switch">切替を大文字</button>
                         </div>
                         <div class="ub-time-adjust" role="group" aria-label="残り時間の調整" data-ub-formats="table text">
                             <span class="ub-time-adjust-label">残り時間</span>
@@ -933,6 +937,23 @@
                     refreshUbTextView();
                 });
             }
+
+            document.querySelectorAll('[data-export-option-target]').forEach((button) => {
+                const option = document.getElementById(button.dataset.exportOptionTarget || '');
+                if (!(option instanceof HTMLInputElement)) {
+                    return;
+                }
+                const syncButton = () => {
+                    button.classList.toggle('is-active', option.checked);
+                    button.setAttribute('aria-pressed', option.checked ? 'true' : 'false');
+                };
+                option.addEventListener('change', syncButton);
+                button.addEventListener('click', () => {
+                    option.checked = !option.checked;
+                    option.dispatchEvent(new Event('change'));
+                });
+                syncButton();
+            });
         }
 
         function formatDamageForExport(value) {

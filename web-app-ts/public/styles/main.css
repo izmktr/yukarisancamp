@@ -2242,6 +2242,7 @@ body {
 .ub-compact-toggle {
     display: inline-flex;
     align-items: center;
+    gap: 4px;
     padding: 4px;
     border: 1px solid #d8e0f2;
     border-radius: 999px;
