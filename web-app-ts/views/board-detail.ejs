@@ -36,13 +36,14 @@
             <h2><%= article.postTitle || '記事詳細' %></h2>
             <div class="board-article-actions">
                 <button id="board-help-toggle" type="button" class="btn board-help-toggle-btn" aria-controls="board-help-panel" aria-expanded="false">使い方</button>
+                <a href="/board/<%= id %>/diff" class="btn">差分</a>
                 <% if (canEdit) { %>
                     <a href="/board/<%= id %>/edit" class="btn btn-primary">編集</a>
                 <% } %>
+                <% if (canEdit || (ubRows && ubRows.length > 0)) { %>
                 <div class="board-article-menu">
                     <button type="button" id="board-article-menu-button" class="btn board-article-menu-button" aria-haspopup="menu" aria-expanded="false" aria-controls="board-article-menu-list" aria-label="その他の操作">⋯</button>
                     <div id="board-article-menu-list" class="board-article-menu-list" role="menu" hidden>
-                        <a href="/board/<%= id %>/diff" class="board-article-menu-item" role="menuitem">差分</a>
                         <% if (ubRows && ubRows.length > 0) { %>
                             <button type="button" id="board-export-open-button" class="board-article-menu-item" role="menuitem">エクスポート</button>
                         <% } %>
@@ -53,6 +54,7 @@
                         <% } %>
                     </div>
                 </div>
+                <% } %>
             </div>
         </div>
         <section id="board-help-panel" class="board-help-panel" hidden>
@@ -64,7 +66,7 @@
                 <li>「操作表示」をオンにすると、UBと編成の間に「操作」列が入り、その行で切り替えるキャラ（OFF→ON、ON→OFF、Autoの順）だけをアイコンで表示します。編成は◯（ON）×（OFF）で表示し、切り替えるキャラは赤枠で強調します。</li>
                 <li>サイズは「大 / 中 / 小」で切り替えできます。スマホで見切れる場合は「小」にすると全体を確認しやすくなります。</li>
                 <li>残り時間が90秒でない場合は、「入力時間」に秒数を入れて「変更」を押すと残り時間に合わせて時間が再計算されます。</li>
-                <li>タイトル右の「⋯」から「差分」「エクスポート」「削除」を選べます。</li>
+                <li>タイトル右の「⋯」から「エクスポート」「削除」を選べます。</li>
                 <li>「エクスポート」では現在の表示内容をテキスト化できます。</li>
                 <li>「差分」では別のTLとの差分確認ができます。どこでずれているかを調べる事ができます。</li>
                 <li>「カスタム」で編成キャラの表示名変更と所持チェックができます。ログインしていれば、内容を保存します。</li>
