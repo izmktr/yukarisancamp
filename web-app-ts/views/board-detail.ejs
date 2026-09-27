@@ -1191,6 +1191,9 @@
         }
 
         function getOperationIconBoxes(mainRow) {
+            if (mainRow.dataset.isBattleStart === 'true') {
+                return [];
+            }
             const partyIconBoxes = Array.from(mainRow.querySelectorAll('.ub-party-cell .ub-icon-box'))
                 .filter((iconBox) => isIconActive(iconBox));
             const turnOnBoxes = partyIconBoxes.filter((iconBox) => iconBox.classList.contains('has-set'));
