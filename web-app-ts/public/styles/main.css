@@ -1051,7 +1051,8 @@ body {
     border-bottom: none;
 }
 
-.board-help-toggle-btn {
+.board-help-toggle-btn,
+.board-article-menu-button {
     background: #eef3ff;
     color: #2f4ca3;
     border: 1px solid #c9d7ff;
@@ -1059,7 +1060,14 @@ body {
     padding: 8px 14px;
 }
 
-.board-help-toggle-btn:hover {
+.board-diff-btn {
+    border: 1px solid #cbd3e6;
+    padding: 8px 14px;
+    text-decoration: none;
+}
+
+.board-help-toggle-btn:hover,
+.board-article-menu-button:hover {
     background: #e3ebff;
     color: #253d84;
 }

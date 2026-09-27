@@ -36,7 +36,7 @@
             <h2><%= article.postTitle || '記事詳細' %></h2>
             <div class="board-article-actions">
                 <button id="board-help-toggle" type="button" class="btn board-help-toggle-btn" aria-controls="board-help-panel" aria-expanded="false">使い方</button>
-                <a href="/board/<%= id %>/diff" class="btn">差分</a>
+                <a href="/board/<%= id %>/diff" class="btn btn-secondary board-diff-btn">差分</a>
                 <% if (canEdit) { %>
                     <a href="/board/<%= id %>/edit" class="btn btn-primary">編集</a>
                 <% } %>
