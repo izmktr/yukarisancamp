@@ -2239,6 +2239,81 @@ body {
     box-shadow: 0 1px 4px rgba(29, 52, 137, 0.25);
 }
 
+.ub-compact-toggle {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px;
+    border: 1px solid #d8e0f2;
+    border-radius: 999px;
+    background: #f7f9ff;
+}
+
+.ub-compact-toggle-btn {
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: #4a5783;
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding: 7px 12px;
+    cursor: pointer;
+}
+
+.ub-compact-toggle-btn.is-active {
+    background: #667eea;
+    color: #ffffff;
+    box-shadow: 0 1px 4px rgba(29, 52, 137, 0.25);
+}
+
+.ub-compact-table .ub-operation-cell {
+    min-width: calc(84px * var(--ub-icon-scale, 1));
+    padding-left: calc(0.95rem * var(--ub-icon-scale, 1));
+}
+
+.ub-operation-list {
+    display: flex;
+    align-items: center;
+    gap: calc(8px * var(--ub-icon-scale, 1));
+}
+
+.ub-operation-list .ub-icon-box {
+    margin: 0;
+    flex-shrink: 0;
+}
+
+.ub-compact-party-cell,
+.ub-compact-auto-cell {
+    border-left: 2px solid #7f8fb2;
+}
+
+.ub-compact-party-cell {
+    font-size: 0;
+}
+
+.ub-compact-mark {
+    --ub-compact-mark-size: calc(1rem + 0.6rem * var(--ub-icon-scale, 1));
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--ub-compact-mark-size);
+    height: var(--ub-compact-mark-size);
+    margin: 0 1px;
+    padding: 0 0.15rem;
+    border: 2px solid transparent;
+    border-radius: 6px;
+    color: #9aa3b8;
+    font-size: calc(0.7rem + 0.25rem * var(--ub-icon-scale, 1));
+    font-weight: 700;
+}
+
+.ub-compact-mark.is-set {
+    color: #2f6fd6;
+}
+
+.ub-compact-mark.is-active {
+    border-color: #e53935;
+}
+
 .ub-display-toggle {
     display: inline-flex;
     align-items: center;

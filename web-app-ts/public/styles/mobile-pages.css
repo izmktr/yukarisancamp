@@ -117,7 +117,7 @@
     .standard-pages-layout .post-info-pill-value { min-width: 0; }
     .standard-pages-layout .post-info-toggle-wrap-difficulty { flex-wrap: wrap; }
     .standard-pages-layout .post-info-input { height: 44px; }
-    .standard-pages-layout :is(.post-toggle-btn, .ub-size-toggle-btn, .ub-display-toggle-btn) { min-height: 44px; }
+    .standard-pages-layout :is(.post-toggle-btn, .ub-size-toggle-btn, .ub-display-toggle-btn, .ub-compact-toggle-btn) { min-height: 44px; }
     .standard-pages-layout :is(.ub-display-toggle, .ub-size-toggle, .ub-time-adjust, .board-party-heading) { flex-wrap: wrap; }
     .standard-pages-layout .ub-control-panel { border-radius: 12px; min-width: 0; }
     .standard-pages-layout .ub-toolbar-main { min-width: 0; max-width: 100%; }

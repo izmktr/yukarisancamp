@@ -61,6 +61,7 @@
                 <li>ユニオンバースト発動時間は「表」「テキスト」のタブで表示形式を切り替えできます。テキストは表示切り替えと残り時間を反映し、「コピー」でクリップボードにコピーできます。</li>
                 <li>表示切り替えは「すべて」「操作」「操作+1つ前」から選べます。操作行だけ確認したい場合は「操作」、行動の流れも見たい場合は「操作+1つ前」が便利です。</li>
                 <li>ユニオンバースト発動時間の表は、行をクリックすると水色の枠で選択できます。Spaceキーで次の操作行、Shift+Spaceキーで前の操作行に移動し、選択した行が画面中央に来るようにスクロールします。</li>
+                <li>「簡略表示」をオンにすると、UBと編成の間に「操作」列が入り、その行で切り替えるキャラ（OFF→ON、ON→OFF、Autoの順）だけをアイコンで表示します。編成は◯（ON）×（OFF）で表示し、切り替えるキャラは赤枠で強調します。</li>
                 <li>サイズは「大 / 中 / 小」で切り替えできます。スマホで見切れる場合は「小」にすると全体を確認しやすくなります。</li>
                 <li>残り時間が90秒でない場合は、「入力時間」に秒数を入れて「変更」を押すと残り時間に合わせて時間が再計算されます。</li>
                 <li>タイトル右の「⋯」から「差分」「エクスポート」「削除」を選べます。</li>
@@ -172,6 +173,9 @@
                             <button type="button" class="ub-size-toggle-btn" data-icon-size="medium">中</button>
                             <button type="button" class="ub-size-toggle-btn" data-icon-size="small">小</button>
                         </div>
+                        <div class="ub-compact-toggle" data-ub-formats="table">
+                            <button type="button" id="ub-compact-toggle-button" class="ub-compact-toggle-btn" aria-pressed="false">簡略表示</button>
+                        </div>
                         <div class="ub-time-adjust" role="group" aria-label="残り時間の調整" data-ub-formats="table text">
                             <span class="ub-time-adjust-label">残り時間</span>
                             <input type="text" id="ub-time-adjust-input" class="ub-time-adjust-input" inputmode="numeric" value="<%= battleTimeSeconds > 0 ? battleTimeSeconds : '' %>" data-battle-time="<%= battleTimeSeconds %>" aria-label="入力時間" />
@@ -184,8 +188,8 @@
                 </div>
             </div>
             <pre id="ub-text-view" class="ub-text-view" data-ub-formats="text" hidden></pre>
-            <div class="ub-table-wrapper" data-ub-formats="table">
-                <table class="ub-table">
+            <div id="ub-main-table-wrapper" class="ub-table-wrapper">
+                <table id="ub-main-table" class="ub-table">
                     <thead>
                         <tr>
                             <th>残り時間</th>
@@ -264,6 +268,20 @@
                     </tbody>
                 </table>
             </div>
+            <div id="ub-compact-table-wrapper" class="ub-table-wrapper" hidden>
+                <table id="ub-compact-table" class="ub-table ub-compact-table">
+                    <thead>
+                        <tr>
+                            <th>残り時間</th>
+                            <th>UB</th>
+                            <th>操作</th>
+                            <th>編成</th>
+                            <th>Auto</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
         <% } else { %>
             <p>未登録</p>
         <% } %>
@@ -334,6 +352,14 @@
         let currentUbFormat = UB_FORMAT_TABLE;
         const ubTextView = document.getElementById('ub-text-view');
         const ubTextCopyButton = document.getElementById('ub-text-copy-button');
+        const BOARD_COMPACT_TABLE_COOKIE_KEY = 'boardDetailCompactTable';
+        const ubMainTableWrapper = document.getElementById('ub-main-table-wrapper');
+        const ubMainTableBody = document.querySelector('#ub-main-table tbody');
+        const ubCompactTableWrapper = document.getElementById('ub-compact-table-wrapper');
+        const ubCompactTableBody = document.querySelector('#ub-compact-table tbody');
+        const ubCompactToggleButton = document.getElementById('ub-compact-toggle-button');
+        let isUbCompactTable = false;
+        let selectedUbRowIndex = -1;
         const articleMenuButton = document.getElementById('board-article-menu-button');
         const articleMenuList = document.getElementById('board-article-menu-list');
         let currentBattleTimeSeconds = 0;
@@ -866,6 +892,7 @@
             document.querySelectorAll('.ub-size-toggle-btn').forEach((item) => {
                 item.classList.toggle('is-active', item.dataset.iconSize === safeSizeMode);
             });
+            renderCompactTable();
         }
 
         function initializeBoardDetailToggleStates() {
@@ -1010,7 +1037,7 @@
         }
 
         function buildTimelineTextLines() {
-            const tbody = document.querySelector('.ub-table tbody');
+            const tbody = document.querySelector('#ub-main-table tbody');
             if (!tbody) {
                 return [];
             }
@@ -1138,7 +1165,153 @@
                 const formats = String(element.dataset.ubFormats || '').split(/\s+/);
                 element.hidden = !formats.includes(currentUbFormat);
             });
+            applyUbTableVisibility();
             refreshUbTextView();
+        }
+
+        function applyUbTableVisibility() {
+            const isTableFormat = currentUbFormat === UB_FORMAT_TABLE;
+            if (ubMainTableWrapper instanceof HTMLElement) {
+                ubMainTableWrapper.hidden = !isTableFormat || isUbCompactTable;
+            }
+            if (ubCompactTableWrapper instanceof HTMLElement) {
+                ubCompactTableWrapper.hidden = !isTableFormat || !isUbCompactTable;
+            }
+            if (ubCompactToggleButton instanceof HTMLElement) {
+                ubCompactToggleButton.classList.toggle('is-active', isUbCompactTable);
+                ubCompactToggleButton.setAttribute('aria-pressed', isUbCompactTable ? 'true' : 'false');
+            }
+            renderCompactTable();
+            applyUbSelection();
+        }
+
+        function setUbCompactTable(isCompact) {
+            isUbCompactTable = isCompact;
+            applyUbTableVisibility();
+        }
+
+        function getOperationIconBoxes(mainRow) {
+            const partyIconBoxes = Array.from(mainRow.querySelectorAll('.ub-party-cell .ub-icon-box'))
+                .filter((iconBox) => isIconActive(iconBox));
+            const turnOnBoxes = partyIconBoxes.filter((iconBox) => iconBox.classList.contains('has-set'));
+            const turnOffBoxes = partyIconBoxes.filter((iconBox) => !iconBox.classList.contains('has-set'));
+            const autoBox = mainRow.querySelector('.ub-auto-cell .ub-icon-box');
+            return [...turnOnBoxes, ...turnOffBoxes, ...(isIconActive(autoBox) ? [autoBox] : [])];
+        }
+
+        function createCompactStateMark(isSet, isActive) {
+            const mark = document.createElement('span');
+            mark.className = `ub-compact-mark${isSet ? ' is-set' : ''}${isActive ? ' is-active' : ''}`;
+            mark.textContent = isSet ? '◯' : '×';
+            return mark;
+        }
+
+        function createCompactRow(mainRow) {
+            const row = document.createElement('tr');
+            row.className = mainRow.className.replace(/\bub-selected(-first|-last)?\b/g, '').trim();
+            Object.assign(row.dataset, mainRow.dataset);
+            row.hidden = mainRow.hidden;
+
+            ['.ub-time-cell', '.ub-event-cell'].forEach((selector) => {
+                const cell = mainRow.querySelector(selector);
+                row.appendChild(cell ? cell.cloneNode(true) : document.createElement('td'));
+            });
+
+            const operationCell = document.createElement('td');
+            operationCell.className = 'ub-operation-cell';
+            const operationList = document.createElement('div');
+            operationList.className = 'ub-operation-list';
+            getOperationIconBoxes(mainRow).forEach((iconBox) => {
+                operationList.appendChild(iconBox.cloneNode(true));
+            });
+            operationCell.appendChild(operationList);
+            row.appendChild(operationCell);
+
+            const partyCell = document.createElement('td');
+            partyCell.className = 'ub-compact-party-cell';
+            mainRow.querySelectorAll('.ub-party-cell .ub-icon-box').forEach((iconBox) => {
+                partyCell.appendChild(createCompactStateMark(iconBox.classList.contains('has-set'), isIconActive(iconBox)));
+            });
+            row.appendChild(partyCell);
+
+            const autoCell = document.createElement('td');
+            autoCell.className = 'ub-compact-auto-cell';
+            const autoBox = mainRow.querySelector('.ub-auto-cell .ub-icon-box');
+            const autoButton = autoBox ? autoBox.querySelector('.ub-auto-btn') : null;
+            const isAutoSet = autoButton ? autoButton.classList.contains('ub-auto-btn-set') : false;
+            const autoMark = createCompactStateMark(isAutoSet, isIconActive(autoBox));
+            autoMark.textContent = isAutoSet ? 'ON' : 'OFF';
+            autoCell.appendChild(autoMark);
+            row.appendChild(autoCell);
+
+            return row;
+        }
+
+        function createCompactCommentRow(commentRow) {
+            const row = commentRow.cloneNode(true);
+            row.classList.remove('ub-selected', 'ub-selected-first', 'ub-selected-last');
+            const commentCell = row.querySelector('.ub-comment-cell');
+            if (commentCell instanceof HTMLTableCellElement) {
+                commentCell.colSpan = 4;
+            }
+            return row;
+        }
+
+        function renderCompactTable() {
+            if (!isUbCompactTable || !(ubMainTableBody instanceof HTMLElement) || !(ubCompactTableBody instanceof HTMLElement)) {
+                return;
+            }
+            const fragment = document.createDocumentFragment();
+            Array.from(ubMainTableBody.children).forEach((mainRow) => {
+                if (!(mainRow instanceof HTMLTableRowElement)) {
+                    return;
+                }
+                fragment.appendChild(mainRow.classList.contains('ub-comment-row')
+                    ? createCompactCommentRow(mainRow)
+                    : createCompactRow(mainRow));
+            });
+            ubCompactTableBody.replaceChildren(fragment);
+            applyUbSelection();
+        }
+
+        function getVisibleUbTableBody() {
+            return isUbCompactTable ? ubCompactTableBody : ubMainTableBody;
+        }
+
+        function getUbMainRows(tbody) {
+            return tbody instanceof HTMLElement
+                ? Array.from(tbody.querySelectorAll('tr:not(.ub-comment-row)'))
+                : [];
+        }
+
+        function getUbRowGroup(mainRow) {
+            const commentRow = mainRow.nextElementSibling;
+            return commentRow instanceof HTMLTableRowElement && commentRow.classList.contains('ub-comment-row')
+                ? [mainRow, commentRow]
+                : [mainRow];
+        }
+
+        function applyUbSelection() {
+            [ubMainTableBody, ubCompactTableBody].forEach((tbody) => {
+                if (tbody instanceof HTMLElement) {
+                    tbody.querySelectorAll('.ub-selected').forEach((row) => {
+                        row.classList.remove('ub-selected', 'ub-selected-first', 'ub-selected-last');
+                    });
+                }
+            });
+            const mainRow = getUbMainRows(getVisibleUbTableBody())[selectedUbRowIndex];
+            if (!mainRow) {
+                return;
+            }
+            const group = getUbRowGroup(mainRow);
+            group.forEach((row) => row.classList.add('ub-selected'));
+            group[0].classList.add('ub-selected-first');
+            group[group.length - 1].classList.add('ub-selected-last');
+        }
+
+        function selectUbRow(index) {
+            selectedUbRowIndex = index;
+            applyUbSelection();
         }
 
         async function copyUbText() {
@@ -1232,7 +1405,7 @@
         }
 
         function initializeTimeCells() {
-            const rows = Array.from(document.querySelectorAll('.ub-table tbody tr:not(.ub-comment-row)'));
+            const rows = Array.from(document.querySelectorAll('#ub-main-table tbody tr:not(.ub-comment-row)'));
             rows.forEach((row) => {
                 const timeCell = row.querySelector('.ub-time-cell');
                 if (!timeCell) {
@@ -1293,7 +1466,7 @@
         }
 
         function updateStateBadges() {
-            const rows = Array.from(document.querySelectorAll('.ub-table tbody tr:not(.ub-comment-row)'));
+            const rows = Array.from(document.querySelectorAll('#ub-main-table tbody tr:not(.ub-comment-row)'));
 
             rows.forEach((row) => {
                 const isTimingRow = row.dataset.timing === 'true';
@@ -1340,7 +1513,7 @@
         }
 
         function updateSetBubbles() {
-            const rows = Array.from(document.querySelectorAll('.ub-table tbody tr:not(.ub-comment-row)'));
+            const rows = Array.from(document.querySelectorAll('#ub-main-table tbody tr:not(.ub-comment-row)'));
             const previousSetByColumn = Array(PARTY_COLUMN_COUNT + 1).fill(false);
 
             rows.forEach((row) => {
@@ -1408,7 +1581,7 @@
         }
 
         function applyRowFilter() {
-            const tbody = document.querySelector('.ub-table tbody');
+            const tbody = document.querySelector('#ub-main-table tbody');
             if (!tbody) {
                 return;
             }
@@ -1506,16 +1679,14 @@
                 refreshExportText();
             }
             refreshUbTextView();
+            renderCompactTable();
         }
 
         function applyIconSize(sizeMode) {
-            const tableWrapper = document.querySelector('.ub-table-wrapper');
-            if (!(tableWrapper instanceof HTMLElement)) {
-                return;
-            }
-
-            tableWrapper.classList.remove('ub-icon-size-large', 'ub-icon-size-medium', 'ub-icon-size-small');
-            tableWrapper.classList.add(`ub-icon-size-${sizeMode}`);
+            document.querySelectorAll('.ub-table-wrapper').forEach((tableWrapper) => {
+                tableWrapper.classList.remove('ub-icon-size-large', 'ub-icon-size-medium', 'ub-icon-size-small');
+                tableWrapper.classList.add(`ub-icon-size-${sizeMode}`);
+            });
         }
 
         function updateBattleStartEndLabels(sizeMode) {
@@ -1616,6 +1787,13 @@
             });
         });
 
+        if (ubCompactToggleButton) {
+            ubCompactToggleButton.addEventListener('click', () => {
+                setUbCompactTable(!isUbCompactTable);
+                setCookieValue(BOARD_COMPACT_TABLE_COOKIE_KEY, isUbCompactTable ? '1' : '0');
+            });
+        }
+
         if (ubTextCopyButton) {
             ubTextCopyButton.addEventListener('click', () => {
                 copyUbText();
@@ -1660,6 +1838,7 @@
         initializeBoardDetailToggleStates();
         updateSetBubbles();
         applyRowFilter();
+        isUbCompactTable = getCookieValue(BOARD_COMPACT_TABLE_COOKIE_KEY) === '1';
         setActiveUbFormat(getCookieValue(BOARD_UB_FORMAT_COOKIE_KEY));
 
         if (partyStateByOfficialName.size === 0) {
@@ -1706,29 +1885,6 @@
             }
         });
 
-        const ubTableBody = document.querySelector('.ub-table tbody');
-        let selectedUbMainRow = null;
-
-        function getUbRowGroup(mainRow) {
-            const commentRow = mainRow.nextElementSibling;
-            return commentRow instanceof HTMLTableRowElement && commentRow.classList.contains('ub-comment-row')
-                ? [mainRow, commentRow]
-                : [mainRow];
-        }
-
-        function selectUbRow(mainRow) {
-            if (selectedUbMainRow) {
-                getUbRowGroup(selectedUbMainRow).forEach((row) => {
-                    row.classList.remove('ub-selected', 'ub-selected-first', 'ub-selected-last');
-                });
-            }
-            selectedUbMainRow = mainRow;
-            const group = getUbRowGroup(mainRow);
-            group.forEach((row) => row.classList.add('ub-selected'));
-            group[0].classList.add('ub-selected-first');
-            group[group.length - 1].classList.add('ub-selected-last');
-        }
-
         function scrollUbRowGroupToCenter(mainRow) {
             const group = getUbRowGroup(mainRow);
             const top = group[0].getBoundingClientRect().top;
@@ -1739,31 +1895,36 @@
             });
         }
 
-        function findOperationRow(backward) {
-            if (!ubTableBody) {
-                return null;
+        function findOperationRowIndex(backward) {
+            const mainRows = getUbMainRows(getVisibleUbTableBody());
+            const candidates = mainRows
+                .map((row, index) => ({ row, index }))
+                .filter(({ index }) => (backward
+                    ? selectedUbRowIndex >= 0 && index < selectedUbRowIndex
+                    : index > selectedUbRowIndex));
+            if (backward) {
+                candidates.reverse();
             }
-            const mainRows = Array.from(ubTableBody.querySelectorAll('tr:not(.ub-comment-row)'));
-            const selectedIndex = selectedUbMainRow ? mainRows.indexOf(selectedUbMainRow) : -1;
-            const candidates = backward
-                ? (selectedIndex < 0 ? [] : mainRows.slice(0, selectedIndex).reverse())
-                : mainRows.slice(selectedIndex + 1);
-            return candidates.find((row) => !row.hidden && isYellowMainRow(row)) || null;
+            const found = candidates.find(({ row }) => !row.hidden && isYellowMainRow(row));
+            return found ? found.index : -1;
         }
 
-        if (ubTableBody) {
-            ubTableBody.addEventListener('click', (event) => {
+        [ubMainTableBody, ubCompactTableBody].forEach((tbody) => {
+            if (!(tbody instanceof HTMLElement)) {
+                return;
+            }
+            tbody.addEventListener('click', (event) => {
                 const target = event.target;
                 const row = target instanceof Element ? target.closest('tr') : null;
-                if (!(row instanceof HTMLTableRowElement) || row.parentElement !== ubTableBody) {
+                if (!(row instanceof HTMLTableRowElement) || row.parentElement !== tbody) {
                     return;
                 }
                 const mainRow = row.classList.contains('ub-comment-row') ? row.previousElementSibling : row;
                 if (mainRow instanceof HTMLTableRowElement) {
-                    selectUbRow(mainRow);
+                    selectUbRow(getUbMainRows(tbody).indexOf(mainRow));
                 }
             });
-        }
+        });
 
         document.addEventListener('keydown', (event) => {
             if (event.code !== 'Space' || event.repeat || event.ctrlKey || event.altKey || event.metaKey) {
@@ -1782,10 +1943,13 @@
 
             // ボタンにフォーカスが残っていても、再クリックやページ送りをさせない
             event.preventDefault();
-            const nextRow = findOperationRow(event.shiftKey);
-            if (nextRow) {
-                selectUbRow(nextRow);
-                scrollUbRowGroupToCenter(nextRow);
+            const nextIndex = findOperationRowIndex(event.shiftKey);
+            if (nextIndex >= 0) {
+                selectUbRow(nextIndex);
+                const nextRow = getUbMainRows(getVisibleUbTableBody())[nextIndex];
+                if (nextRow) {
+                    scrollUbRowGroupToCenter(nextRow);
+                }
             }
         });
 
