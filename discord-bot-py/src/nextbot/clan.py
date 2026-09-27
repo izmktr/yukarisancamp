@@ -488,8 +488,15 @@ class Clan(MessageRouter):
             react.action = action
 
             if action == "complete":
-                await self.damagecontrol[boss - 1].Injure(member)
-                await self.damagecontrol[boss - 1].SendResult()
+                dc = self.damagecontrol[boss - 1]
+                prev_hp = dc.remainhp
+                await dc.Injure(member)
+                if dc.remainhp != prev_hp:
+                    try:
+                        await self.SaveBossHp(boss, dc.remainhp, member.name)
+                    except Exception as exc:
+                        self.TemporaryMessage(message.channel, f'残りHPの更新に失敗しました: {exc}')
+                await dc.SendResult()
             elif action == "cancel":
                 await self.damagecontrol[boss - 1].Remove(member)
                 await self.damagecontrol[boss - 1].SendResult()
@@ -1720,8 +1727,12 @@ class Clan(MessageRouter):
         return yearmonth, max_hp
 
     async def ResetBossHp(self, boss: int, updated_by: str) -> None:
-        yearmonth, max_hp = self._BossHpSetting(boss)
+        _, max_hp = self._BossHpSetting(boss)
         self.damagecontrol[boss - 1].SetBossHp(max_hp)
+        await self.SaveBossHp(boss, max_hp, updated_by)
+
+    async def SaveBossHp(self, boss: int, current_hp: int, updated_by: str) -> None:
+        yearmonth, max_hp = self._BossHpSetting(boss)
         if self.supabase is None or self.clan_id is None or not yearmonth:
             return
         await asyncio.to_thread(
@@ -1729,7 +1740,7 @@ class Clan(MessageRouter):
             self.clan_id,
             yearmonth,
             boss,
-            max_hp,
+            current_hp,
             max_hp,
             updated_by,
         )

@@ -591,6 +591,35 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
 
         supabase.update_clan_boss_state_current_hp.assert_not_called()
 
+    async def test_complete_reaction_saves_reduced_boss_hp(self) -> None:
+        clan, member, supabase = self.create_clan()
+        clan.clanbattle_setting = {"yearmonth": "202609", "bossHp": [100, 200, 300, 400, 500]}
+        clan.damagecontrol[4].SetBossHp(500)
+        clan.damagecontrol[4].Damage(member, 120)
+        message = self.create_message()
+        member.Attack(5, 1)
+        member.attackmessage = message
+        supabase.finish_clan_member_attack.return_value = {
+            "history_id": 77,
+            "attacktime": [None, None, None],
+            "attackdata": {"day": "", "sortie": 0, "lap": 0, "boss": 0},
+            "bosslaps": [1, 1, 1, 1, 1],
+        }
+        supabase.refresh_clan_member_attacktime.return_value = [None, None, None]
+        clan.RemoveReaction = AsyncMock()
+        reaction = clan.CreateAttackReaction(member, message, 5, 1, 0)
+        payload = types.SimpleNamespace(
+            message_id=message.id,
+            emoji=types.SimpleNamespace(name=clan.emojis[0]),
+        )
+
+        self.assertTrue(await reaction.addreaction(member, payload))
+
+        self.assertEqual(clan.damagecontrol[4].remainhp, 380)
+        supabase.update_clan_boss_state_current_hp.assert_called_once_with(
+            123, "202609", 5, 380, 500, "old name"
+        )
+
     async def test_defeat_command_resets_boss_hp_to_max(self) -> None:
         clan, _member, supabase = self.create_clan()
         clan.clanbattle_setting = {"yearmonth": "202609", "bossHp": [100, 200, 300, 400, 500]}
