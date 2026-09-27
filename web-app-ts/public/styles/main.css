@@ -2301,9 +2301,15 @@ body {
     padding: 0 0.15rem;
     border: 2px solid transparent;
     border-radius: 6px;
-    color: #9aa3b8;
+    color: #7a849c;
     font-size: calc(0.7rem + 0.25rem * var(--ub-icon-scale, 1));
-    font-weight: 700;
+    font-weight: 900;
+    /* ◯・× は太字指定だけでは細いままなので、輪郭線で太らせる */
+    -webkit-text-stroke: 1.5px currentColor;
+}
+
+.ub-compact-auto-cell .ub-compact-mark {
+    -webkit-text-stroke: 0.3px currentColor;
 }
 
 .ub-compact-mark.is-set {
