@@ -746,6 +746,41 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(dc.active)
         dc.SendResult.assert_awaited_once()
 
+    async def test_x_damage_input_saves_skull_in_comment(self) -> None:
+        clan, member, _supabase = self.create_clan()
+        member.Attack(3, 1)
+        channel = object()
+        dc = clan.damagecontrol[2]
+        dc.SetChannel(cast(discord.TextChannel, channel))
+
+        for content, damage, comment in [("x", 0, "\u2620"), ("x500 遅れます", 500, "\u2620遅れます")]:
+            message = types.SimpleNamespace(content=content, channel=channel)
+            result = await clan.DamageChannelMessage(cast(discord.Message, message), cast(discord.Member, self.create_discord_member()))
+
+            self.assertIs(result, dc)
+            self.assertEqual(dc.members[member].damage, damage)
+            self.assertEqual(dc.members[member].message, comment)
+
+    async def test_skull_comments_survive_realtime_echo_for_multiple_members(self) -> None:
+        clan, _channel, _post = self.create_web_attack_clan()
+        dc = clan.damagecontrol[2]
+        dc.SendResult = AsyncMock()
+        dc.SetBossHp(5000)
+        other = ClanMember("999")
+        other.name = "きりたん"
+        other.Attack(3, 1)
+        clan.members[other.id] = other
+        dc.Damage(other, 0, "\u2620")
+        row = self.web_member_row(3, 1, [None, None, None])
+        row["attackdata"]["damage"] = 0
+        row["attackdata"]["message"] = "\u2620"
+
+        await clan.OnSupabaseUpdateClanMembers({}, row)
+
+        status = dc.Status()
+        self.assertIn("ゆかり", status)
+        self.assertEqual(status.count("\u2620"), 2)
+
     async def start_realtime_attack_with_other_attacker(self) -> tuple[Clan, DamageControl, ClanMember]:
         clan, _channel, _post = self.create_web_attack_clan()
         dc = clan.damagecontrol[2]

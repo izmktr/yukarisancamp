@@ -12,12 +12,11 @@ if TYPE_CHECKING:
     from .clan import Clan
 
 class DamageControlMember:
-    def __init__(self, member : ClanMember, damage : int, message : str = '', mark : int = 0) -> None:
+    def __init__(self, member : ClanMember, damage : int, message : str = '') -> None:
         self.member : ClanMember = member
         self.damage : int = damage
         self.status : int = 0
         self.message : str = message
-        self.mark : int = mark
 
 class DamageControl():
 
@@ -55,12 +54,12 @@ class DamageControl():
         if 0 < len(self.members):
              await self.SendResult()
 
-    def Damage(self, member : ClanMember, damage : int, message : str = '', mark : int = 0):
+    def Damage(self, member : ClanMember, damage : int, message : str = ''):
         self.active = True
-        self.SetDamage(member, damage, message, mark)
+        self.SetDamage(member, damage, message)
 
-    def SetDamage(self, member : ClanMember, damage : int, message : str = '', mark : int = 0):
-        self.members[member] = DamageControlMember(member, damage, message, mark)
+    def SetDamage(self, member : ClanMember, damage : int, message : str = ''):
+        self.members[member] = DamageControlMember(member, damage, message)
 
     def MemberSweep(self):
         if len([m for m in self.members.values() if m.status == 0]) == 0:
@@ -194,9 +193,7 @@ class DamageControl():
         for m in damagelist:
             if m.status == 0:
                 attackmember.discard(m.member)
-                suffix = '' if m.mark == 0 else "\u2620"
-                if 0 < m.damage:
-                    suffix += '%d' % m.damage
+                suffix = '%d' % m.damage if 0 < m.damage else ''
 
                 mes += '\n%s %s' % (m.member.DecoName('nOTv'), suffix)
                 if m.message != '':

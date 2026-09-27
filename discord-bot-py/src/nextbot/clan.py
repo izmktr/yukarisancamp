@@ -1844,8 +1844,8 @@ class Clan(MessageRouter):
             m = re.match(r'([xXｘＸ×])([\s　]*)([\d]*)([^\d]*.*)', message.content)
             if m:
                 damage = int(m.group(3)) if 0 < len(m.group(3)) else 0
-                comment = m.group(4)
-                dc.Damage(cmember, damage, comment, 1)
+                comment = "\u2620" + m.group(4).strip()
+                dc.Damage(cmember, damage, comment)
                 return dc
         return None
 
