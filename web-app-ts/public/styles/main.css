@@ -2971,32 +2971,33 @@ tr[data-timing="true"] .ub-timing-hoshi {
 }
 
 /* 選択中の行(コメント行があれば一緒に)を1つの水色の枠で囲む */
+/* td を position 指定すると背景が表の縦線より上に描かれて線が消えるため、内側の影で描く */
 .ub-table tbody tr.ub-selected > td {
-    position: relative;
+    --ub-selected-top: 0px;
+    --ub-selected-bottom: 0px;
+    --ub-selected-left: 0px;
+    --ub-selected-right: 0px;
+    box-shadow:
+        inset 0 var(--ub-selected-top) 0 0 #29b6f6,
+        inset 0 calc(-1 * var(--ub-selected-bottom)) 0 0 #29b6f6,
+        inset var(--ub-selected-left) 0 0 0 #29b6f6,
+        inset calc(-1 * var(--ub-selected-right)) 0 0 0 #29b6f6;
 }
 
-.ub-table tbody tr.ub-selected > td::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border: 0 solid #29b6f6;
-    pointer-events: none;
+.ub-table tbody tr.ub-selected-first > td {
+    --ub-selected-top: 3px;
 }
 
-.ub-table tbody tr.ub-selected-first > td::after {
-    border-top-width: 3px;
+.ub-table tbody tr.ub-selected-last > td {
+    --ub-selected-bottom: 3px;
 }
 
-.ub-table tbody tr.ub-selected-last > td::after {
-    border-bottom-width: 3px;
+.ub-table tbody tr.ub-selected > td:first-child {
+    --ub-selected-left: 3px;
 }
 
-.ub-table tbody tr.ub-selected > td:first-child::after {
-    border-left-width: 3px;
-}
-
-.ub-table tbody tr.ub-selected > td:last-child::after {
-    border-right-width: 3px;
+.ub-table tbody tr.ub-selected > td:last-child {
+    --ub-selected-right: 3px;
 }
 
 .ub-comment-cell {
