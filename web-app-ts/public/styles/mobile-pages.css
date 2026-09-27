@@ -1,0 +1,131 @@
+/* Information, board (including detail/editor) and settings on small screens.
+   Keep desktop layouts and the hidden states managed by scripts intact. */
+@media (max-width: 768px) {
+    .standard-pages-layout .header-content { padding-inline: 16px; gap: 8px; }
+    .standard-pages-layout .header-right { min-width: 0; max-width: 100%; }
+    .standard-pages-layout .auth-buttons { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; }
+    .standard-pages-layout .user-name { overflow-wrap: anywhere; }
+    .standard-pages-layout .tab-content {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 4px;
+        padding-inline: 8px;
+    }
+    .standard-pages-layout .tab {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 0;
+        min-height: 44px;
+        padding-inline: 6px;
+    }
+    .standard-pages-layout .main-content { padding: 0 12px 24px; }
+    .standard-pages-layout .page-content { padding: 20px 0; overflow-wrap: anywhere; }
+    .standard-pages-layout .btn {
+        min-height: 44px;
+        line-height: 1.5;
+    }
+    .standard-pages-layout a.btn { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+    .standard-pages-layout :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+        min-width: 0;
+        max-width: 100%;
+        font-size: 16px;
+    }
+    .standard-pages-layout :is(button, a, input, select, textarea):focus-visible {
+        outline: 3px solid #5268b4;
+        outline-offset: 2px;
+    }
+
+    .info-page .info-section { padding: 16px; margin: 16px 0; }
+    .info-page .info-section h3 { font-size: 1.05rem; margin-bottom: 12px; }
+    .info-page .info-section h4 { margin: 16px 0 8px; }
+    .info-page .info-section p { margin-bottom: 16px; }
+    .info-page .info-section p:last-child { margin-bottom: 0; }
+    .info-page .info-section :is(ul, ol) { padding-left: 20px; }
+    .info-page .info-section a { display: inline-block; padding-block: 10px; }
+
+    .settings-page .settings-card { padding: 16px; }
+    .settings-page .settings-row { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+    .settings-page .settings-row > * { min-width: 0; }
+    .settings-page .settings-row input { height: 44px; }
+    .settings-page .settings-discord-value { flex-wrap: wrap; }
+    .settings-page .settings-discord-value span { flex: 1 1 100%; }
+    .settings-page .settings-actions { align-items: stretch; }
+    .settings-page .settings-status { overflow-wrap: anywhere; }
+    .settings-page .settings-link-dialog {
+        margin: auto;
+        max-height: calc(100dvh - 32px);
+        overflow-y: auto;
+    }
+    .settings-page .settings-link-dialog-content { padding: 16px; }
+    .settings-page .settings-link-copy-row { grid-template-columns: minmax(0, 1fr) 44px; }
+    .settings-page .settings-icon-button { width: 44px; height: 44px; }
+    .settings-page .settings-link-field input,
+    .settings-page .settings-link-copy-row input { height: 44px; }
+    .settings-page .settings-link-actions { flex-wrap: wrap; }
+    .settings-page .settings-link-actions .btn { flex: 1 1 auto; }
+
+    /* Keep the existing filter controls visible above the article cards. */
+    .standard-pages-layout .board-list-table-wrap { overflow: visible; }
+    .standard-pages-layout .board-list-table { display: block; border: 0; overflow: visible; background: transparent; }
+    .standard-pages-layout .board-list-table thead,
+    .standard-pages-layout .board-list-table tbody { display: block; }
+    .standard-pages-layout .board-list-table thead tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 16px; }
+    .standard-pages-layout .board-list-table thead th { display: block; min-width: 0; padding: 8px 4px; border: 1px solid #dce3ee; border-radius: 8px; }
+    .standard-pages-layout .board-list-table thead th:nth-child(-n+3) { display: none; }
+    .standard-pages-layout .board-filter-header { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; }
+    .standard-pages-layout .board-filter-icon-btn { width: 100%; height: 44px; border-radius: 6px; }
+    .standard-pages-layout .board-filter-menu {
+        width: min(220px, calc(100vw - 40px));
+        min-width: 0;
+        max-height: 50dvh;
+        overflow-y: auto;
+    }
+    .standard-pages-layout .board-filter-menu[data-filter-kind="difficulty"] { left: 0; right: auto; }
+    .standard-pages-layout .board-filter-menu[data-filter-kind="mode"] { left: 50%; right: auto; transform: translateX(-50%); }
+    .standard-pages-layout .board-filter-menu-item { min-height: 44px; }
+    .standard-pages-layout .board-list-table tbody tr:not([hidden]) {
+        display: block;
+        margin-bottom: 16px;
+        padding: 4px 12px;
+        border: 1px solid #dce3ee;
+        border-radius: 12px;
+        background: #fff;
+    }
+    .standard-pages-layout .board-list-table tbody td { display: block; padding: 10px 0; }
+    .standard-pages-layout .board-list-table tbody td[data-label] {
+        display: grid;
+        grid-template-columns: 60px minmax(0, 1fr);
+        align-items: center;
+        gap: 8px;
+    }
+    .standard-pages-layout .board-list-table td[data-label]::before { content: attr(data-label); color: #5f6a80; font-weight: 600; font-size: 0.8rem; }
+    .standard-pages-layout .board-list-title-cell a { display: block; padding-block: 6px; font-size: 1rem; }
+    .standard-pages-layout .board-list-table tbody tr td:last-child { border: 0; }
+    .standard-pages-layout .board-list-party-icons { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; max-width: 220px; }
+    .standard-pages-layout .board-list-party-icon-wrap,
+    .standard-pages-layout .board-list-party-icon { width: 100%; height: auto; aspect-ratio: 1; min-width: 0; }
+    .standard-pages-layout .board-list-filter-toolbar { flex-wrap: wrap; }
+
+    .standard-pages-layout .board-page-title-row { align-items: stretch; }
+    .standard-pages-layout .board-page-title-row h2 { min-width: 0; }
+    .standard-pages-layout .board-help-panel { padding: 16px; }
+    .standard-pages-layout .post-info-row { grid-template-columns: minmax(0, 1fr); }
+    .standard-pages-layout .post-info-row > * { min-width: 0; }
+    .standard-pages-layout .post-info-pill { max-width: 100%; }
+    .standard-pages-layout .post-info-pill-key { flex-shrink: 0; }
+    .standard-pages-layout .post-info-pill-value { min-width: 0; }
+    .standard-pages-layout .post-info-toggle-wrap-difficulty { flex-wrap: wrap; }
+    .standard-pages-layout .post-info-input { height: 44px; }
+    .standard-pages-layout :is(.post-toggle-btn, .ub-size-toggle-btn, .ub-display-toggle-btn) { min-height: 44px; }
+    .standard-pages-layout :is(.ub-display-toggle, .ub-size-toggle, .ub-time-adjust, .board-party-heading) { flex-wrap: wrap; }
+    .standard-pages-layout .ub-control-panel { border-radius: 12px; min-width: 0; }
+    .standard-pages-layout .ub-toolbar-main { min-width: 0; max-width: 100%; }
+    .standard-pages-layout .ub-toolbar-actions { margin-left: 0; }
+    .standard-pages-layout .ub-table-wrapper.ub-icon-size-small { overflow-x: auto; }
+    .standard-pages-layout .board-party-customize-row { grid-template-columns: 54px minmax(0, 1fr); }
+    .standard-pages-layout .board-party-customize-controls { min-width: 0; }
+    .standard-pages-layout .board-export-modal-dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
+    .standard-pages-layout .board-party-modal-window { max-height: calc(100dvh - 20px); }
+    .standard-pages-layout .board-export-modal-header-row { flex-wrap: wrap; }
+}

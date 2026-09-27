@@ -67,8 +67,8 @@
                                 <td class="board-list-title-cell">
                                     <a href="/board/<%= article.id %>"><%= article.title %></a>
                                 </td>
-                                <td><%= article.authorName %></td>
-                                <td>
+                                <td data-label="投稿者"><%= article.authorName %></td>
+                                <td data-label="編成">
                                     <div class="board-list-party-icons" aria-label="編成">
                                         <% for (let i = 0; i < 5; i += 1) { %>
                                             <% const member = article.partyMembers && article.partyMembers[i]; %>
@@ -90,9 +90,9 @@
                                         <% } %>
                                     </div>
                                 </td>
-                                <td><%= article.difficultyLabel || '-' %></td>
-                                <td><%= article.modeLabel || '-' %></td>
-                                <td><%= article.visibilityLabel || '-' %></td>
+                                <td data-label="難易度"><%= article.difficultyLabel || '-' %></td>
+                                <td data-label="モード"><%= article.modeLabel || '-' %></td>
+                                <td data-label="公開範囲"><%= article.visibilityLabel || '-' %></td>
                             </tr>
                         <% }); %>
                     </tbody>

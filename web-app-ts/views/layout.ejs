@@ -8,11 +8,15 @@
     <link rel="apple-touch-icon" href="/images/favicon.png">
     <link rel="stylesheet" href="/styles/main.css">
     <% const isClanWorkspace = ['clan', 'clan-data', 'clan-management'].includes(currentPage); %>
+    <% const isStandardPage = ['info', 'board', 'settings'].includes(currentPage); %>
+    <% if (isStandardPage) { %>
+        <link rel="stylesheet" href="/styles/mobile-pages.css">
+    <% } %>
     <% if (isClanWorkspace) { %>
         <link rel="stylesheet" href="/styles/clan-pages.css">
     <% } %>
 </head>
-<body class="<%= isClanWorkspace ? 'clan-workspace-layout' : '' %>">
+<body class="<%= isClanWorkspace ? 'clan-workspace-layout' : isStandardPage ? 'standard-pages-layout' : '' %>">
     <!-- ヘッダー -->
     <header class="header">
         <div class="header-content">
