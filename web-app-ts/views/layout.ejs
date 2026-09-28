@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><%= title %></title>
+    <% const siteName = 'ユカリさん△'; %>
+    <title><%= typeof pageTitle === 'string' && pageTitle ? `${pageTitle} - ${siteName}` : siteName %></title>
     <link rel="icon" type="image/png" href="/images/favicon.png">
     <link rel="apple-touch-icon" href="/images/favicon.png">
     <link rel="stylesheet" href="/styles/main.css">
@@ -21,7 +22,7 @@
     <header class="header">
         <div class="header-content">
             <div class="header-left">
-                <h1 class="title"><%= title %></h1>
+                <h1 class="title"><%= siteName %></h1>
             </div>
             <div class="header-right">
                 <div class="info-space">

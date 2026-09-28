@@ -326,7 +326,6 @@ console.log('Web app starting...');
 // ルート定義
 app.get('/', (req, res) => {
   res.render('info', {
-    title: 'ゆかりさん△',
     currentPage: 'info',
     ...getAuthViewData(req)
   });
@@ -334,7 +333,7 @@ app.get('/', (req, res) => {
 
 app.get('/info', (req, res) => {
   res.render('info', {
-    title: 'ゆかりさん△',
+    pageTitle: '情報',
     currentPage: 'info',
     ...getAuthViewData(req)
   });
@@ -349,7 +348,7 @@ app.use('/board', boardRouter);
 
 app.get('/settings', (req, res) => {
   res.render('settings', {
-    title: 'ゆかりさん△',
+    pageTitle: '設定',
     currentPage: 'settings',
     ...getAuthViewData(req)
   });
@@ -357,7 +356,7 @@ app.get('/settings', (req, res) => {
 
 app.get('/clanbattle-settings', (req, res) => {
   res.render('clanbattle-settings', {
-    title: 'ゆかりさん△',
+    pageTitle: 'クラバト設定',
     currentPage: 'clanbattle-settings',
     ...getAuthViewData(req)
   });
@@ -386,7 +385,7 @@ app.get('/clan', ensureDiscordServerLinked, async (req, res) => {
 
   if (!config) {
     res.render('clan', {
-      title: 'ゆかりさん△',
+      pageTitle: 'クラン',
       currentPage: 'clan',
       ...getAuthViewData(req),
       clanPageData: {
@@ -406,7 +405,7 @@ app.get('/clan', ensureDiscordServerLinked, async (req, res) => {
     const discordId = profile && isNonEmptyTrimmedString(profile.discordId) ? profile.discordId.trim() : '';
     const clanPageData = await loadClanPagePayload(config, discordServer, discordId);
     res.render('clan', {
-      title: 'ゆかりさん△',
+      pageTitle: 'クラン',
       currentPage: 'clan',
       ...getAuthViewData(req),
       clanPageData
@@ -414,7 +413,7 @@ app.get('/clan', ensureDiscordServerLinked, async (req, res) => {
   } catch (error) {
     console.error('Failed to load clan page data:', error);
     res.render('clan', {
-      title: 'ゆかりさん△',
+      pageTitle: 'クラン',
       currentPage: 'clan',
       ...getAuthViewData(req),
       clanPageData: {
@@ -453,7 +452,7 @@ app.get('/clan-data', ensureDiscordServerLinked, async (req, res) => {
     }
 
     res.render('clan-data', {
-      title: 'ゆかりさん△',
+      pageTitle: 'メンバー',
       currentPage: 'clan-data',
       ...getAuthViewData(req),
       clanDataPageData: clanDataPage,
@@ -493,7 +492,7 @@ app.get('/clan-management', ensureDiscordServerLinked, async (req, res) => {
     const delegations = clanId ? await supabaseSelectMemberDelegationsByClan(config, clanId) : [];
 
     res.render('clan-management', {
-      title: 'ゆかりさん△',
+      pageTitle: '管理',
       currentPage: 'clan-management',
       ...getAuthViewData(req),
       clanManagementData: {
@@ -3532,7 +3531,7 @@ function renderCharaCheckPage(req: express.Request, res: express.Response) {
   const uploadFlash = getUploadFlashFromQuery(req);
 
   res.render('chara-check', {
-    title: 'ゆかりさん△',
+    pageTitle: 'キャラ確認',
     currentPage: 'chara-check',
     ...getAuthViewData(req),
     characters,
@@ -3743,7 +3742,7 @@ app.get('/clanlist', ensureAdmin, (req, res) => {
   }
 
   res.render('clanlist', {
-    title: 'ゆかりさん△',
+    pageTitle: 'クラン一覧',
     currentPage: 'clanlist',
     ...getAuthViewData(req),
     clans
@@ -3770,7 +3769,7 @@ app.get('/clandata/:id', (req, res) => {
   }
 
   res.render('clandata-detail', {
-    title: 'ゆかりさん△ - クランデータ',
+    pageTitle: 'クランデータ',
     currentPage: 'clandata',
     ...getAuthViewData(req),
     clanId,

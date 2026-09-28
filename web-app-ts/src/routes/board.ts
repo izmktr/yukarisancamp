@@ -838,7 +838,7 @@ router.get('/', async (req, res) => {
     });
 
     res.render('board', {
-      title: 'ゆかりさん△',
+      pageTitle: '掲示板',
       currentPage: 'board',
       ...auth,
       articles
@@ -853,7 +853,7 @@ router.get('/', async (req, res) => {
 router.get('/post', (req, res) => {
   const auth = getAuthViewData(req);
   res.render('board-post', {
-    title: 'ゆかりさん△',
+    pageTitle: '新規投稿 - 掲示板',
     currentPage: 'board',
     ...auth
   });
@@ -875,7 +875,7 @@ router.get('/:id/diff', async (req, res) => {
     const myComparableArticles = await resolveBoardDiffCandidates(sourceArticle, String(sourceRow.legacy_id || sourceRow.id), currentGoogleUserId);
 
     return res.render('board-diff', {
-      title: 'ゆかりさん△',
+      pageTitle: `差分 - ${resolveArticleDisplayTitle(sourceArticle)} - 掲示板`,
       currentPage: 'board',
       ...auth,
       id: sourceRow.legacy_id || sourceRow.id,
@@ -935,7 +935,7 @@ router.post('/:id/diff/timelog', async (req, res) => {
     }
 
     return res.render('board-diff', {
-      title: 'ゆかりさん△',
+      pageTitle: `差分 - ${resolveArticleDisplayTitle(sourceArticle)} - 掲示板`,
       currentPage: 'board',
       ...auth,
       id: sourceRow.legacy_id || sourceRow.id,
@@ -995,7 +995,7 @@ router.post('/:id/diff/article/:targetId', async (req, res) => {
     };
 
     return res.render('board-diff', {
-      title: 'ゆかりさん△',
+      pageTitle: `差分 - ${resolveArticleDisplayTitle(sourceArticle)} - 掲示板`,
       currentPage: 'board',
       ...auth,
       id: sourceRow.legacy_id || sourceRow.id,
@@ -1028,7 +1028,7 @@ router.get('/:id', async (req, res) => {
     const canEdit = canEditArticle(data, currentUserSession);
     const showOwnerOnlyMessage = !!currentUserSession && !canEdit;
     res.render('board-detail', {
-      title: 'ゆかりさん△',
+      pageTitle: `${resolveArticleDisplayTitle(data)} - 掲示板`,
       currentPage: 'board',
       ...auth,
       article: data,
@@ -1059,7 +1059,7 @@ router.post('/edit', (req, res) => {
       const partyMembers = resolveBoardDetailPartyMembers(parsedTimelineInfo.party);
       const ubRows = resolveBoardDetailUbRows(parsedTimelineInfo);
       return res.render('board-edit', {
-        title: 'ゆかりさん△',
+        pageTitle: '新規投稿 - 掲示板',
         currentPage: 'board',
         ...auth,
         article: parsedTimelineInfo,
@@ -1079,7 +1079,7 @@ router.post('/edit', (req, res) => {
   const partyMembers = resolveBoardDetailPartyMembers(parsed.party);
   const ubRows = resolveBoardDetailUbRows(parsed);
   return res.render('board-edit', {
-    title: 'ゆかりさん△',
+    pageTitle: '新規投稿 - 掲示板',
     currentPage: 'board',
     ...auth,
     article: parsed,
@@ -1106,7 +1106,7 @@ router.get('/:id/edit', async (req, res) => {
     const partyMembers = resolveBoardDetailPartyMembers(data.party);
     const ubRows = resolveBoardDetailUbRows(data);
     res.render('board-edit', {
-      title: 'ゆかりさん△',
+      pageTitle: `編集 - ${resolveArticleDisplayTitle(data)} - 掲示板`,
       currentPage: 'board',
       ...auth,
       article: data,
