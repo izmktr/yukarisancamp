@@ -61,7 +61,7 @@
             <h3>記事詳細の使い方</h3>
             <ul>
                 <li>ユニオンバースト発動時間は「表」「テキスト」のタブで表示形式を切り替えできます。テキストは表示切り替えと残り時間を反映し、「コピー」でクリップボードにコピーできます。「ON/OFF表示」「切替を大文字」はエクスポートのオプションと連動します。</li>
-                <li>表示切り替えは「すべて」「操作」「操作+1つ前」から選べます。操作行だけ確認したい場合は「操作」、行動の流れも見たい場合は「操作+1つ前」が便利です。</li>
+                <li>表示切り替えは「すべて」「操作」「操作+1つ前」から選べます。操作行だけ確認したい場合は「操作」、行動の流れも見たい場合は「操作+1つ前」が便利です。非表示になった行は「⋯ 3行」のように行数で表示され、押すとその間の行を表示できます。</li>
                 <li>ユニオンバースト発動時間の表は、行をクリックすると水色の枠で選択できます。Spaceキーで次の操作行、Shift+Spaceキーで前の操作行に移動し、選択した行が画面中央に来るようにスクロールします。</li>
                 <li>「操作表示」をオンにすると、UBと編成の間に「操作」列が入り、その行で切り替えるキャラ（OFF→ON、ON→OFF、Autoの順）だけをアイコンで表示します。編成は◯（ON）×（OFF）で表示し、切り替えるキャラは赤枠で強調します。</li>
                 <li>サイズは「大 / 中 / 小」で切り替えできます。スマホで見切れる場合は「小」にすると全体を確認しやすくなります。</li>
@@ -366,6 +366,9 @@
         const ubCompactToggleButton = document.getElementById('ub-compact-toggle-button');
         let isUbCompactTable = false;
         let selectedUbRowIndex = -1;
+        const expandedUbRows = new Set();
+        const UB_MAIN_TABLE_COLUMN_COUNT = 8;
+        const UB_COMPACT_TABLE_COLUMN_COUNT = 5;
         const articleMenuButton = document.getElementById('board-article-menu-button');
         const articleMenuList = document.getElementById('board-article-menu-list');
         let currentBattleTimeSeconds = 0;
@@ -884,6 +887,7 @@
         function setActiveDisplayMode(mode) {
             const safeMode = isValidDisplayMode(mode) ? mode : DISPLAY_MODE_ALL;
             currentDisplayMode = safeMode;
+            expandedUbRows.clear();
             document.querySelectorAll('.ub-display-toggle-btn').forEach((item) => {
                 item.classList.toggle('is-active', item.dataset.displayMode === safeMode);
             });
@@ -1066,7 +1070,7 @@
             }
 
             const lines = [];
-            const visibleRows = Array.from(tbody.querySelectorAll('tr:not(.ub-comment-row)')).filter((row) => !row.hidden);
+            const visibleRows = Array.from(tbody.querySelectorAll('tr:not(.ub-comment-row):not(.ub-gap-row)')).filter((row) => !row.hidden);
             const { showOnOffCharacters, uppercaseSwitchState } = getExportOptionFlags();
 
             visibleRows.forEach((row) => {
@@ -1283,6 +1287,41 @@
             return row;
         }
 
+        function createUbGapRow(start, count, columnCount) {
+            const row = document.createElement('tr');
+            row.className = 'ub-gap-row';
+            row.dataset.gapStart = String(start);
+            row.dataset.gapCount = String(count);
+            const cell = document.createElement('td');
+            cell.colSpan = columnCount;
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'ub-gap-button';
+            button.textContent = `⋯ ${count}行`;
+            button.setAttribute('aria-label', `非表示の${count}行を表示`);
+            cell.appendChild(button);
+            row.appendChild(cell);
+            return row;
+        }
+
+        function insertUbGapRows(tbody, collapsedFlags) {
+            const mainRows = getUbMainRows(tbody);
+            let start = -1;
+            collapsedFlags.concat(false).forEach((isCollapsed, index) => {
+                if (isCollapsed && start < 0) {
+                    start = index;
+                } else if (!isCollapsed && start >= 0) {
+                    tbody.insertBefore(createUbGapRow(start, index - start, UB_MAIN_TABLE_COLUMN_COUNT), mainRows[start]);
+                    start = -1;
+                }
+            });
+        }
+
+        function expandUbGap(start, count) {
+            getUbMainRows(ubMainTableBody).slice(start, start + count).forEach((row) => expandedUbRows.add(row));
+            applyRowFilter();
+        }
+
         function renderCompactTable() {
             if (!isUbCompactTable || !(ubMainTableBody instanceof HTMLElement) || !(ubCompactTableBody instanceof HTMLElement)) {
                 return;
@@ -1290,6 +1329,14 @@
             const fragment = document.createDocumentFragment();
             Array.from(ubMainTableBody.children).forEach((mainRow) => {
                 if (!(mainRow instanceof HTMLTableRowElement)) {
+                    return;
+                }
+                if (mainRow.classList.contains('ub-gap-row')) {
+                    fragment.appendChild(createUbGapRow(
+                        Number(mainRow.dataset.gapStart),
+                        Number(mainRow.dataset.gapCount),
+                        UB_COMPACT_TABLE_COLUMN_COUNT
+                    ));
                     return;
                 }
                 fragment.appendChild(mainRow.classList.contains('ub-comment-row')
@@ -1306,7 +1353,7 @@
 
         function getUbMainRows(tbody) {
             return tbody instanceof HTMLElement
-                ? Array.from(tbody.querySelectorAll('tr:not(.ub-comment-row)'))
+                ? Array.from(tbody.querySelectorAll('tr:not(.ub-comment-row):not(.ub-gap-row)'))
                 : [];
         }
 
@@ -1411,7 +1458,7 @@
             return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
         }
 
-        function renderTimeCell(cell, timeText, diffText = '') {
+        function renderTimeCell(cell, timeText) {
             if (!cell) {
                 return;
             }
@@ -1421,17 +1468,10 @@
             timeMain.className = 'ub-time-main';
             timeMain.textContent = timeText || '';
             cell.appendChild(timeMain);
-
-            if (diffText) {
-                const timeDiff = document.createElement('div');
-                timeDiff.className = 'ub-time-diff';
-                timeDiff.textContent = diffText;
-                cell.appendChild(timeDiff);
-            }
         }
 
         function initializeTimeCells() {
-            const rows = Array.from(document.querySelectorAll('#ub-main-table tbody tr:not(.ub-comment-row)'));
+            const rows = Array.from(document.querySelectorAll('#ub-main-table tbody tr:not(.ub-comment-row):not(.ub-gap-row)'));
             rows.forEach((row) => {
                 const timeCell = row.querySelector('.ub-time-cell');
                 if (!timeCell) {
@@ -1492,7 +1532,7 @@
         }
 
         function updateStateBadges() {
-            const rows = Array.from(document.querySelectorAll('#ub-main-table tbody tr:not(.ub-comment-row)'));
+            const rows = Array.from(document.querySelectorAll('#ub-main-table tbody tr:not(.ub-comment-row):not(.ub-gap-row)'));
 
             rows.forEach((row) => {
                 const isTimingRow = row.dataset.timing === 'true';
@@ -1539,7 +1579,7 @@
         }
 
         function updateSetBubbles() {
-            const rows = Array.from(document.querySelectorAll('#ub-main-table tbody tr:not(.ub-comment-row)'));
+            const rows = Array.from(document.querySelectorAll('#ub-main-table tbody tr:not(.ub-comment-row):not(.ub-gap-row)'));
             const previousSetByColumn = Array(PARTY_COLUMN_COUNT + 1).fill(false);
 
             rows.forEach((row) => {
@@ -1612,8 +1652,11 @@
                 return;
             }
 
-            const mainRows = Array.from(tbody.querySelectorAll('tr:not(.ub-comment-row)'));
+            tbody.querySelectorAll('.ub-gap-row').forEach((row) => row.remove());
+
+            const mainRows = Array.from(tbody.querySelectorAll('tr:not(.ub-comment-row):not(.ub-gap-row)'));
             const visibleMainRows = new Set();
+            const timeVisibleRows = new Set();
             const offsetSeconds = getTimeOffsetSeconds();
             const adjustedSecondsByRow = new Map();
 
@@ -1625,8 +1668,12 @@
                 const timeVisible = adjustedSeconds === null || adjustedSeconds >= 0;
                 const modeVisible = currentDisplayMode === DISPLAY_MODE_ALL
                     || (currentDisplayMode === DISPLAY_MODE_OPERATION && isYellowRow(row))
-                    || (currentDisplayMode === DISPLAY_MODE_OPERATION_PLUS_PREV && isYellowRow(row));
+                    || (currentDisplayMode === DISPLAY_MODE_OPERATION_PLUS_PREV && isYellowRow(row))
+                    || expandedUbRows.has(row);
 
+                if (timeVisible) {
+                    timeVisibleRows.add(row);
+                }
                 if (modeVisible && timeVisible) {
                     visibleMainRows.add(row);
                 }
@@ -1659,7 +1706,6 @@
                 row.hidden = !visibleMainRows.has(row);
             });
 
-            let previousVisibleSeconds = null;
             mainRows.forEach((row) => {
                 const timeCell = row.querySelector('.ub-time-cell');
                 if (!timeCell) {
@@ -1670,9 +1716,6 @@
                 const adjustedSeconds = adjustedSecondsByRow.get(row);
                 if (adjustedSeconds === null) {
                     renderTimeCell(timeCell, timeRaw);
-                    if (!row.hidden) {
-                        previousVisibleSeconds = null;
-                    }
                     return;
                 }
 
@@ -1681,17 +1724,7 @@
                     return;
                 }
 
-                let diffText = '';
-                if (!row.hidden && previousVisibleSeconds !== null) {
-                    const diffSeconds = previousVisibleSeconds - adjustedSeconds;
-                    diffText = `${diffSeconds > 0 ? '+' : ''}${diffSeconds}s`;
-                }
-
-                renderTimeCell(timeCell, formatSecondsToTime(adjustedSeconds), diffText);
-
-                if (!row.hidden) {
-                    previousVisibleSeconds = adjustedSeconds;
-                }
+                renderTimeCell(timeCell, formatSecondsToTime(adjustedSeconds));
             });
 
             mainRows.forEach((row) => {
@@ -1700,6 +1733,8 @@
                     commentRow.hidden = row.hidden;
                 }
             });
+
+            insertUbGapRows(tbody, mainRows.map((row) => row.hidden && timeVisibleRows.has(row)));
 
             if (exportModal instanceof HTMLElement && !exportModal.hidden) {
                 refreshExportText();
@@ -1943,6 +1978,10 @@
                 const target = event.target;
                 const row = target instanceof Element ? target.closest('tr') : null;
                 if (!(row instanceof HTMLTableRowElement) || row.parentElement !== tbody) {
+                    return;
+                }
+                if (row.classList.contains('ub-gap-row')) {
+                    expandUbGap(Number(row.dataset.gapStart), Number(row.dataset.gapCount));
                     return;
                 }
                 const mainRow = row.classList.contains('ub-comment-row') ? row.previousElementSibling : row;

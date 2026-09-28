@@ -2597,14 +2597,6 @@ tr[data-timing="true"] .ub-timing-hoshi {
     display: block;
 }
 
-.ub-time-diff {
-    display: block;
-    margin-top: 2px;
-    font-size: 0.78rem;
-    font-weight: 700;
-    color: #5f6a8a;
-}
-
 .ub-time-input {
     width: 82px;
     height: 32px;
@@ -2981,6 +2973,32 @@ tr[data-timing="true"] .ub-timing-hoshi {
     border-top: none;
 }
 
+.ub-table tbody tr.ub-gap-row > td {
+    padding: 0;
+    background: #f4f6fb;
+    border-top: 1px dashed #c3cbe0;
+    border-bottom: 1px dashed #c3cbe0;
+}
+
+.ub-gap-button {
+    display: block;
+    width: 100%;
+    padding: 2px 0;
+    border: none;
+    background: transparent;
+    color: #6b7594;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1.4;
+    cursor: pointer;
+}
+
+.ub-gap-button:hover,
+.ub-gap-button:focus-visible {
+    background: #e6ebf7;
+    color: #3f4a78;
+}
+
 .ub-comment-prefix-cell {
     background: #fff9d9;
 }
@@ -3127,10 +3145,6 @@ tr[data-timing="true"] .ub-timing-hoshi {
 
     .ub-table-wrapper.ub-icon-size-small .ub-time-main {
         font-size: 0.82rem;
-    }
-
-    .ub-table-wrapper.ub-icon-size-small .ub-time-diff {
-        font-size: 0.62rem;
     }
 
     .ub-table-wrapper.ub-icon-size-small .ub-auto-label {
