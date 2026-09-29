@@ -62,7 +62,7 @@
             <ul>
                 <li>ユニオンバースト発動時間は「表」「テキスト」のタブで表示形式を切り替えできます。テキストは表示切り替えと残り時間を反映し、「コピー」でクリップボードにコピーできます。「ON/OFF表示」「切替を大文字」はエクスポートのオプションと連動します。</li>
                 <li>表示切り替えは「すべて」「操作」「操作+1つ前」から選べます。操作行だけ確認したい場合は「操作」、行動の流れも見たい場合は「操作+1つ前」が便利です。非表示になった行は「⋯ 3行」のように行数で表示され、押すとその間の行を表示できます。</li>
-                <li>ユニオンバースト発動時間の表は、行をクリックすると水色の枠で選択できます。Spaceキーで次の操作行、Shift+Spaceキーで前の操作行に移動し、選択した行が画面中央に来るようにスクロールします。</li>
+                <li>ユニオンバースト発動時間の表は、行をクリックすると水色の枠で選択できます。Spaceキーで次の操作行、Shift+Spaceキーで前の操作行、HomeキーまたはRキーで「バトル開始」の行に移動し、選択した行が画面中央に来るようにスクロールします。</li>
                 <li>「操作表示」をオンにすると、UBと編成の間に「操作」列が入り、その行で切り替えるキャラ（OFF→ON、ON→OFF、Autoの順）だけをアイコンで表示します。編成は◯（ON）×（OFF）で表示し、切り替えるキャラは赤枠で強調します。</li>
                 <li>サイズは「大 / 中 / 小」で切り替えできます。スマホで見切れる場合は「小」にすると全体を確認しやすくなります。</li>
                 <li>残り時間が90秒でない場合は、「入力時間」に秒数を入れて「変更」を押すと残り時間に合わせて時間が再計算されます。</li>
@@ -1991,8 +1991,15 @@
             });
         });
 
+        function findBattleStartRowIndex() {
+            const mainRows = getUbMainRows(getVisibleUbTableBody());
+            const battleStartIndex = mainRows.findIndex((row) => !row.hidden && row.dataset.isBattleStart === 'true');
+            return battleStartIndex >= 0 ? battleStartIndex : mainRows.findIndex((row) => !row.hidden);
+        }
+
         document.addEventListener('keydown', (event) => {
-            if (event.code !== 'Space' || event.repeat || event.ctrlKey || event.altKey || event.metaKey) {
+            const isNavigationKey = event.code === 'Space' || event.code === 'Home' || event.code === 'KeyR';
+            if (!isNavigationKey || event.repeat || event.ctrlKey || event.altKey || event.metaKey) {
                 return;
             }
             const target = event.target;
@@ -2008,7 +2015,9 @@
 
             // ボタンにフォーカスが残っていても、再クリックやページ送りをさせない
             event.preventDefault();
-            const nextIndex = findOperationRowIndex(event.shiftKey);
+            const nextIndex = event.code === 'Space'
+                ? findOperationRowIndex(event.shiftKey)
+                : findBattleStartRowIndex();
             if (nextIndex >= 0) {
                 selectUbRow(nextIndex);
                 const nextRow = getUbMainRows(getVisibleUbTableBody())[nextIndex];
