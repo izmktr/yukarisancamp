@@ -766,6 +766,54 @@ grant execute on function public.delete_clan_member_attack_history(
   text
 ) to service_role;
 
+-- 残りHPの減算は読み取りと書き込みを分けると同時完了で片方の減算が消えるため、1回の更新で行う
+create or replace function public.apply_clan_boss_damage(
+  p_clanid text,
+  p_yearmonth text,
+  p_boss_index integer,
+  p_damage bigint,
+  p_max_hp bigint,
+  p_updated_by text
+)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  applied_damage bigint := greatest(coalesce(p_damage, 0), 0);
+  next_hp integer;
+begin
+  insert into public.clan_boss_state (
+    clanid, yearmonth, boss_index, current_hp, max_hp, is_defeated, updated_at, updated_by
+  )
+  values (
+    p_clanid,
+    p_yearmonth,
+    p_boss_index,
+    greatest(p_max_hp - applied_damage, 0),
+    p_max_hp,
+    greatest(p_max_hp - applied_damage, 0) = 0,
+    now(),
+    p_updated_by
+  )
+  on conflict (clanid, yearmonth, boss_index) do update
+  set current_hp = greatest(public.clan_boss_state.current_hp - applied_damage, 0),
+      max_hp = excluded.max_hp,
+      is_defeated = greatest(public.clan_boss_state.current_hp - applied_damage, 0) = 0,
+      updated_at = excluded.updated_at,
+      updated_by = excluded.updated_by
+  returning current_hp into next_hp;
+
+  return next_hp;
+end;
+$$;
+
+revoke all on function public.apply_clan_boss_damage(text, text, integer, bigint, bigint, text)
+  from public, anon, authenticated;
+grant execute on function public.apply_clan_boss_damage(text, text, integer, bigint, bigint, text)
+  to service_role;
+
 create index if not exists attack_history_clanid_idx
   on public.attack_histories (clanid);
 -- Dummy seed data (re-runnable)

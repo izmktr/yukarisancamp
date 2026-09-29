@@ -616,9 +616,32 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(await reaction.addreaction(member, payload))
 
         self.assertEqual(clan.damagecontrol[4].remainhp, 380)
-        supabase.update_clan_boss_state_current_hp.assert_called_once_with(
-            123, "202609", 5, 380, 500, "old name"
+        supabase.apply_clan_boss_damage.assert_called_once_with(
+            123, "202609", 5, 120, 500, "old name"
         )
+        supabase.update_clan_boss_state_current_hp.assert_not_called()
+
+    async def test_consecutive_completes_send_damage_not_stale_hp(self) -> None:
+        clan, member, supabase = self.create_clan()
+        clan.clanbattle_setting = {"yearmonth": "202609", "bossHp": [100, 200, 300, 400, 1000]}
+        dc = clan.damagecontrol[4]
+        dc.SendResult = AsyncMock()
+        dc.SetBossHp(1000)
+        other = ClanMember("999")
+        other.name = "きりたん"
+        dc.Damage(member, 300)
+        dc.Damage(other, 200)
+
+        await dc.Injure(member)
+        await clan.ApplyBossDamage(5, 300, member.name)
+        # 1人目の書き込みの Realtime が、2人目の完了より後に届いたケース
+        await dc.Injure(other)
+        await clan.OnSupabaseUpdateClanBossState({}, {"boss_index": 5, "current_hp": 700})
+        await clan.ApplyBossDamage(5, 200, other.name)
+
+        damages = [c.args[3] for c in supabase.apply_clan_boss_damage.call_args_list]
+        self.assertEqual(damages, [300, 200])
+        supabase.update_clan_boss_state_current_hp.assert_not_called()
 
     async def test_defeat_command_resets_boss_hp_to_max(self) -> None:
         clan, _member, supabase = self.create_clan()

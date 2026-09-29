@@ -163,6 +163,46 @@ class SupabaseClient:
         with urlopen(request, timeout=10):
             pass
 
+    def apply_clan_boss_damage(
+        self,
+        clan_id: int,
+        yearmonth: str,
+        boss_index: int,
+        damage: int,
+        max_hp: int,
+        updated_by: str,
+    ) -> int:
+        payload = json.dumps(
+            {
+                "p_clanid": str(clan_id),
+                "p_yearmonth": yearmonth,
+                "p_boss_index": boss_index,
+                "p_damage": damage,
+                "p_max_hp": max_hp,
+                "p_updated_by": updated_by,
+            }
+        ).encode("utf-8")
+        request = Request(
+            f"{self.url}/rest/v1/rpc/apply_clan_boss_damage",
+            data=payload,
+            method="POST",
+            headers={
+                "apikey": self.secret_key,
+                "Authorization": f"Bearer {self.secret_key}",
+                "Content-Type": "application/json",
+            },
+        )
+        try:
+            with urlopen(request, timeout=10) as response:
+                raw_result: object = json.load(response)
+        except HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"apply_clan_boss_damage failed: {exc.code} {detail}") from exc
+
+        if not isinstance(raw_result, int):
+            raise RuntimeError("apply_clan_boss_damage returned an invalid response")
+        return raw_result
+
     def update_clan_bosslaps(self, clan_id: int, bosslaps: list[int]) -> None:
         query = urlencode({"clanid": f"eq.{clan_id}"})
         payload = json.dumps({"bosslaps": bosslaps}).encode("utf-8")

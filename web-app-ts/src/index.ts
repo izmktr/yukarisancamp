@@ -1443,6 +1443,39 @@ async function supabaseUpsertClanBossStateCurrentHp(
   }
 }
 
+async function supabaseApplyClanBossDamage(
+  config: SupabaseConfig,
+  clanid: string,
+  yearmonth: string,
+  bossIndex: number,
+  damage: number,
+  maxHp: number,
+  updatedBy: string
+): Promise<void> {
+  const endpointUrl = `${config.url.replace(/\/$/, '')}/rest/v1/rpc/apply_clan_boss_damage`;
+  const response = await fetch(endpointUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: config.secretKey,
+      Authorization: `Bearer ${config.secretKey}`
+    },
+    body: JSON.stringify({
+      p_clanid: clanid,
+      p_yearmonth: yearmonth,
+      p_boss_index: bossIndex,
+      p_damage: damage,
+      p_max_hp: maxHp,
+      p_updated_by: updatedBy
+    })
+  });
+
+  if (!response.ok) {
+    const responseText = await response.text();
+    throw new Error(`Supabase apply clan boss damage failed: ${response.status} ${responseText}`);
+  }
+}
+
 async function resolveClanBossHpForDisplay(
   config: SupabaseConfig,
   clan: ClanInfoRow | null,
@@ -3021,35 +3054,32 @@ app.post('/api/clan/attack/finish', ensureDiscordServerLinked, express.json(), a
       return res.status(409).json({ error: 'Boss HP is not configured' });
     }
 
-    let nextBossHp: number | null = null;
     const normalizedMaxHp = Math.trunc(settingMaxHp);
-    if (action === 'complete') {
-      const bossStates = await supabaseSelectClanBossStates(
-        config,
-        clan.clanid,
-        clanBattleState.yearmonth
-      );
-      const targetState = bossStates.find((row) => row.boss_index === bossIndex) || null;
-      const currentHp = targetState ? targetState.current_hp : normalizedMaxHp;
-      const damage = Number.isFinite(currentMember.damage) && currentMember.damage !== null
-        ? Math.max(0, Math.trunc(currentMember.damage))
-        : 0;
-      nextBossHp = Math.max(0, currentHp - damage);
-    } else if (action === 'defeat') {
-      nextBossHp = normalizedMaxHp;
-    }
+    const damage = action === 'complete' && Number.isFinite(currentMember.damage) && currentMember.damage !== null
+      ? Math.max(0, Math.trunc(currentMember.damage))
+      : 0;
 
     await supabaseFinishClanMemberAttack(config, currentMember, action, overtime);
     if (action !== 'cancel') {
       await supabaseRefreshClanMemberAttacktime(config, currentMember);
     }
-    if (nextBossHp !== null) {
+    if (damage > 0) {
+      await supabaseApplyClanBossDamage(
+        config,
+        clan.clanid,
+        clanBattleState.yearmonth,
+        bossIndex,
+        damage,
+        normalizedMaxHp,
+        discordId
+      );
+    } else if (action === 'defeat') {
       await supabaseUpsertClanBossStateCurrentHp(
         config,
         clan.clanid,
         clanBattleState.yearmonth,
         bossIndex,
-        nextBossHp,
+        normalizedMaxHp,
         normalizedMaxHp,
         discordId
       );

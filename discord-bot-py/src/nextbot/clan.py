@@ -489,11 +489,12 @@ class Clan(MessageRouter):
 
             if action == "complete":
                 dc = self.damagecontrol[boss - 1]
-                prev_hp = dc.remainhp
+                dcm = dc.members.get(member)
+                damage = dcm.damage if dcm is not None else 0
                 await dc.Injure(member)
-                if dc.remainhp != prev_hp:
+                if 0 < damage:
                     try:
-                        await self.SaveBossHp(boss, dc.remainhp, member.name)
+                        await self.ApplyBossDamage(boss, damage, member.name)
                     except Exception as exc:
                         self.TemporaryMessage(message.channel, f'残りHPの更新に失敗しました: {exc}')
                 await dc.SendResult()
@@ -1744,6 +1745,21 @@ class Clan(MessageRouter):
             yearmonth,
             boss,
             current_hp,
+            max_hp,
+            updated_by,
+        )
+
+    async def ApplyBossDamage(self, boss: int, damage: int, updated_by: str) -> None:
+        # 減算は DB 側で行い、手元の残りHPは Realtime で届く値に任せる
+        yearmonth, max_hp = self._BossHpSetting(boss)
+        if self.supabase is None or self.clan_id is None or not yearmonth:
+            return
+        await asyncio.to_thread(
+            self.supabase.apply_clan_boss_damage,
+            self.clan_id,
+            yearmonth,
+            boss,
+            damage,
             max_hp,
             updated_by,
         )
