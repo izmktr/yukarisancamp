@@ -736,7 +736,7 @@ function getClanBattleDatesForYearMonth(yearmonth) {
     const lastDayNumber = lastDay.getDate();
 
     const startDate = new Date(lastDay);
-    startDate.setDate(lastDayNumber - 6);
+    startDate.setDate(lastDayNumber - 5);
 
     const endDate = new Date(lastDay);
     endDate.setDate(lastDayNumber - 1);
