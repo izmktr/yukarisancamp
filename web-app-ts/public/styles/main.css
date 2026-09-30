@@ -3342,6 +3342,49 @@ tr[data-timing="true"] .ub-timing-hoshi {
     font-weight: 700;
 }
 
+.chara-filter-bar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    align-items: center;
+    margin-top: 1rem;
+    padding: 0.6rem 0;
+    background: #ffffff;
+}
+
+.chara-filter-bar .chara-add-input {
+    flex: 1 1 220px;
+}
+
+.chara-filter-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+.chara-card[hidden] {
+    display: none;
+}
+
+.chara-image-preview {
+    display: block;
+    max-width: 120px;
+    max-height: 120px;
+    margin-top: 0.45rem;
+    border: 1px dashed #c8d0e1;
+    border-radius: 8px;
+    background: #f4f7ff;
+}
+
+.chara-image-preview[hidden] {
+    display: none;
+}
+
 .chara-register-form {
     display: flex;
     flex-wrap: wrap;

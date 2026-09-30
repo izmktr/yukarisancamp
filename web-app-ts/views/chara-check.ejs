@@ -21,6 +21,7 @@
             <input type="file" name="charaPng" accept=".png,image/png">
             <button type="submit" class="btn btn-primary chara-add-button">登録</button>
         </form>
+        <img class="chara-image-preview" alt="選択した画像" hidden>
         <p class="chara-upload-note">画像は 5MB 以下の .png です。後から登録することもできます。</p>
     </div>
 
@@ -45,9 +46,17 @@
             <p>キャラデータが見つかりませんでした。</p>
         </div>
     <% } else { %>
+        <div class="chara-filter-bar">
+            <input type="search" id="chara-filter-input" class="chara-add-input" placeholder="キャラ名で絞り込み（ひらがな可）" autocomplete="off">
+            <label class="chara-filter-option">
+                <input type="checkbox" id="chara-filter-missing"> 画像なしのみ
+            </label>
+            <span id="chara-filter-count" class="chara-upload-note"></span>
+        </div>
+        <p id="chara-filter-empty" class="chara-upload-note" hidden>該当するキャラがいません。</p>
         <div class="chara-grid">
             <% characters.forEach((character) => { %>
-                <div class="chara-card">
+                <div class="chara-card" data-name="<%= character.name %>" data-has-image="<%= character.imageUrl ? 'true' : 'false' %>">
                     <% if (character.imageUrl) { %>
                         <img src="<%= character.imageUrl %>" alt="<%= character.name %>" class="chara-image" loading="lazy">
                     <% } else { %>
@@ -66,6 +75,7 @@
                             <input type="file" name="charaPng" class="chara-image-input" accept=".png,image/png" required>
                             <button type="submit" class="btn chara-add-button">画像</button>
                         </form>
+                        <img class="chara-image-preview" alt="選択した画像" hidden>
                     </div>
                 </div>
             <% }) %>
@@ -85,6 +95,96 @@
                 newNameInput.value = button.dataset.name || '';
                 newNameInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 newNameInput.focus();
+            });
+        });
+
+        const filterInput = document.getElementById('chara-filter-input');
+        const filterMissing = document.getElementById('chara-filter-missing');
+        const filterCount = document.getElementById('chara-filter-count');
+        const filterEmpty = document.getElementById('chara-filter-empty');
+        const charaCards = Array.from(document.querySelectorAll('.chara-grid .chara-card'));
+
+        const normalizeForSearch = (value) => String(value || '')
+            .normalize('NFKC')
+            .toLowerCase()
+            .replace(/[\u30a1-\u30f6]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0x60))
+            .replace(/\s+/g, '');
+
+        charaCards.forEach((card) => {
+            if (card instanceof HTMLElement) {
+                card.dataset.searchKey = normalizeForSearch(card.dataset.name);
+            }
+        });
+
+        const applyCharaFilter = () => {
+            if (!(filterInput instanceof HTMLInputElement) || !(filterMissing instanceof HTMLInputElement)) {
+                return;
+            }
+            const query = normalizeForSearch(filterInput.value);
+            const missingOnly = filterMissing.checked;
+            let visibleCount = 0;
+            charaCards.forEach((card) => {
+                if (!(card instanceof HTMLElement)) {
+                    return;
+                }
+                const matches = (!query || (card.dataset.searchKey || '').includes(query))
+                    && (!missingOnly || card.dataset.hasImage !== 'true');
+                card.hidden = !matches;
+                if (matches) {
+                    visibleCount += 1;
+                }
+            });
+            if (filterCount) {
+                filterCount.textContent = `${visibleCount} / ${charaCards.length}件`;
+            }
+            if (filterEmpty) {
+                filterEmpty.hidden = visibleCount > 0;
+            }
+        };
+
+        if (filterInput && filterMissing) {
+            filterInput.addEventListener('input', applyCharaFilter);
+            filterMissing.addEventListener('change', applyCharaFilter);
+            applyCharaFilter();
+        }
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey) {
+                return;
+            }
+            const target = event.target;
+            if (target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) {
+                return;
+            }
+            if (filterInput instanceof HTMLInputElement) {
+                event.preventDefault();
+                filterInput.focus();
+                filterInput.select();
+            }
+        });
+
+        document.querySelectorAll('input[type="file"][name="charaPng"]').forEach((fileInput) => {
+            if (!(fileInput instanceof HTMLInputElement)) {
+                return;
+            }
+            const form = fileInput.closest('form');
+            const preview = form ? form.nextElementSibling : null;
+            if (!(preview instanceof HTMLImageElement) || !preview.classList.contains('chara-image-preview')) {
+                return;
+            }
+
+            fileInput.addEventListener('change', () => {
+                if (preview.src) {
+                    URL.revokeObjectURL(preview.src);
+                    preview.removeAttribute('src');
+                }
+                const file = fileInput.files && fileInput.files[0];
+                if (!file) {
+                    preview.hidden = true;
+                    return;
+                }
+                preview.src = URL.createObjectURL(file);
+                preview.hidden = false;
             });
         });
 
