@@ -1,7 +1,6 @@
 import { canEditArticle, canViewArticle } from '../utils/boardAccess';
 import { Router } from 'express';
-import path from 'path';
-import fs from 'fs';
+import { normalizeCharacterName, resolveCharacterImageUrl } from '../services/characterSupabase';
 import {
   boardRowToArticle,
   deleteBoardPostByLegacyId,
@@ -22,7 +21,6 @@ declare module 'express-session' {
 }
 
 const router = Router();
-const CHARA_INDEX_PATH = path.join(__dirname, '../../chara/charaindex.json');
 
 type ParsedArticle = {
   bossname: string;
@@ -42,11 +40,6 @@ type TimelinePartyMember = {
   star: number;
   level: number;
   rank: number;
-};
-
-type CharaIndexEntry = {
-  fileName: string;
-  name: string;
 };
 
 type BoardDetailPartyMember = {
@@ -200,46 +193,6 @@ function ensureArticleEditableByUser(article: any, req: any, res: any): boolean 
   return true;
 }
 
-function loadCharaIndex(): CharaIndexEntry[] {
-  try {
-    const raw = fs.readFileSync(CHARA_INDEX_PATH, 'utf-8');
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-
-    return parsed.filter((entry): entry is CharaIndexEntry => {
-      return entry
-        && typeof entry === 'object'
-        && typeof (entry as CharaIndexEntry).fileName === 'string'
-        && typeof (entry as CharaIndexEntry).name === 'string';
-    });
-  } catch (error) {
-    console.error('Failed to load chara index:', error);
-    return [];
-  }
-}
-
-let charaIndex: CharaIndexEntry[] = [];
-let charaImageByName = new Map<string, string>();
-let charaImageByNormalizedName = new Map<string, string>();
-
-function rebuildCharaImageCache(): number {
-  const loaded = loadCharaIndex();
-  charaIndex = loaded;
-  charaImageByName = new Map(loaded.map((entry) => [entry.name, entry.fileName]));
-  charaImageByNormalizedName = new Map(
-    loaded.map((entry) => [normalizeCharacterLookupKey(entry.name), entry.fileName])
-  );
-  return loaded.length;
-}
-
-export function refreshBoardCharaImageCache(): number {
-  return rebuildCharaImageCache();
-}
-
-rebuildCharaImageCache();
-
 function normalizeCharacterLookupKey(name: string): string {
   return (name || '')
     .toLowerCase()
@@ -247,48 +200,8 @@ function normalizeCharacterLookupKey(name: string): string {
     .trim();
 }
 
-function normalizeCharacterName(name: string): string {
-  return name.trim();
-}
-
-function splitCharacterName(name: string): { base: string; suffix: string | null } {
-  const trimmed = normalizeCharacterName(name);
-  const match = trimmed.match(/^(.*?)(?:（(.+)）)?$/);
-  if (!match) {
-    return { base: trimmed, suffix: null };
-  }
-
-  return {
-    base: match[1].trim(),
-    suffix: match[2] ? match[2].trim() : null
-  };
-}
-
 function resolveCharacterImagePath(name: string): string | null {
-  const normalizedName = normalizeCharacterName(name);
-  const exact = charaImageByName.get(normalizedName)
-    || charaImageByName.get(name);
-  if (exact) {
-    return `/chara-images/${exact}`;
-  }
-
-  const normalizedKey = normalizeCharacterLookupKey(normalizedName);
-  const normalizedMatch = charaImageByNormalizedName.get(normalizedKey);
-  if (normalizedMatch) {
-    return `/chara-images/${normalizedMatch}`;
-  }
-
-  const target = splitCharacterName(normalizedName);
-  const fallback = charaIndex.find((entry) => {
-    const candidate = splitCharacterName(entry.name);
-    if (candidate.suffix !== target.suffix) {
-      return false;
-    }
-
-    return candidate.base.includes(target.base) || target.base.includes(candidate.base);
-  });
-
-  return fallback ? `/chara-images/${fallback.fileName}` : null;
+  return resolveCharacterImageUrl(name);
 }
 
 function parseLegacyPartyMember(value: string): BoardDetailPartyMember {
@@ -335,6 +248,21 @@ function resolveBoardDetailPartyMembers(party: unknown): BoardDetailPartyMember[
 
     return [];
   });
+}
+
+export async function countCurrentMonthBoardCharacterNames(): Promise<Map<string, number>> {
+  const rows = await listCurrentMonthBoardPosts();
+  const counts = new Map<string, number>();
+  rows.forEach((row) => {
+    const article = boardRowToArticle(row);
+    const names = new Set(
+      resolveBoardDetailPartyMembers(article.party)
+        .map((member) => member.name)
+        .filter((name) => name.length > 0)
+    );
+    names.forEach((name) => counts.set(name, (counts.get(name) || 0) + 1));
+  });
+  return counts;
 }
 
 function resolveBoardDetailUbRows(article: any): BoardDetailUbRow[] {

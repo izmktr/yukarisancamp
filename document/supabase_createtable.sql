@@ -885,6 +885,28 @@ create table if not exists public.member_delegations (
 create index if not exists member_delegations_clanid_memberid_idx
   on public.member_delegations (clanid, memberid);
 
+-- キャラクター一覧: 掲示板などは name をそのまま参照する（未登録名でも記事は書ける）
+create table if not exists public.characters (
+  name text primary key,
+  image_key text null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  updated_by text null,
+  constraint characters_name_check check (length(btrim(name)) > 0 and name = btrim(name))
+);
+
+-- Web サーバーの service_role からのみ読み書きする
+alter table public.characters enable row level security;
+revoke all on public.characters from anon, authenticated;
+
+-- キャラクター画像: キーは画像内容の SHA-256 (Storage のキーに日本語は使えないため)
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('chara-images', 'chara-images', true, 5242880, array['image/png'])
+on conflict (id) do update
+set public = excluded.public,
+    file_size_limit = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
+
 -- ブラウザ Realtime (publishable/anon) で postgres_changes を受け取るための権限。
 -- Discord bot は service_role のため不要だが、Web は anon JWT で RLS 判定される。
 grant select on public.clans to anon, authenticated;

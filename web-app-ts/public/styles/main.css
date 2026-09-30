@@ -1062,8 +1062,13 @@ body {
 
 .board-diff-btn {
     border: 1px solid #cbd3e6;
+    color: #2f3b62;
     padding: 8px 14px;
     text-decoration: none;
+}
+
+.board-diff-btn:hover {
+    color: #1f2a4d;
 }
 
 .board-help-toggle-btn:hover,
@@ -3316,8 +3321,59 @@ tr[data-timing="true"] .ub-timing-hoshi {
     align-items: center;
 }
 
-.chara-edit-form[hidden] {
+.chara-edit-form[hidden],
+.chara-edit-panel[hidden] {
     display: none;
+}
+
+.chara-image-input {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.78rem;
+}
+
+.chara-image-missing {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 1;
+    color: #8a93ad;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.chara-register-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    margin: 0.5rem 0;
+}
+
+.chara-register-form .chara-add-input {
+    flex: 1 1 200px;
+}
+
+.chara-unregistered-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin: 0.5rem 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.chara-unregistered-item {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.chara-unregistered-name {
+    flex: 1;
+    min-width: 0;
+    font-weight: 600;
+    word-break: break-word;
 }
 
 .clan-list-table-wrapper {

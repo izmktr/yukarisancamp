@@ -283,7 +283,6 @@ app.set('views', path.join(__dirname, '../views'));
 
 // 静的ファイルの設定
 app.use(express.static(path.join(__dirname, '../public')));
-app.use('/chara-images', express.static(path.join(__dirname, '../chara')));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -343,7 +342,23 @@ app.get('/users', (_req, res) => {
   res.redirect('/info');
 });
 
-import boardRouter, { refreshBoardCharaImageCache } from './routes/board';
+import boardRouter, { countCurrentMonthBoardCharacterNames } from './routes/board';
+import {
+  CharacterConflictError,
+  deleteCharaImageIfUnused,
+  getCharaImagePublicUrl,
+  insertCharacter,
+  listCharacters,
+  normalizeCharacterName,
+  refreshCharacterCache,
+  renameCharacter,
+  setCharacterImageKey,
+  uploadCharaImage
+} from './services/characterSupabase';
+
+refreshCharacterCache().catch((error) => {
+  console.error('Failed to load character cache:', error);
+});
 app.use('/board', boardRouter);
 
 app.get('/settings', (req, res) => {
@@ -3363,222 +3378,46 @@ app.post('/api/clan/attack-history/delete', ensureDiscordServerLinked, express.j
   }
 });
 
-const charaIndexPath = path.join(__dirname, '../chara/charaindex.json');
-const charaDirPath = path.join(__dirname, '../chara');
-
-type UploadFlash = {
+type CharaFlash = {
   type: 'success' | 'error';
   message: string;
 } | null;
 
-function sanitizeUploadFileName(originalName: string): string {
-  const baseName = path.basename(originalName);
-  // Keep common readable characters (including Japanese) and replace forbidden path/file characters.
-  return baseName.replace(/[\\/:*?"<>|]/g, '_');
+const CHARA_FLASH_MESSAGES: Record<string, (name: string) => NonNullable<CharaFlash>> = {
+  added: (name) => ({ type: 'success', message: `${name} を登録しました。` }),
+  renamed: (name) => ({ type: 'success', message: `名前を ${name} に変更しました。` }),
+  'image-updated': (name) => ({ type: 'success', message: `${name} の画像を更新しました。` }),
+  'cache-refreshed': (name) => ({ type: 'success', message: `キャラ一覧を再読込しました（${name}件）。` }),
+  'missing-name': () => ({ type: 'error', message: 'キャラ名を入力してください。' }),
+  'missing-file': () => ({ type: 'error', message: '画像ファイルを選択してください。' }),
+  'invalid-type': () => ({ type: 'error', message: '画像は 5MB 以下の .png のみ登録できます。' }),
+  duplicate: (name) => ({ type: 'error', message: `${name} はすでに登録されています。` }),
+  'not-found': (name) => ({ type: 'error', message: `${name} が見つかりませんでした。` }),
+  failed: () => ({ type: 'error', message: '処理に失敗しました。時間をおいて再試行してください。' })
+};
+
+function getCharaFlashFromQuery(req: express.Request): CharaFlash {
+  const status = typeof req.query.status === 'string' ? req.query.status : '';
+  const name = typeof req.query.name === 'string' ? req.query.name : '';
+  const buildFlash = CHARA_FLASH_MESSAGES[status];
+  return buildFlash ? buildFlash(name) : null;
 }
 
-function getUploadFlashFromQuery(req: express.Request): UploadFlash {
-  const status = typeof req.query.uploadStatus === 'string' ? req.query.uploadStatus : '';
-  const fileName = typeof req.query.fileName === 'string' ? req.query.fileName : '';
-  const addStatus = typeof req.query.addStatus === 'string' ? req.query.addStatus : '';
-  const addedFileName = typeof req.query.addedFileName === 'string' ? req.query.addedFileName : '';
-  const editStatus = typeof req.query.editStatus === 'string' ? req.query.editStatus : '';
-  const editedFileName = typeof req.query.editedFileName === 'string' ? req.query.editedFileName : '';
-  const cacheStatus = typeof req.query.cacheStatus === 'string' ? req.query.cacheStatus : '';
-  const cacheCount = typeof req.query.cacheCount === 'string' ? req.query.cacheCount : '';
-
-  if (status === 'success' && fileName) {
-    return {
-      type: 'success',
-      message: `${fileName} をアップロードしました。`
-    };
+function redirectCharaCheck(res: express.Response, status: string, name = '') {
+  const query = new URLSearchParams({ status });
+  if (name) {
+    query.set('name', name);
   }
-
-  if (status === 'invalid-type') {
-    return {
-      type: 'error',
-      message: 'アップロードできるファイルは .png のみです。'
-    };
-  }
-
-  if (status === 'missing-file') {
-    return {
-      type: 'error',
-      message: 'アップロードする .png ファイルを選択してください。'
-    };
-  }
-
-  if (status === 'failed') {
-    return {
-      type: 'error',
-      message: 'アップロードに失敗しました。時間をおいて再試行してください。'
-    };
-  }
-
-  if (addStatus === 'success' && addedFileName) {
-    return {
-      type: 'success',
-      message: `${addedFileName} を charaindex.json に追加しました。`
-    };
-  }
-
-  if (addStatus === 'missing-name') {
-    return {
-      type: 'error',
-      message: 'キャラ名を入力してください。'
-    };
-  }
-
-  if (addStatus === 'missing-file') {
-    return {
-      type: 'error',
-      message: '対象ファイル名が指定されていません。'
-    };
-  }
-
-  if (addStatus === 'invalid-file') {
-    return {
-      type: 'error',
-      message: '指定されたファイルは未登録PNGではありません。'
-    };
-  }
-
-  if (addStatus === 'already-exists') {
-    return {
-      type: 'error',
-      message: 'そのファイルはすでに charaindex.json に登録済みです。'
-    };
-  }
-
-  if (addStatus === 'failed') {
-    return {
-      type: 'error',
-      message: 'charaindex.json への追加に失敗しました。'
-    };
-  }
-
-  if (editStatus === 'success' && editedFileName) {
-    return {
-      type: 'success',
-      message: `${editedFileName} の名前を更新しました。`
-    };
-  }
-
-  if (editStatus === 'missing-name') {
-    return {
-      type: 'error',
-      message: '変更後のキャラ名を入力してください。'
-    };
-  }
-
-  if (editStatus === 'missing-file') {
-    return {
-      type: 'error',
-      message: '更新対象のファイル名が指定されていません。'
-    };
-  }
-
-  if (editStatus === 'not-found') {
-    return {
-      type: 'error',
-      message: '更新対象が charaindex.json に見つかりませんでした。'
-    };
-  }
-
-  if (editStatus === 'failed') {
-    return {
-      type: 'error',
-      message: 'キャラ名の更新に失敗しました。'
-    };
-  }
-
-  if (cacheStatus === 'success') {
-    const countText = /^\d+$/.test(cacheCount) ? `（${cacheCount}件）` : '';
-    return {
-      type: 'success',
-      message: `掲示板のキャラ画像キャッシュを再読込しました${countText}。`
-    };
-  }
-
-  if (cacheStatus === 'failed') {
-    return {
-      type: 'error',
-      message: '掲示板のキャラ画像キャッシュ再読込に失敗しました。'
-    };
-  }
-
-  return null;
+  res.redirect(`/chara-check?${query.toString()}`);
 }
 
-function redirectCharaAddStatus(res: express.Response, status: string, fileName?: string) {
-  const encodedFileName = fileName ? encodeURIComponent(fileName) : '';
-  const suffix = encodedFileName ? `&addedFileName=${encodedFileName}` : '';
-  res.redirect(`/chara-check?addStatus=${status}${suffix}`);
-}
-
-function redirectCharaEditStatus(res: express.Response, status: string, fileName?: string) {
-  const encodedFileName = fileName ? encodeURIComponent(fileName) : '';
-  const suffix = encodedFileName ? `&editedFileName=${encodedFileName}` : '';
-  res.redirect(`/chara-check?editStatus=${status}${suffix}`);
-}
-
-function loadCharaCheckData() {
-  const charaIndexPath = path.join(__dirname, '../chara/charaindex.json');
-  const charaDirPath = path.join(__dirname, '../chara');
-  let characters: { fileName: string; name: string }[] = [];
-  let unindexedImages: string[] = [];
-
-  try {
-    const raw = fs.readFileSync(charaIndexPath, 'utf-8');
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      characters = parsed.filter((item): item is { fileName: string; name: string } => {
-        return item && typeof item.fileName === 'string' && typeof item.name === 'string';
-      });
-    }
-  } catch (error) {
-    console.error('Failed to load character index:', error);
-  }
-
-  try {
-    const indexedFileNames = new Set(characters.map((character) => character.fileName));
-    unindexedImages = fs.readdirSync(charaDirPath)
-      .filter((fileName) => fileName.toLowerCase().endsWith('.png'))
-      .filter((fileName) => !indexedFileNames.has(fileName))
-      .sort((left, right) => left.localeCompare(right, 'ja'));
-  } catch (error) {
-    console.error('Failed to scan character image directory:', error);
-  }
-
-  return {
-    characters,
-    unindexedImages
-  };
-}
-
-function renderCharaCheckPage(req: express.Request, res: express.Response) {
-  const { characters, unindexedImages } = loadCharaCheckData();
-  const uploadFlash = getUploadFlashFromQuery(req);
-
-  res.render('chara-check', {
-    pageTitle: 'キャラ確認',
-    currentPage: 'chara-check',
-    ...getAuthViewData(req),
-    characters,
-    unindexedImages,
-    uploadFlash
-  });
+function getCharaUpdatedBy(req: express.Request): string {
+  const userSession = req.session.user as any;
+  return userSession?.displayName || userSession?.googleUserId || 'admin';
 }
 
 const charaUpload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, callback) => {
-      callback(null, charaDirPath);
-    },
-    filename: (_req, file, callback) => {
-      callback(null, sanitizeUploadFileName(file.originalname));
-    }
-  }),
+  storage: multer.memoryStorage(),
   fileFilter: (_req, file, callback) => {
     const extensionIsPng = path.extname(file.originalname).toLowerCase() === '.png';
     const mimeIsPng = file.mimetype === 'image/png';
@@ -3589,125 +3428,173 @@ const charaUpload = multer({
     callback(new Error('Only PNG files are allowed'));
   },
   limits: {
-    files: 1
+    files: 1,
+    fileSize: 5 * 1024 * 1024
   }
 });
 
-app.get('/chara-check', ensureAdmin, (req, res) => {
-  renderCharaCheckPage(req, res);
-});
+function receiveCharaUpload(req: express.Request, res: express.Response): Promise<boolean> {
+  return new Promise((resolve) => {
+    charaUpload.single('charaPng')(req, res, (error: unknown) => {
+      if (error) {
+        console.error('Character image upload failed:', error);
+        redirectCharaCheck(res, 'invalid-type');
+        resolve(false);
+        return;
+      }
+      resolve(true);
+    });
+  });
+}
 
-app.post('/chara-check/upload', ensureAdmin, (req, res) => {
-  charaUpload.single('charaPng')(req, res, (error: unknown) => {
-    if (error) {
-      console.error('Character image upload failed:', error);
-      const status = error instanceof multer.MulterError ? 'failed' : 'invalid-type';
-      res.redirect(`/chara-check?uploadStatus=${status}`);
-      return;
+async function refreshCharacterCacheSafely(): Promise<void> {
+  try {
+    await refreshCharacterCache();
+  } catch (error) {
+    console.error('Failed to refresh character cache:', error);
+  }
+}
+
+async function deleteCharaImageSafely(imageKey: string | null): Promise<void> {
+  if (!imageKey) {
+    return;
+  }
+  try {
+    await deleteCharaImageIfUnused(imageKey);
+  } catch (error) {
+    console.error('Failed to delete character image:', error);
+  }
+}
+
+app.get('/chara-check', ensureAdmin, async (req, res) => {
+  let characters: { name: string; imageUrl: string | null }[] = [];
+  let unregisteredNames: { name: string; count: number }[] = [];
+  let loadError = '';
+
+  try {
+    const rows = await listCharacters();
+    characters = rows
+      .map((row) => ({
+        name: row.name,
+        imageUrl: row.image_key ? getCharaImagePublicUrl(row.image_key) : null
+      }))
+      .sort((left, right) => left.name.localeCompare(right.name, 'ja'));
+
+    const registeredNames = new Set(rows.map((row) => row.name));
+    try {
+      const counts = await countCurrentMonthBoardCharacterNames();
+      unregisteredNames = Array.from(counts)
+        .filter(([name]) => !registeredNames.has(name))
+        .map(([name, count]) => ({ name, count }))
+        .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name, 'ja'));
+    } catch (error) {
+      console.error('Failed to collect board character names:', error);
     }
+  } catch (error) {
+    console.error('Failed to load characters:', error);
+    loadError = 'キャラ一覧の読み込みに失敗しました。';
+  }
 
-    const uploadedFile = req.file;
-    if (!uploadedFile) {
-      res.redirect('/chara-check?uploadStatus=missing-file');
-      return;
-    }
-
-    const fileName = encodeURIComponent(uploadedFile.filename);
-    res.redirect(`/chara-check?uploadStatus=success&fileName=${fileName}`);
+  res.render('chara-check', {
+    pageTitle: 'キャラ確認',
+    currentPage: 'chara-check',
+    ...getAuthViewData(req),
+    characters,
+    unregisteredNames,
+    flash: getCharaFlashFromQuery(req),
+    loadError
   });
 });
 
-app.post('/chara-check/add', ensureAdmin, (req, res) => {
-  const fileName = typeof req.body.fileName === 'string' ? req.body.fileName.trim() : '';
-  const name = typeof req.body.characterName === 'string' ? req.body.characterName.trim() : '';
-
-  if (!fileName) {
-    redirectCharaAddStatus(res, 'missing-file');
+app.post('/chara-check/add', ensureAdmin, async (req, res) => {
+  if (!(await receiveCharaUpload(req, res))) {
     return;
   }
 
+  const name = normalizeCharacterName(typeof req.body.characterName === 'string' ? req.body.characterName : '');
   if (!name) {
-    redirectCharaAddStatus(res, 'missing-name');
+    redirectCharaCheck(res, 'missing-name');
     return;
   }
 
-  const safeFileName = path.basename(fileName);
-  const imagePath = path.join(charaDirPath, safeFileName);
-  if (!safeFileName.toLowerCase().endsWith('.png') || !fs.existsSync(imagePath)) {
-    redirectCharaAddStatus(res, 'invalid-file');
-    return;
-  }
-
+  let imageKey: string | null = null;
   try {
-    const raw = fs.readFileSync(charaIndexPath, 'utf-8');
-    const parsed = JSON.parse(raw);
-    const entries = Array.isArray(parsed) ? parsed.filter((item) => {
-      return item && typeof item.fileName === 'string' && typeof item.name === 'string';
-    }) as { fileName: string; name: string }[] : [];
-
-    if (entries.some((entry) => entry.fileName === safeFileName)) {
-      redirectCharaAddStatus(res, 'already-exists', safeFileName);
-      return;
-    }
-
-    entries.push({
-      fileName: safeFileName,
-      name
-    });
-
-    fs.writeFileSync(charaIndexPath, `${JSON.stringify(entries, null, 2)}\n`, 'utf-8');
-    redirectCharaAddStatus(res, 'success', safeFileName);
+    imageKey = req.file ? await uploadCharaImage(req.file.buffer) : null;
+    await insertCharacter(name, imageKey, getCharaUpdatedBy(req));
+    await refreshCharacterCacheSafely();
+    redirectCharaCheck(res, 'added', name);
   } catch (error) {
-    console.error('Failed to append chara index entry:', error);
-    redirectCharaAddStatus(res, 'failed');
+    console.error('Failed to add character:', error);
+    await deleteCharaImageSafely(imageKey);
+    redirectCharaCheck(res, error instanceof CharacterConflictError ? 'duplicate' : 'failed', name);
   }
 });
 
-app.post('/chara-check/update', ensureAdmin, (req, res) => {
-  const fileName = typeof req.body.fileName === 'string' ? req.body.fileName.trim() : '';
-  const name = typeof req.body.characterName === 'string' ? req.body.characterName.trim() : '';
-
-  if (!fileName) {
-    redirectCharaEditStatus(res, 'missing-file');
+app.post('/chara-check/rename', ensureAdmin, async (req, res) => {
+  const oldName = normalizeCharacterName(typeof req.body.oldName === 'string' ? req.body.oldName : '');
+  const newName = normalizeCharacterName(typeof req.body.characterName === 'string' ? req.body.characterName : '');
+  if (!newName) {
+    redirectCharaCheck(res, 'missing-name');
     return;
   }
-
-  if (!name) {
-    redirectCharaEditStatus(res, 'missing-name');
+  if (oldName === newName) {
+    redirectCharaCheck(res, 'renamed', newName);
     return;
   }
-
-  const safeFileName = path.basename(fileName);
 
   try {
-    const raw = fs.readFileSync(charaIndexPath, 'utf-8');
-    const parsed = JSON.parse(raw);
-    const entries = Array.isArray(parsed) ? parsed.filter((item) => {
-      return item && typeof item.fileName === 'string' && typeof item.name === 'string';
-    }) as { fileName: string; name: string }[] : [];
-
-    const target = entries.find((entry) => entry.fileName === safeFileName);
-    if (!target) {
-      redirectCharaEditStatus(res, 'not-found', safeFileName);
+    if (!(await renameCharacter(oldName, newName, getCharaUpdatedBy(req)))) {
+      redirectCharaCheck(res, 'not-found', oldName);
       return;
     }
-
-    target.name = name;
-    fs.writeFileSync(charaIndexPath, `${JSON.stringify(entries, null, 2)}\n`, 'utf-8');
-    redirectCharaEditStatus(res, 'success', safeFileName);
+    await refreshCharacterCacheSafely();
+    redirectCharaCheck(res, 'renamed', newName);
   } catch (error) {
-    console.error('Failed to update chara index entry:', error);
-    redirectCharaEditStatus(res, 'failed');
+    console.error('Failed to rename character:', error);
+    redirectCharaCheck(res, error instanceof CharacterConflictError ? 'duplicate' : 'failed', newName);
   }
 });
 
-app.post('/chara-check/refresh-cache', ensureAdmin, (_req, res) => {
+app.post('/chara-check/image', ensureAdmin, async (req, res) => {
+  if (!(await receiveCharaUpload(req, res))) {
+    return;
+  }
+
+  const name = normalizeCharacterName(typeof req.body.characterName === 'string' ? req.body.characterName : '');
+  if (!req.file) {
+    redirectCharaCheck(res, 'missing-file', name);
+    return;
+  }
+
+  let imageKey: string | null = null;
   try {
-    const cacheCount = refreshBoardCharaImageCache();
-    res.redirect(`/chara-check?cacheStatus=success&cacheCount=${cacheCount}`);
+    const current = (await listCharacters()).find((character) => character.name === name);
+    if (!current) {
+      redirectCharaCheck(res, 'not-found', name);
+      return;
+    }
+
+    imageKey = await uploadCharaImage(req.file.buffer);
+    await setCharacterImageKey(name, imageKey, getCharaUpdatedBy(req));
+    if (current.image_key && current.image_key !== imageKey) {
+      await deleteCharaImageSafely(current.image_key);
+    }
+    await refreshCharacterCacheSafely();
+    redirectCharaCheck(res, 'image-updated', name);
   } catch (error) {
-    console.error('Failed to refresh board chara image cache:', error);
-    res.redirect('/chara-check?cacheStatus=failed');
+    console.error('Failed to update character image:', error);
+    await deleteCharaImageSafely(imageKey);
+    redirectCharaCheck(res, 'failed', name);
+  }
+});
+
+app.post('/chara-check/refresh-cache', ensureAdmin, async (_req, res) => {
+  try {
+    const cacheCount = await refreshCharacterCache();
+    redirectCharaCheck(res, 'cache-refreshed', String(cacheCount));
+  } catch (error) {
+    console.error('Failed to refresh character cache:', error);
+    redirectCharaCheck(res, 'failed');
   }
 });
 
