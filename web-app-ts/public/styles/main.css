@@ -2512,6 +2512,11 @@ body {
     background: #ffd9d9 !important;
 }
 
+.ub-table tbody tr[data-is-added-row="true"].ub-row-has-active td,
+.ub-table tbody tr[data-is-added-row="true"].ub-row-has-active + tr.ub-comment-row td {
+    background: #ffd9d9 !important;
+}
+
 .ub-event-cell-inner {
     position: relative;
     display: inline-block;
