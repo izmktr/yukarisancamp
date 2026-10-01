@@ -1,0 +1,317 @@
+<div class="page-content tools-page">
+    <h2>ツール</h2>
+
+    <div class="tools-tabs" role="tablist">
+        <button type="button" class="tools-tab-button" role="tab" data-tool="tl" aria-controls="tools-panel-tl">TL変換</button>
+        <button type="button" class="tools-tab-button" role="tab" data-tool="carryover" aria-controls="tools-panel-carryover">持越時間</button>
+    </div>
+
+    <section id="tools-panel-tl" class="tools-panel" role="tabpanel" data-tool="tl" hidden>
+        <div class="tools-split">
+            <div class="tools-pane">
+                <div class="tools-pane-toolbar">
+                    <button type="button" id="tools-tl-reset" class="btn btn-secondary tools-reset-button">リセット</button>
+                </div>
+                <label class="tools-field">
+                    <span class="tools-label">残り時間（秒）</span>
+                    <input id="tools-tl-remain" type="text" class="tools-input tools-input-short" inputmode="numeric" maxlength="2" value="90" autocomplete="off">
+                </label>
+                <label class="tools-field">
+                    <span class="tools-label">タイムライン</span>
+                    <textarea id="tools-tl-input" class="tools-input tools-textarea" spellcheck="false" placeholder="1:20 ユイ&#10;1:05 ペコリーヌ"></textarea>
+                </label>
+            </div>
+            <div class="tools-pane">
+                <div class="tools-output-header">
+                    <span class="tools-label">変換結果</span>
+                    <button type="button" id="tools-tl-copy" class="btn btn-secondary tools-copy-button">コピー</button>
+                </div>
+                <pre id="tools-tl-output" class="tools-output"></pre>
+            </div>
+        </div>
+    </section>
+
+    <section id="tools-panel-carryover" class="tools-panel" role="tabpanel" data-tool="carryover" hidden>
+        <div class="tools-split">
+            <div class="tools-pane">
+                <div class="tools-pane-toolbar">
+                    <button type="button" id="tools-co-reset" class="btn btn-secondary tools-reset-button">リセット</button>
+                </div>
+                <label class="tools-field">
+                    <span class="tools-label">敵のHP</span>
+                    <input id="tools-co-hp" type="text" class="tools-input" inputmode="numeric" autocomplete="off">
+                </label>
+                <label class="tools-field">
+                    <span class="tools-label">ダメージ（1行に1つ）</span>
+                    <textarea id="tools-co-damage" class="tools-input tools-textarea" spellcheck="false" placeholder="10000&#10;30000&#10;4000"></textarea>
+                </label>
+            </div>
+            <div class="tools-pane">
+                <div class="tools-co-remaining">
+                    <span class="tools-label">残りHP</span>
+                    <span id="tools-co-remaining" class="tools-co-remaining-value">-</span>
+                    <button type="button" id="tools-co-clear-checks" class="btn btn-secondary tools-reset-button tools-co-clear-checks">チェッククリア</button>
+                </div>
+                <p id="tools-co-message" class="tools-message" hidden></p>
+                <table class="tools-co-table">
+                    <thead>
+                        <tr>
+                            <th class="tools-co-check-cell" aria-label="与えたダメージ"></th>
+                            <th>ダメージ</th>
+                            <th>結果</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tools-co-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const STORAGE_PREFIX = 'yukarisancamp.tools.';
+        const loadStored = (key, fallback) => {
+            try {
+                const value = localStorage.getItem(STORAGE_PREFIX + key);
+                return value === null ? fallback : value;
+            } catch (_error) {
+                return fallback;
+            }
+        };
+        const saveStored = (key, value) => {
+            try {
+                localStorage.setItem(STORAGE_PREFIX + key, value);
+            } catch (_error) {
+                // 保存できなくても動作は続ける
+            }
+        };
+        const toHalfWidth = (value) => String(value || '').normalize('NFKC');
+
+        // タブ切り替え
+        const tabButtons = Array.from(document.querySelectorAll('.tools-tab-button'));
+        const panels = Array.from(document.querySelectorAll('.tools-panel'));
+        const selectTool = (tool) => {
+            const exists = panels.some((panel) => panel.dataset.tool === tool);
+            const selected = exists ? tool : 'tl';
+            tabButtons.forEach((button) => {
+                const isActive = button.dataset.tool === selected;
+                button.classList.toggle('active', isActive);
+                button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            });
+            panels.forEach((panel) => {
+                panel.hidden = panel.dataset.tool !== selected;
+            });
+            if (location.hash !== `#${selected}`) {
+                history.replaceState(null, '', `#${selected}`);
+            }
+        };
+        tabButtons.forEach((button) => {
+            button.addEventListener('click', () => selectTool(button.dataset.tool));
+        });
+        window.addEventListener('hashchange', () => selectTool(location.hash.slice(1)));
+        selectTool(location.hash.slice(1));
+
+        // TL変換（Discord の TL コマンドと同じ変換）
+        const tlRemain = document.getElementById('tools-tl-remain');
+        const tlInput = document.getElementById('tools-tl-input');
+        const tlOutput = document.getElementById('tools-tl-output');
+        const tlCopy = document.getElementById('tools-tl-copy');
+        const TL_TIME_PATTERN = /([0-9０-９]+)([:：])([0-9０-９]+)/;
+
+        const convertTimeline = (remainText, timelineText) => {
+            const remainMatch = toHalfWidth(remainText).match(/^\s*(\d+)/);
+            if (!remainMatch) {
+                return null;
+            }
+            const overtime = Number(remainMatch[1]);
+            let result = `持ち越し時間:${overtime}秒\n`;
+            const lines = String(timelineText || '').split(/(?<=\n)/);
+            lines.forEach((line) => {
+                let offset = 0;
+                while (true) {
+                    const rest = line.slice(offset);
+                    const match = TL_TIME_PATTERN.exec(rest);
+                    if (!match) {
+                        result += rest;
+                        break;
+                    }
+                    const seconds = Number(toHalfWidth(match[1])) * 60 + Number(toHalfWidth(match[3]));
+                    const converted = Math.max(seconds - (90 - overtime), 0);
+                    if (offset > 0 || converted > 0) {
+                        result += rest.slice(0, match.index)
+                            + `${Math.floor(converted / 60)}:${String(converted % 60).padStart(2, '0')}`;
+                        offset += match.index + match[0].length;
+                    } else {
+                        break;
+                    }
+                }
+            });
+            return result;
+        };
+
+        const renderTimeline = () => {
+            const converted = convertTimeline(tlRemain.value, tlInput.value);
+            tlOutput.textContent = converted === null ? '残り時間を入力してください' : converted;
+            tlOutput.classList.toggle('is-error', converted === null);
+            saveStored('tl.remain', tlRemain.value);
+            saveStored('tl.input', tlInput.value);
+        };
+
+        tlRemain.value = loadStored('tl.remain', '90');
+        tlInput.value = loadStored('tl.input', '');
+        tlRemain.addEventListener('input', renderTimeline);
+        tlInput.addEventListener('input', renderTimeline);
+        tlCopy.addEventListener('click', async () => {
+            try {
+                await navigator.clipboard.writeText(tlOutput.textContent || '');
+                tlCopy.textContent = 'コピーしました';
+            } catch (_error) {
+                tlCopy.textContent = 'コピー失敗';
+            }
+            setTimeout(() => {
+                tlCopy.textContent = 'コピー';
+            }, 1500);
+        });
+        document.getElementById('tools-tl-reset').addEventListener('click', () => {
+            tlRemain.value = '90';
+            tlInput.value = '';
+            renderTimeline();
+            tlInput.focus();
+        });
+        renderTimeline();
+
+        // 持越時間
+        const coHp = document.getElementById('tools-co-hp');
+        const coDamage = document.getElementById('tools-co-damage');
+        const coBody = document.getElementById('tools-co-body');
+        const coMessage = document.getElementById('tools-co-message');
+        const coRemaining = document.getElementById('tools-co-remaining');
+
+        const parseNumber = (text) => {
+            const match = toHalfWidth(text).replace(/[,\s]/g, '').match(/\d+/);
+            return match ? Number(match[0]) : null;
+        };
+        const formatNumber = (value) => value.toLocaleString('ja-JP');
+        // 討伐時の持ち越し時間: 110 - 90 × 残りHP ÷ ダメージ（秒、切り上げ、最大90）
+        const calcCarryOverSeconds = (remainingHp, damage) => Math.min(90, Math.ceil((110 * damage - 90 * remainingHp) / damage));
+
+        const getRowDamage = (row) => (row.dataset.damage === '' ? null : Number(row.dataset.damage));
+
+        const updateCarryOverResults = () => {
+            const hp = parseNumber(coHp.value);
+            const rows = Array.from(coBody.querySelectorAll('tr'));
+            coMessage.hidden = hp !== null;
+            coMessage.textContent = hp === null ? '敵のHPを入力してください' : '';
+
+            const checkedTotal = rows.reduce((total, row) => {
+                const checkbox = row.querySelector('.tools-co-check');
+                const damage = getRowDamage(row);
+                return checkbox.checked && damage !== null ? total + damage : total;
+            }, 0);
+            const remainingHp = hp === null ? null : hp - checkedTotal;
+            coRemaining.textContent = remainingHp === null ? '-' : formatNumber(remainingHp);
+
+            rows.forEach((row) => {
+                const checkbox = row.querySelector('.tools-co-check');
+                const resultCell = row.querySelector('.tools-co-result');
+                const damage = getRowDamage(row);
+                row.className = '';
+                checkbox.disabled = false;
+                resultCell.textContent = '';
+
+                if (damage === null || remainingHp === null) {
+                    checkbox.disabled = true;
+                    resultCell.textContent = damage === null ? '数値なし' : '';
+                    row.classList.add('is-muted');
+                    return;
+                }
+                if (checkbox.checked) {
+                    row.classList.add('is-checked');
+                    return;
+                }
+                if (remainingHp > damage) {
+                    resultCell.textContent = `残り:${formatNumber(remainingHp - damage)}`;
+                    return;
+                }
+                resultCell.textContent = `持越:${calcCarryOverSeconds(remainingHp, damage)}秒`;
+                checkbox.disabled = true;
+                row.classList.add('is-defeat');
+            });
+        };
+
+        const autoCheckRows = () => {
+            let remainingHp = parseNumber(coHp.value);
+            if (remainingHp === null) {
+                return;
+            }
+            for (const row of coBody.querySelectorAll('tr')) {
+                const damage = getRowDamage(row);
+                if (damage === null) {
+                    continue;
+                }
+                if (remainingHp <= damage) {
+                    break;
+                }
+                row.querySelector('.tools-co-check').checked = true;
+                remainingHp -= damage;
+            }
+        };
+
+        const renderCarryOverTable = () => {
+            coBody.textContent = '';
+            coDamage.value.split('\n').map((line) => line.trim()).filter((line) => line !== '').forEach((line) => {
+                const damage = parseNumber(line);
+                const row = document.createElement('tr');
+                row.dataset.damage = damage === null ? '' : String(damage);
+
+                const checkCell = document.createElement('td');
+                checkCell.className = 'tools-co-check-cell';
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'tools-co-check';
+                checkbox.setAttribute('aria-label', `${line} を与えたダメージに含める`);
+                checkbox.addEventListener('change', updateCarryOverResults);
+                checkCell.appendChild(checkbox);
+
+                const damageCell = document.createElement('td');
+                damageCell.className = 'tools-co-damage';
+                damageCell.textContent = damage === null ? line : formatNumber(damage);
+
+                const resultCell = document.createElement('td');
+                resultCell.className = 'tools-co-result';
+
+                row.append(checkCell, damageCell, resultCell);
+                coBody.appendChild(row);
+            });
+            autoCheckRows();
+            updateCarryOverResults();
+        };
+
+        coHp.value = loadStored('co.hp', '');
+        coDamage.value = loadStored('co.damage', '');
+        coHp.addEventListener('input', () => {
+            saveStored('co.hp', coHp.value);
+            renderCarryOverTable();
+        });
+        coDamage.addEventListener('input', () => {
+            saveStored('co.damage', coDamage.value);
+            renderCarryOverTable();
+        });
+        document.getElementById('tools-co-clear-checks').addEventListener('click', () => {
+            coBody.querySelectorAll('.tools-co-check').forEach((checkbox) => {
+                checkbox.checked = false;
+            });
+            updateCarryOverResults();
+        });
+        document.getElementById('tools-co-reset').addEventListener('click', () => {
+            coHp.value = '';
+            coDamage.value = '';
+            saveStored('co.hp', '');
+            saveStored('co.damage', '');
+            renderCarryOverTable();
+            coHp.focus();
+        });
+        renderCarryOverTable();
+    });
+</script>

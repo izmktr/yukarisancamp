@@ -338,6 +338,14 @@ app.get('/info', (req, res) => {
   });
 });
 
+app.get('/tools', (req, res) => {
+  res.render('tools', {
+    pageTitle: 'ツール',
+    currentPage: 'tools',
+    ...getAuthViewData(req)
+  });
+});
+
 app.get('/users', (_req, res) => {
   res.redirect('/info');
 });

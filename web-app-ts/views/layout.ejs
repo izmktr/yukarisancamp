@@ -55,6 +55,7 @@
         <div class="tab-content">
             <a href="/info" class="tab <%= currentPage === 'info' ? 'active' : '' %>">情報</a>
             <a href="/board" class="tab <%= currentPage === 'board' ? 'active' : '' %>">掲示板</a>
+            <a href="/tools" class="tab <%= currentPage === 'tools' ? 'active' : '' %>">ツール</a>
             <% if (isLoggedIn) { %>
                 <a href="/settings" class="tab <%= currentPage === 'settings' ? 'active' : '' %>">設定</a>
                 <% if (hasDiscordServer) { %>
