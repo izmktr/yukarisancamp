@@ -211,6 +211,7 @@
             }, 0);
             const remainingHp = hp === null ? null : hp - checkedTotal;
             coRemaining.textContent = remainingHp === null ? '-' : formatNumber(remainingHp);
+            coRemaining.classList.toggle('is-negative', remainingHp !== null && remainingHp < 0);
 
             rows.forEach((row) => {
                 const checkbox = row.querySelector('.tools-co-check');
@@ -230,12 +231,14 @@
                     row.classList.add('is-checked');
                     return;
                 }
+                if (remainingHp <= 0) {
+                    return;
+                }
                 if (remainingHp > damage) {
                     resultCell.textContent = `残り:${formatNumber(remainingHp - damage)}`;
                     return;
                 }
                 resultCell.textContent = `持越:${calcCarryOverSeconds(remainingHp, damage)}秒`;
-                checkbox.disabled = true;
                 row.classList.add('is-defeat');
             });
         };

@@ -3594,6 +3594,10 @@ tr[data-timing="true"] .ub-timing-hoshi {
     gap: 0.6rem;
 }
 
+.tools-co-remaining-value.is-negative {
+    color: #b42323;
+}
+
 .tools-co-clear-checks {
     margin-left: auto;
     align-self: center;

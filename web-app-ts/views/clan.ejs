@@ -400,6 +400,7 @@
 </div>
 
 <script src="/scripts/attackStatus.js"></script>
+<script src="/scripts/clanRefresh.js"></script>
 <script>
     function parseClanBossHpText(text) {
         const value = Number(String(text || '').replace(/,/g, '').trim());
@@ -512,6 +513,14 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
+        initializeClanPageControls();
+        initializeClanRealtimeSubscription();
+    });
+
+    function initializeClanPageControls() {
+        document.querySelectorAll('#clan-page button').forEach((button) => {
+            button.defaultDisabled = button.disabled;
+        });
         replaceBossLabelsFromClanBattleSettings();
         initializeClanActivePanelsVisibility();
         initializeClanBosslapEditor();
@@ -519,8 +528,7 @@
         initializeClanActiveBossHpEditor();
         initializeClanActiveAttackActions();
         initializeClanHistoryEditor();
-        initializeClanRealtimeSubscription();
-    });
+    }
 
     function initializeClanActivePanelsVisibility() {
         const checkbox = document.getElementById('clan-show-all-active-checkbox');
@@ -1188,13 +1196,40 @@
     function initializeClanRealtimeSubscription() {
         const clanIdInput = document.getElementById('clan-id');
         const clanId = clanIdInput ? String(clanIdInput.value || '').trim() : '';
-        const messageInputs = Array.from(document.querySelectorAll('.clan-attack-message-input'));
-        let isReloading = false;
-        let isReloadPending = false;
-
-        const hasUnsavedMessage = () => (
-            messageInputs.some((input) => input.value !== input.defaultValue)
-        );
+        const refreshQueue = window.createClanRefreshQueue({
+            isBusy: () => {
+                const page = document.getElementById('clan-page');
+                if (!page) return true;
+                const messages = Array.from(page.querySelectorAll('.clan-attack-message-input'));
+                const editors = Array.from(page.querySelectorAll(
+                    '#clan-bosscount-save-btn, #clan-history-save-button, .clan-active-boss-hp-save-button'
+                ));
+                // Protect drafts, focus/IME composition, open editors and in-flight actions.
+                return messages.some((input) => input.value !== input.defaultValue || input === document.activeElement)
+                    || editors.some((button) => button.style.display !== 'none')
+                    || Array.from(page.querySelectorAll('button')).some((button) => button.disabled && !button.defaultDisabled);
+            },
+            load: async () => {
+                const response = await fetch(window.location.href, { cache: 'no-store' });
+                if (!response.ok || response.redirected) throw new Error('Failed to refresh clan');
+                const html = new DOMParser().parseFromString(await response.text(), 'text/html');
+                const nextPage = html.getElementById('clan-page');
+                const nextClanId = html.getElementById('clan-id');
+                if (!nextPage || !nextClanId || nextClanId.value !== clanId
+                    || nextPage.querySelector('.settings-firebase-error')) {
+                    throw new Error('Invalid clan refresh response');
+                }
+                return nextPage;
+            },
+            apply: (nextPage) => {
+                const scrollX = window.scrollX;
+                const scrollY = window.scrollY;
+                document.getElementById('clan-page').replaceWith(nextPage);
+                initializeClanPageControls();
+                window.scrollTo(scrollX, scrollY);
+            },
+            onError: (error) => console.error('クラン表示の更新に失敗しました。再試行します:', error)
+        });
 
         const getRealtimeRow = (payload) => {
             if (!payload || typeof payload !== 'object') {
@@ -1222,38 +1257,6 @@
             return !rowClanId || rowClanId === clanId;
         };
 
-        const parseAttackData = (rawAttackData) => {
-            let attackData = rawAttackData;
-            if (typeof attackData === 'string') {
-                try {
-                    attackData = JSON.parse(attackData);
-                } catch (error) {
-                    return {};
-                }
-            }
-            return attackData && typeof attackData === 'object' ? attackData : {};
-        };
-
-        const reloadPage = () => {
-            if (isReloading) {
-                return;
-            }
-            if (hasUnsavedMessage()) {
-                isReloadPending = true;
-                return;
-            }
-            isReloading = true;
-            const nextUrl = new URL(window.location.href);
-            nextUrl.searchParams.set('_rt', String(Date.now()));
-            window.location.replace(nextUrl.toString());
-        };
-
-        const reloadPendingPage = () => {
-            if (isReloadPending && !hasUnsavedMessage()) {
-                reloadPage();
-            }
-        };
-
         if (!/^(?:\d+|w\d{8})$/.test(clanId) || !window.__SUPABASE_PUBLIC_CONFIG__) {
             const configExists = !!window.__SUPABASE_PUBLIC_CONFIG__;
             console.warn('Supabase Realtime を開始できません: clanId/config が不足しています。', {
@@ -1275,12 +1278,17 @@
             return;
         }
 
-        if (messageInputs.length > 0) {
-            messageInputs.forEach((input) => {
-                input.addEventListener('input', reloadPendingPage);
-                input.addEventListener('clan-attack-message-saved', reloadPendingPage);
-            });
-        }
+        const parseAttackData = (rawAttackData) => {
+            let attackData = rawAttackData;
+            if (typeof attackData === 'string') {
+                try {
+                    attackData = JSON.parse(attackData);
+                } catch (error) {
+                    return {};
+                }
+            }
+            return attackData && typeof attackData === 'object' ? attackData : {};
+        };
 
         const tryApplyActiveBossHpRealtimeUpdate = (row) => {
             const hpDisplays = Array.from(document.querySelectorAll('.clan-active-boss-hp-display'));
@@ -1416,7 +1424,7 @@
                     console.log('Supabase Realtime clans change payload:', payload);
                     const row = getRealtimeRow(payload);
                     if (isRealtimeRowForCurrentClan(row)) {
-                        reloadPage();
+                        refreshQueue.request();
                     }
                 })
                 .on('postgres_changes', {
@@ -1432,10 +1440,10 @@
                     }
 
                     const eventType = payload && typeof payload.eventType === 'string' ? payload.eventType : '';
-                    if (eventType !== 'INSERT' && eventType !== 'DELETE' && tryApplyClanMembersRealtimeUpdate(row)) {
-                        return;
+                    if (eventType !== 'INSERT' && eventType !== 'DELETE') {
+                        tryApplyClanMembersRealtimeUpdate(row);
                     }
-                    reloadPage();
+                    refreshQueue.request();
                 })
                 .on('postgres_changes', {
                     event: '*',
@@ -1450,11 +1458,10 @@
                     }
 
                     const eventType = payload && typeof payload.eventType === 'string' ? payload.eventType : '';
-                    if (eventType !== 'DELETE' && tryApplyActiveBossHpRealtimeUpdate(row)) {
-                        return;
+                    if (eventType !== 'DELETE') {
+                        tryApplyActiveBossHpRealtimeUpdate(row);
                     }
-                    //読み込めなかったものは無視
-                    //reloadPage();
+                    refreshQueue.request();
                 })
                 .subscribe((status, error) => {
                     console.log('Supabase Realtime subscription status:', status, error || '');
@@ -1470,10 +1477,7 @@
                 });
 
             window.addEventListener('beforeunload', () => {
-                messageInputs.forEach((input) => {
-                    input.removeEventListener('input', reloadPendingPage);
-                    input.removeEventListener('clan-attack-message-saved', reloadPendingPage);
-                });
+                refreshQueue.stop();
                 client.removeChannel(channel);
             });
         } catch (error) {
