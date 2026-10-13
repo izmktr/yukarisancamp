@@ -609,12 +609,15 @@ begin
     target_member.attacktime->1,
     target_member.attacktime->2
   );
-  attack_times := jsonb_set(
-    attack_times,
-    array[(target_history.sortie - 1)::text],
-    coalesce(to_jsonb(restored_time), 'null'::jsonb),
-    true
-  );
+  -- 前日分の報告取り消しでは、当日の凸数・持ち越しを変更しない
+  if target_history.day = ((changed_at at time zone 'Asia/Tokyo') - interval '5 hours')::date then
+    attack_times := jsonb_set(
+      attack_times,
+      array[(target_history.sortie - 1)::text],
+      coalesce(to_jsonb(restored_time), 'null'::jsonb),
+      true
+    );
+  end if;
 
   if target_history.defeat then
     update public.clans

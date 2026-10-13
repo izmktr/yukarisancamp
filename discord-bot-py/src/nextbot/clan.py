@@ -407,6 +407,7 @@ class Clan(MessageRouter):
 
     def CreateAttackReaction(self, atmember : ClanMember, message : discord.Message, boss : int, sortie : int, overtime : int):
         react: MessageReaction
+        attack_day = atmember.attack_day or constants.reference_date()
 
         def reaction_action(emoji: str) -> tuple[str, int] | None:
             if emoji == self.emojis[9]:
@@ -544,9 +545,9 @@ class Clan(MessageRouter):
                         self.BossLap(boss),
                         sortie,
                         1 if overtime > 0 else 0,
-                        constants.reference_date(),
+                        attack_day,
                     )
-                    member.Attack(boss, sortie)
+                    member.Attack(boss, sortie, attack_day)
                 elif react.history_id is not None:
                     result = await asyncio.to_thread(
                         self.supabase.revert_clan_member_attack,
@@ -729,6 +730,7 @@ class Clan(MessageRouter):
         if error:
             return False
 
+        attack_day = constants.reference_date()
         if self.supabase is not None and self.clan_id is not None:
             self._bot_attack_updating.add(cmember.id)
             try:
@@ -742,7 +744,7 @@ class Clan(MessageRouter):
                     self.BossLap(boss),
                     sortie,
                     overattack,
-                    constants.reference_date(),
+                    attack_day,
                 )
             except Exception as exc:
                 self.TemporaryMessage(message.channel, f'攻撃の開始に失敗しました: {exc}')
@@ -750,7 +752,7 @@ class Clan(MessageRouter):
             finally:
                 self._bot_attack_updating.discard(cmember.id)
 
-        cmember.Attack(boss, sortie)
+        cmember.Attack(boss, sortie, attack_day)
         cmember.name = member.display_name
         cmember.mention = member.mention
         cmember.UpdateActive()
@@ -1124,6 +1126,9 @@ class Clan(MessageRouter):
         for clan_member in self.members.values():
             clan_member.attacktime = [None] * constants.MAX_SORTIE
 
+    async def ResetDailyAttacks(self) -> None:
+        self.ResetMemberAttacktimes()
+
     async def ResetMemberAttacktimesInDatabase(self) -> None:
         if self.supabase is None or self.clan_id is None:
             return
@@ -1488,7 +1493,7 @@ class Clan(MessageRouter):
     def StatusAttack(self):
         attacklist : list[list[ClanMember]] = [ [] for _i in range(constants.BOSSNUMBER) ]
         for member in self.members.values():
-            if member.IsAttack():
+            if member.IsAttack() and member.attack_day in ("", constants.reference_date()):
                 bidx = member.AttackBoss()
                 attacklist[bidx - 1].append(member)
 

@@ -14,6 +14,7 @@ class ClanMember():
         self.attacktime : list[Optional[int]] = [None] * constants.MAX_SORTIE  # 攻撃管理フラグ(None:未凸, 数値:持ち越し時刻)
 
         self.sortie = -1                                # 攻撃中判定
+        self.attack_day = ""
         self.boss = 0                                   # 攻撃ボス
         self.attackmessage: Optional[discord.Message] = None    # 攻撃宣言のメッセージ
         self.reportlimit: Optional[datetime.datetime] = None    # 催促される時刻の期限
@@ -24,7 +25,8 @@ class ClanMember():
         self.damage: int = 0                              # 与えたダメージ
         self.message: str = ''                            # コメント
 
-    def Attack(self, bossindex : int, sortie : int):
+    def Attack(self, bossindex : int, sortie : int, day: str | None = None):
+        self.attack_day = day if day is not None else constants.reference_date()
         self.sortie = sortie
         self.reportlimit = constants.now_jst() + datetime.timedelta(minutes = 30)
         self.boss = bossindex
@@ -54,6 +56,8 @@ class ClanMember():
 
         attackboss = attackdata.get("boss", attackdata.get("attackboss"))
         sortie = attackdata.get("sortie")
+        attack_day = attackdata.get("day")
+        self.attack_day = attack_day if isinstance(attack_day, str) else ""
         if isinstance(attackboss, int) and constants.is_valid_boss(attackboss) \
                 and isinstance(sortie, int) and constants.is_valid_sortie(sortie):
             self.boss = attackboss

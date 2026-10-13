@@ -243,6 +243,18 @@ class SupabaseClient:
         with urlopen(request, timeout=10):
             pass
 
+    @staticmethod
+    def idle_attackdata() -> dict[str, Any]:
+        return {
+            "day": "",
+            "sortie": 0,
+            "lap": 0,
+            "boss": 0,
+            "overattack": None,
+            "damage": None,
+            "message": None,
+        }
+
     def reset_clan_members_attacktime(self, clan_id: int) -> None:
         query = urlencode({"clanid": f"eq.{clan_id}"})
         payload = json.dumps(
@@ -347,15 +359,7 @@ class SupabaseClient:
             {
                 "taskkill": None,
                 "attacktime": [],
-                "attackdata": {
-                    "day": "",
-                    "sortie": 0,
-                    "lap": 0,
-                    "boss": 0,
-                    "overattack": None,
-                    "damage": None,
-                    "message": None,
-                },
+                "attackdata": self.idle_attackdata(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }
         ).encode("utf-8")

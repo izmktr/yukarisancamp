@@ -918,7 +918,7 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         supabase.revert_clan_member_attack.return_value = {
             "attacktime": [None, None, None],
             "attackdata": {
-                "day": "2026-09-05", "sortie": 1, "lap": 1, "boss": 5, "overattack": 0
+                "day": constants.reference_date(), "sortie": 1, "lap": 1, "boss": 5, "overattack": 0
             },
             "bosslaps": [1, 1, 1, 1, 1],
         }
@@ -1158,6 +1158,45 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         clan_member.ApplyDatabaseRow({"taskkill": "2026-09-08"})
 
         self.assertEqual(clan_member.taskkill, "2026-09-08")
+
+    def test_apply_database_row_keeps_attack_from_previous_day(self) -> None:
+        clan_member = ClanMember("456")
+        clan_member.Attack(2, 1)
+
+        clan_member.ApplyDatabaseRow({
+            "attacktime": [None, None, None],
+            "attackdata": {
+                "day": "2000-01-01",
+                "boss": 2,
+                "sortie": 1,
+                "damage": 1000,
+                "message": "昨日の攻撃",
+            },
+        })
+
+        self.assertTrue(clan_member.IsAttack())
+        self.assertEqual((clan_member.boss, clan_member.sortie), (2, 1))
+        self.assertEqual(clan_member.attack_day, "2000-01-01")
+        clan = Clan()
+        clan.members[clan_member.id] = clan_member
+        self.assertEqual(clan.StatusAttack(), "")
+        clan_member.attack_day = constants.reference_date()
+        self.assertIn("攻撃中", clan.StatusAttack())
+
+    def test_apply_database_row_keeps_attack_for_current_reference_date(self) -> None:
+        clan_member = ClanMember("456")
+
+        clan_member.ApplyDatabaseRow({
+            "attacktime": [None, None, None],
+            "attackdata": {
+                "day": constants.reference_date(),
+                "boss": 2,
+                "sortie": 1,
+            },
+        })
+
+        self.assertTrue(clan_member.IsAttack())
+        self.assertEqual((clan_member.boss, clan_member.sortie), (2, 1))
 
     def test_taskkill_display_only_applies_to_matching_base_date(self) -> None:
         clan_member = ClanMember("456")
@@ -1424,6 +1463,77 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
             123, "456", constants.reference_date()
         )
         self.assertEqual(member.attacktime, [50, None, None])
+
+    async def test_previous_day_attack_can_be_reported_after_daily_reset(self) -> None:
+        for action, overtime, emoji_index in [("complete", 0, 0), ("defeat", 0, 1), ("complete", 50, 0)]:
+            with self.subTest(action=action, overtime=overtime):
+                clan, member, supabase = self.create_clan([overtime, None, None])
+                message = self.create_message()
+                member.Attack(5, 1, "2000-01-01")
+                member.attackmessage = message
+                clan.RemoveReaction = AsyncMock()
+                clan.ApplyBossDamage = AsyncMock()
+                clan.ResetBossHp = AsyncMock()
+                clan.damagecontrol[4].SetDamage(member, 1000, "")
+                reaction = clan.CreateAttackReaction(member, message, 5, 1, overtime)
+                clan.messagereaction[message.id] = reaction
+
+                await clan.ResetDailyAttacks()
+
+                self.assertTrue(member.IsAttack())
+                self.assertEqual(clan.StatusAttack(), "")
+                self.assertIs(clan.messagereaction[message.id], reaction)
+                clan.TemporaryMessage = MagicMock()
+                self.assertFalse(await clan.Attack(message, self.create_discord_member(), "5"))
+                supabase.update_discord_clan_member_attack.assert_not_called()
+                supabase.finish_clan_member_attack.return_value = {
+                    "history_id": 77,
+                    "attacktime": [None, None, None],
+                    "attackdata": SupabaseClient.idle_attackdata(),
+                    "bosslaps": [1, 1, 1, 1, 2 if action == "defeat" else 1],
+                }
+                supabase.refresh_clan_member_attacktime.return_value = [None, None, None]
+                payload = types.SimpleNamespace(
+                    message_id=message.id,
+                    emoji=types.SimpleNamespace(name=clan.emojis[emoji_index]),
+                )
+
+                self.assertTrue(await reaction.addreaction(member, payload))
+
+                self.assertFalse(member.IsAttack())
+                self.assertEqual(member.attacktime, [None, None, None])
+                supabase.refresh_clan_member_attacktime.assert_called_once_with(
+                    123, "456", constants.reference_date()
+                )
+                supabase.finish_clan_member_attack.assert_called_once_with(
+                    "456", "old name", "<@456>", 100, action, 20 if action == "defeat" else 0, 123
+                )
+                if action == "complete":
+                    clan.ApplyBossDamage.assert_awaited_once_with(5, 1000, member.name)
+                else:
+                    self.assertEqual(clan.supabase_data["bosslaps"], [1, 1, 1, 1, 2])
+                    clan.ResetBossHp.assert_awaited_once_with(5, member.name)
+
+    async def test_undo_previous_day_cancel_restores_original_day(self) -> None:
+        clan, member, supabase = self.create_clan()
+        message = self.create_message()
+        member.Attack(5, 1, "2000-01-01")
+        member.attackmessage = message
+        clan.RemoveReaction = AsyncMock()
+        supabase.finish_clan_member_attack.return_value = {
+            "attacktime": [None, None, None],
+            "attackdata": SupabaseClient.idle_attackdata(),
+        }
+        reaction = clan.CreateAttackReaction(member, message, 5, 1, 0)
+        payload = types.SimpleNamespace(
+            message_id=message.id, emoji=types.SimpleNamespace(name=clan.emojis[9])
+        )
+        self.assertTrue(await reaction.addreaction(member, payload))
+        self.assertTrue(await reaction.removereaction(member, payload))
+        self.assertEqual(supabase.update_discord_clan_member_attack.call_args.args[-1], "2000-01-01")
+        self.assertEqual(member.attack_day, "2000-01-01")
+        self.assertTrue(member.IsAttack())
+        self.assertEqual(member.attacktime, [None, None, None])
 
     async def test_cancel_attack_does_not_refresh_attacktime_from_histories(self) -> None:
         clan, member, supabase = self.create_clan()
@@ -1729,6 +1839,18 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
             "startDate": "2026-07-25",
             "endDate": "2026-07-30",
         }
+        member.Attack(2, 1, "2000-01-01")
+        attack_message = self.create_message()
+        member.attackmessage = attack_message
+        member.damage = 1000
+        member.message = "攻撃中"
+        web_post = MagicMock()
+        web_post.delete = AsyncMock()
+        clan.webattackposts[member.id] = (web_post, 2, 1)
+        clan.messagereaction[100] = MagicMock()
+        clan.damagecontrol[1].active = True
+        clan.damagecontrol[1].SetDamage(member, 1000, "攻撃中")
+        clan.damagecontrol[1].SendResult = AsyncMock()
 
         await app._on_minute_tick(
             datetime.datetime(2026, 7, 20, 4, 59, 30, tzinfo=constants.JST),
@@ -1738,8 +1860,60 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         app.supabase.get_clanbattle_setting.assert_called_once_with()
         app.supabase.reset_clan_members_attacktime.assert_called_once_with(123)
         self.assertEqual(member.attacktime, [None, None, None])
+        self.assertTrue(member.IsAttack())
+        self.assertEqual((member.boss, member.sortie), (2, 1))
+        self.assertEqual(member.damage, 1000)
+        self.assertEqual(member.message, "攻撃中")
+        self.assertIs(member.attackmessage, attack_message)
+        self.assertIn(member.id, clan.webattackposts)
+        self.assertIn(100, clan.messagereaction)
+        self.assertIn(member, clan.damagecontrol[1].members)
+        clan.damagecontrol[1].SendResult.assert_not_awaited()
+        web_post.delete.assert_not_awaited()
+        self.assertNotIn("攻撃中", clan.Status())
         self.assertEqual(clan.clanbattle_setting["startDate"], "2026-07-25")
         channel.send.assert_not_awaited()
+
+    async def test_five_am_skips_status_for_zero_attack_clans(self) -> None:
+        app, idle_clan, idle_member, _channel = self._create_scheduled_app()
+        idle_member.Attack(2, 1)
+        active_app, active_clan, active_member, _channel = self._create_scheduled_app([0, None, None])
+        active_clan.clan_id = 789
+        active_clan.members["999"] = ClanMember("999")
+        app._clans[789] = active_clan
+
+        await app._on_minute_tick(
+            datetime.datetime(2026, 7, 20, 4, 59, 30, tzinfo=constants.JST),
+            datetime.datetime(2026, 7, 20, 5, 0, 10, tzinfo=constants.JST),
+        )
+
+        idle_clan.OnMessageHandled.assert_not_awaited()
+        active_clan.OnMessageHandled.assert_awaited_once_with(active_clan.guild)
+        app.supabase.reset_clan_members_attacktime.assert_called_once_with(123)
+        active_app.supabase.reset_clan_members_attacktime.assert_called_once_with(789)
+        self.assertTrue(idle_member.IsAttack())
+        self.assertEqual(idle_member.attacktime, [None, None, None])
+        self.assertEqual(active_member.attacktime, [None, None, None])
+
+    async def test_daily_reset_posts_status_for_carryover(self) -> None:
+        app, clan, member, _channel = self._create_scheduled_app([20, None, None])
+
+        await app._reset_all_member_attacktimes()
+
+        clan.OnMessageHandled.assert_awaited_once_with(clan.guild)
+        self.assertEqual(member.attacktime, [None, None, None])
+
+    def test_reset_clan_members_attacktime_preserves_attackdata(self) -> None:
+        client = SupabaseClient("https://example.supabase.co", "secret")
+
+        with patch("src.nextbot.supabase_client.urlopen") as mocked_urlopen:
+            mocked_urlopen.return_value.__enter__.return_value = MagicMock()
+            client.reset_clan_members_attacktime(123)
+
+        called_request = mocked_urlopen.call_args.args[0]
+        payload = json.loads(called_request.data)
+        self.assertEqual(payload["attacktime"], [])
+        self.assertNotIn("attackdata", payload)
 
     async def test_clanbattle_eve_sends_notice_and_resets_bosslaps(self) -> None:
         app, clan, _member, channel = self._create_scheduled_app()

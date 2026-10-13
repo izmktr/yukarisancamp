@@ -378,12 +378,13 @@ class NextBotApp:
 
     async def _reset_all_member_attacktimes(self) -> None:
         for clan in self._clans.values():
-            clan.ResetMemberAttacktimes()
+            had_attacks = any(member.SortieCount() > 0 for member in clan.members.values())
+            await clan.ResetDailyAttacks()
             try:
                 await clan.ResetMemberAttacktimesInDatabase()
             except Exception as exc:
                 print(f"attacktime のリセットに失敗しました: {clan.clan_id}: {exc}")
-            if clan.guild is not None:
+            if had_attacks and clan.guild is not None:
                 await clan.OnMessageHandled(clan.guild)
 
     async def _reset_lastmessage(self) -> None:
