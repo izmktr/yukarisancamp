@@ -1,4 +1,4 @@
-/* Information, board (including detail/editor) and settings on small screens.
+/* Information, board (including detail/editor), tools and settings on small screens.
    Keep desktop layouts and the hidden states managed by scripts intact. */
 @media (max-width: 768px) {
     .standard-pages-layout .header-content { padding-inline: 16px; gap: 8px; }
@@ -35,6 +35,10 @@
         outline: 3px solid #5268b4;
         outline-offset: 2px;
     }
+
+    .tools-page .tools-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .tools-page .tools-tab-button { min-width: 0; min-height: 44px; padding-inline: 8px; }
+    .tools-page .tools-co-remaining { flex-wrap: wrap; }
 
     .info-page .info-section { padding: 16px; margin: 16px 0; }
     .info-page .info-section h3 { font-size: 1.05rem; margin-bottom: 12px; }
