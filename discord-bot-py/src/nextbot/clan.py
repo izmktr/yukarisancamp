@@ -985,10 +985,11 @@ class Clan(MessageRouter):
             self.TemporaryMessage(message.channel, f'ロール「{role_name}」が見つかりません')
             return False
 
-        if not guild.chunked:
-            await guild.chunk()
-
-        targets = [target for target in role.members if not target.bot]
+        targets = [
+            target
+            async for target in guild.fetch_members(limit=None)
+            if not target.bot and any(member_role.id == role.id for member_role in target.roles)
+        ]
         if not targets:
             self.TemporaryMessage(message.channel, f'ロール「{role.name}」が付いたメンバーがいません')
             return False

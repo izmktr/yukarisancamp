@@ -106,6 +106,7 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         clan.TemporaryMessage = MagicMock()
         clan.CheckNotAdministrator = MagicMock(return_value=False)
         role = types.SimpleNamespace(
+            id=1234,
             name="クランメンバー",
             members=[
                 self.create_role_member(456, "既存"),
@@ -115,20 +116,44 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
-        async def reload() -> None:
-            for target in role.members:
+        message = self.create_setmember_message([role])
+        fetched_members = list(role.members)
+        outsider = self.create_role_member(333, "対象外")
+        outsider.roles = []
+        for target in fetched_members:
+            target.roles = [role]
+
+        async def fetch_members(*, limit):
+            for target in [*fetched_members, outsider]:
+                yield target
+
+        message.guild.fetch_members = MagicMock(side_effect=fetch_members)
+        # The cached role list is stale; only the API response should be used.
+        role.members = []
+
+        async def reload_fetched() -> None:
+            for target in fetched_members:
                 if not target.bot:
                     clan.members.setdefault(str(target.id), ClanMember(str(target.id)))
 
-        clan.ReloadSupabaseMembers = AsyncMock(side_effect=reload)
-
-        self.assertTrue(await clan.SetMember(self.create_setmember_message([role]), MagicMock(), "クランメンバー"))
+        clan.ReloadSupabaseMembers = AsyncMock(side_effect=reload_fetched)
+        self.assertTrue(await clan.SetMember(message, MagicMock(), "クランメンバー"))
 
         calls = supabase.insert_discord_clan_member_if_missing.call_args_list
         self.assertEqual([call.args[1] for call in calls], [456, 789, 111])
         self.assertEqual([call.args[5] for call in calls], ["member", "member", "leader"])
         self.assertEqual(clan.members["789"].name, "新規")
         self.assertIn("3 人中 2 人", clan.TemporaryMessage.call_args.args[1])
+
+        supabase.insert_discord_clan_member_if_missing.reset_mock()
+        fetched_members[1].roles = []
+        self.assertTrue(await clan.SetMember(message, MagicMock(), "クランメンバー"))
+        self.assertEqual(message.guild.fetch_members.call_count, 2)
+        message.guild.fetch_members.assert_called_with(limit=None)
+        self.assertEqual(
+            [call.args[1] for call in supabase.insert_discord_clan_member_if_missing.call_args_list],
+            [456, 111],
+        )
 
     async def test_setmember_reports_missing_role(self) -> None:
         clan, _member, supabase = self.create_clan()
