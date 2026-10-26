@@ -1,0 +1,42 @@
+<div class="page-content clan-page clan-workspace">
+  <%- include('partials/clan-page-header', { pageLabel: 'プラン', clanName: data && data.clan ? data.clan.name : 'プラン', description: '本凸実績から、ボスごとの残り見込みと予想着地を確認します。' }) %>
+  <% if (loadError) { %>
+    <p role="alert"><%= loadError %></p><a href="/clan-plan">再読み込み</a>
+  <% } else { %>
+    <p>基準日：<%= data.baseDate %>（日本時間5時切り替え）</p>
+    <a href="/clan-plan">最新の集計に更新</a>
+    <% if (!summary.inPeriod) { %><p>開催期間外、または開催日未設定です。前日比較・予想着地は表示しません。</p><% } %>
+    <% if (summary.inPeriod && !summary.hasPrevious) { %><p>開催初日のため、前日比較・予想着地は算出できません。</p><% } %>
+    <div class="plan-boss-grid">
+    <% summary.bosses.forEach(b => { %>
+      <section class="plan-boss-card">
+        <h3><%= b.boss %>：<%= data.bossNames[b.boss - 1] || `ボス${b.boss}` %></h3>
+        <p class="plan-progress"><%= b.lap %>周目 + <%= b.current %>凸</p>
+        <p>平均：<%= b.average === null ? '算出不可' : `${b.average.toFixed(1)}凸` %></p>
+        <% if (b.landing) { %><p class="plan-landing">予想着地：<%= b.landing.lap %>周目 + <%= b.landing.attacks %>凸</p><% } %>
+        <dl class="plan-counts">
+          <dt>前日（予定）</dt><dd><%= summary.hasPrevious ? `${b.planned}凸` : '—' %></dd>
+          <dt>本日（済み）</dt><dd><%= summary.inPeriod ? `${b.done}凸` : '—' %></dd>
+          <dt>残り見込み</dt><dd><%= summary.hasPrevious ? `${b.remaining}凸` : '—' %></dd>
+        </dl>
+      </section>
+    <% }); %>
+    </div>
+    <p>平均は今開催の23周目から各ボスの現在周回の直前までを集計。残り見込みは前日−本日で、負数になる場合があります。予想着地は本凸数からの概算です。</p>
+    <h3>移動メンバー</h3>
+    <% if (!summary.hasPrevious) { %><p>前日比較は算出できません。</p>
+    <% } else if (!summary.movement.length) { %><p>移動メンバーはいません。</p><% } else { %>
+      <div class="plan-table-scroll"><table class="plan-movement-table">
+        <thead><tr><th>メンバー</th><th>移動元候補</th><th>移動先</th></tr></thead>
+        <tbody><% summary.movement.forEach(m => { %>
+          <tr><th scope="row"><%= m.name %></th>
+          <% [m.from, m.to].forEach(values => { %><td>
+            <% if (!values.some(n => n > 0)) { %>—<% } %>
+            <% values.forEach((n, i) => { if (n > 0) { %><div><%= i + 1 %>：<%= data.bossNames[i] || `ボス${i + 1}` %> × <%= n %>凸</div><% } }); %>
+          </td><% }); %></tr>
+        <% }); %></tbody>
+      </table></div>
+    <% } %>
+    <p>同じメンバー・同じボスの前日と本日を相殺した差分です。移動元候補は未消化分であり、移動先との対応は確定していません。</p>
+  <% } %>
+</div>

@@ -20,6 +20,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import { randomInt } from 'crypto';
 import { getBaseDate } from './utils/baseDate';
+import { buildClanPlan } from './utils/clanPlan';
 import { decrypt, encrypt } from './utils/encrypt';
 import { buildClanAttackMemberStatus, sortClanAttackMembers } from './utils/attackStatus';
 
@@ -484,6 +485,32 @@ app.get('/clan-data', ensureDiscordServerLinked, async (req, res) => {
   } catch (error) {
     console.error('Failed to load clan data page:', error);
     res.redirect('/clan');
+  }
+});
+
+app.get('/clan-plan', ensureDiscordServerLinked, async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const config = getSupabaseConfig();
+  const googleUserId = (req.session.user as any)?.googleUserId;
+  if (!config || !googleUserId) { res.redirect('/settings'); return; }
+  try {
+    const profile = await supabaseSelectUserProfileByGoogleUserId(config, googleUserId);
+    const server = profile && isNonEmptyTrimmedString(profile.discordServer)
+      ? profile.discordServer.trim() : getSessionDiscordServer(req);
+    if (!server) { res.redirect('/settings'); return; }
+    const data = await loadClanDataPagePayload(config, server);
+    if (!data || !data.clan) { res.redirect('/clan'); return; }
+    res.render('clan-plan', {
+      ...getAuthViewData(req), pageTitle: 'プラン', currentPage: 'clan-plan',
+      data, summary: buildClanPlan(data.bossHistories, data.members, data.clan.bosslaps, data.baseDate, data.startDate, data.endDate),
+      loadError: ''
+    });
+  } catch (error) {
+    console.error('Failed to load clan plan:', error);
+    res.status(503).render('clan-plan', {
+      ...getAuthViewData(req), pageTitle: 'プラン', currentPage: 'clan-plan', data: null, summary: null,
+      loadError: '集計データを取得できませんでした。再読み込みしてください。'
+    });
   }
 });
 
@@ -1588,25 +1615,27 @@ async function supabaseSelectClanAttackHistories(
   const query = new URLSearchParams({
     select: 'id,day,clanid,memberid,sortie,sortiecount,boss,attacklap,overtime,defeat,damage',
     clanid: `eq.${clanId}`,
-    order: 'day.asc,sortie.asc,overtime.asc'
+    order: 'id.asc',
+    limit: '500'
   });
 
-  const response = await fetch(`${endpointUrl}?${query.toString()}`, {
-    method: 'GET',
-    headers: {
-      apikey: config.secretKey,
-      Authorization: `Bearer ${config.secretKey}`
+  const rows: unknown[] = [];
+  for (;;) {
+    query.set('offset', String(rows.length));
+    const response = await fetch(`${endpointUrl}?${query.toString()}`, {
+      method: 'GET',
+      headers: {
+        apikey: config.secretKey,
+        Authorization: `Bearer ${config.secretKey}`
+      }
+    });
+    if (!response.ok) {
+      throw new Error(`Supabase select clan attack histories failed: ${response.status}`);
     }
-  });
-
-  if (!response.ok) {
-    const responseText = await response.text();
-    throw new Error(`Supabase select clan attack histories failed: ${response.status} ${responseText}`);
-  }
-
-  const rows = await response.json() as unknown;
-  if (!Array.isArray(rows)) {
-    return [];
+    const page: unknown = await response.json();
+    if (!Array.isArray(page)) { throw new Error('Invalid attack histories response'); }
+    if (page.length === 0) { break; }
+    rows.push(...page);
   }
 
   const baseRangeStart = startDate && endDate ? startDate : baseDate;
