@@ -1167,6 +1167,65 @@ body {
     margin-top: 0.35rem;
 }
 
+.board-timelog-import {
+    margin-top: 0.75rem;
+}
+
+.board-timelog-import h4 {
+    margin: 0 0 0.4rem;
+}
+
+.board-timelog-import label {
+    display: block;
+    margin-top: 0.5rem;
+    font-weight: 700;
+}
+
+.board-timelog-import textarea {
+    display: block;
+    width: 100%;
+    max-width: 52rem;
+    margin: 0.25rem 0 0.5rem;
+    font: inherit;
+}
+
+.board-timelog-preview {
+    margin-top: 0.75rem;
+}
+
+.board-timelog-preview-table-wrap {
+    overflow-x: auto;
+    margin-bottom: 0.75rem;
+}
+
+.board-timelog-preview-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+}
+
+.board-timelog-preview-table th,
+.board-timelog-preview-table td {
+    padding: 0.4rem;
+    border: 1px solid #dbe5ff;
+    text-align: left;
+    vertical-align: top;
+}
+
+.board-timelog-preview-table select {
+    min-width: 12rem;
+    max-width: 20rem;
+}
+
+.board-timelog-error {
+    color: #b42318;
+    font-weight: 700;
+}
+
+.board-timelog-status {
+    margin-top: 0.5rem;
+}
+
 .board-header {
     margin-bottom: 0.75rem;
 }

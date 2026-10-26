@@ -119,6 +119,26 @@
         <h3>ユニオンバースト発動時間</h3>
         <% if (ubRows && ubRows.length > 0) { %>
             <% const partySlots = (partyMembers && partyMembers.length > 0) ? partyMembers.slice().reverse() : []; %>
+            <button type="button" id="board-timelog-toggle" class="btn board-timelog-toggle" aria-controls="board-timelog-panel" aria-expanded="false">テキストからSET状態を取り込む</button>
+            <section id="board-timelog-panel" class="board-help-panel board-timelog-import" aria-label="テキスト取り込み" hidden>
+                <h4>テキストからSET状態を取り込む</h4>
+                <p>テキストの時刻・UB名・行構成は変更せず、対応する既存行のキャラSET／Auto切り替えだけを反映します。名前は時刻とUB名から候補を選び、1:30はバトル開始に対応します。○/〇/◯/oはSET、×/x/ー/-はSETなしとして扱います。5項目は表の左から順です。on/offがない行は前の状態を維持します。</p>
+                <label for="board-timelog-input">テキスト</label>
+                <textarea id="board-timelog-input" rows="8" placeholder="時刻、UB名、5つの状態を貼り付け"></textarea>
+                <button type="button" id="board-timelog-preview-button" class="btn">プレビュー</button>
+                <div id="board-timelog-status" class="board-timelog-status" role="status" aria-live="polite"></div>
+                <div id="board-timelog-preview" class="board-timelog-preview" hidden>
+                    <div class="board-timelog-preview-table-wrap">
+                        <table class="board-timelog-preview-table">
+                            <thead>
+                                <tr><th>行</th><th>時刻</th><th>入力名</th><th>UB行の対応</th><th>5項目</th><th>Auto</th><th>確認事項</th></tr>
+                            </thead>
+                            <tbody id="board-timelog-preview-body"></tbody>
+                        </table>
+                    </div>
+                    <button type="button" id="board-timelog-apply-button" class="btn btn-primary" disabled>SET状態を反映</button>
+                </div>
+            </section>
             <div class="ub-toolbar">
                 <div class="ub-toolbar-main">
                     <div class="ub-display-toggle" role="group" aria-label="表示切り替え">
@@ -961,6 +981,326 @@
             actionsButtons.appendChild(deleteButton);
         }
 
+        function normalizeImportedName(value) {
+            return value.normalize('NFKC').toLowerCase().replace(/[\s　・･()[\]（）]/g, '');
+        }
+
+        function importedNameSimilarity(left, right) {
+            const a = Array.from(normalizeImportedName(left));
+            const b = Array.from(normalizeImportedName(right));
+            if (a.length === 0 || b.length === 0 || !a.some((character) => b.includes(character))) {
+                return 0;
+            }
+
+            let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+            for (let i = 1; i <= a.length; i += 1) {
+                const current = [i];
+                for (let j = 1; j <= b.length; j += 1) {
+                    current[j] = Math.min(
+                        current[j - 1] + 1,
+                        previous[j] + 1,
+                        previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+                    );
+                }
+                previous = current;
+            }
+
+            return 1 - (previous[b.length] / Math.max(a.length, b.length));
+        }
+
+        function parseImportedTimelog(text) {
+            let previousSeconds = null;
+            const rows = [];
+            const symbolPattern = /[〇○◯oOxX×ーｰ－\-―—−]/g;
+            const normalizedText = text.replace(/[０-９]/g, (digit) => String.fromCharCode(digit.charCodeAt(0) - 0xFEE0)).replace(/：/g, ':');
+
+            normalizedText.split(/\r?\n/).forEach((rawLine, index) => {
+                if (!rawLine.trim()) {
+                    return;
+                }
+
+                const timeMatch = rawLine.match(/^\s*(\d{1,2}):(\d{2})/);
+                const line = (timeMatch ? rawLine.slice(timeMatch[0].length) : rawLine)
+                    .replace(/（[^）]*）|\([^)]*\)|\[[^\]]*\]/g, ' ');
+                const autoMatch = line.match(/(?:\bauto\s+)?\b(on|off)\b[。．.、,，！!]*\s*$|(?:オン|オフ)[。．.、,，！!]*\s*$/i);
+                const lineBeforeAuto = autoMatch ? line.slice(0, autoMatch.index).trimEnd() : line;
+                const matches = Array.from(lineBeforeAuto.matchAll(symbolPattern));
+                const warnings = [];
+                let error = '';
+                let seconds = null;
+
+                if (timeMatch) {
+                    seconds = (Number(timeMatch[1]) * 60) + Number(timeMatch[2]);
+                    if (Number(timeMatch[2]) >= 60) {
+                        error = '時刻の秒は00〜59で指定してください';
+                        seconds = null;
+                    } else if (previousSeconds !== null && seconds > previousSeconds) {
+                        warnings.push('時刻が前の行より進んでいます。入力順・時刻を保ちます');
+                    }
+                } else if (previousSeconds !== null) {
+                    seconds = previousSeconds;
+                    warnings.push('時刻を前の行から補完しました');
+                } else {
+                    error = '最初の有効な行には時刻が必要です';
+                }
+
+                if (seconds !== null) {
+                    previousSeconds = seconds;
+                }
+
+                if (matches.length < PARTY_COLUMN_COUNT) {
+                    error = error || 'SET状態を5つ読み取れません';
+                }
+
+                const statusMatches = matches.slice(-PARTY_COLUMN_COUNT);
+                const statusStart = statusMatches.length === PARTY_COLUMN_COUNT ? statusMatches[0].index : lineBeforeAuto.length;
+                const rawName = lineBeforeAuto.slice(0, statusStart)
+                    .replace(/^[\s　:：|｜,，、]+|[\s　:：|｜,，、]+$/g, '')
+                    .trim();
+                const statuses = statusMatches.map((match) => !/[×xXーｰ－\-―—−]/.test(match[0]));
+                const autoValue = autoMatch ? (autoMatch[1] || autoMatch[0]).replace(/[。．.、,，！!]/g, '').trim() : '';
+                const auto = autoMatch
+                    ? (/^(?:オン|on)$/i.test(autoValue))
+                    : null;
+
+                rows.push({
+                    lineNumber: index + 1,
+                    time: seconds === null ? '' : formatSecondsToTime(seconds),
+                    seconds,
+                    name: rawName,
+                    statuses,
+                    auto,
+                    warnings,
+                    error,
+                    candidateIndex: null,
+                    candidateResolved: false,
+                    isBattleStart: seconds === 90
+                });
+            });
+
+            return rows;
+        }
+
+        function collectTimelogCandidates() {
+            return getMainRows().map((row, index) => {
+                const name = getOfficialUbText(row) || getUbEventLabel(row);
+                return {
+                    row,
+                    index,
+                    name,
+                    seconds: parseTimeToSeconds(getRowTimeText(row)),
+                    isBattleStart: row.dataset.isBattleStart === 'true'
+                };
+            }).filter((candidate) => candidate.name);
+        }
+
+        function findTimelogCandidate(row, candidates) {
+            if (row.isBattleStart || !row.name) {
+                return null;
+            }
+
+            const ranked = candidates.map((candidate, index) => ({
+                index,
+                similarity: importedNameSimilarity(row.name, candidate.name),
+                timeDifference: row.seconds === null || candidate.seconds === null
+                    ? Number.POSITIVE_INFINITY
+                    : Math.abs(row.seconds - candidate.seconds)
+            })).filter((candidate) => !candidates[candidate.index].isBattleStart)
+                .sort((left, right) => right.similarity - left.similarity || left.timeDifference - right.timeDifference);
+
+            return ranked.length > 0 && ranked[0].similarity > 0 ? ranked[0].index : null;
+        }
+
+        function renderTimelogPreview(rows, candidates) {
+            const preview = document.getElementById('board-timelog-preview');
+            const body = document.getElementById('board-timelog-preview-body');
+            const applyButton = document.getElementById('board-timelog-apply-button');
+            const status = document.getElementById('board-timelog-status');
+            if (!(preview instanceof HTMLElement) || !(body instanceof HTMLElement) || !(applyButton instanceof HTMLButtonElement) || !(status instanceof HTMLElement)) {
+                return;
+            }
+
+            body.replaceChildren();
+            preview.hidden = true;
+            applyButton.disabled = true;
+            if (rows.length === 0) {
+                status.textContent = '取り込める行がありません。';
+                return;
+            }
+
+            const battleStartIndex = candidates.findIndex((candidate) => candidate.isBattleStart);
+            rows.forEach((row) => {
+                if (!row.candidateResolved) {
+                    row.candidateIndex = row.isBattleStart
+                        ? (battleStartIndex >= 0 ? battleStartIndex : null)
+                        : findTimelogCandidate(row, candidates);
+                    row.candidateResolved = true;
+                }
+            });
+            const assignmentCounts = new Map();
+            rows.forEach((row) => {
+                if (row.candidateIndex !== null) {
+                    assignmentCounts.set(row.candidateIndex, (assignmentCounts.get(row.candidateIndex) || 0) + 1);
+                }
+            });
+            const hasDuplicateAssignments = Array.from(assignmentCounts.values()).some((count) => count > 1);
+
+            rows.forEach((row) => {
+                const tableRow = document.createElement('tr');
+                const lineCell = document.createElement('td');
+                lineCell.textContent = String(row.lineNumber);
+                const timeCell = document.createElement('td');
+                timeCell.textContent = row.time || '—';
+                const inputNameCell = document.createElement('td');
+                inputNameCell.textContent = row.name || '（名前なし）';
+                const nameCell = document.createElement('td');
+                const statusCell = document.createElement('td');
+                statusCell.textContent = row.statuses.map((isSet) => isSet ? '○' : '×').join('');
+                const autoCell = document.createElement('td');
+                autoCell.textContent = row.auto === null ? '前の状態を維持' : row.auto ? 'ON' : 'OFF';
+                const warningCell = document.createElement('td');
+
+                if (row.isBattleStart) {
+                    nameCell.textContent = battleStartIndex >= 0
+                        ? 'バトル開始'
+                        : 'バトル開始行が見つかりません（この行は反映されません）';
+                } else {
+                    const select = document.createElement('select');
+                    select.setAttribute('aria-label', `${row.lineNumber}行目のUB名`);
+                    const ignoreOption = document.createElement('option');
+                    ignoreOption.value = 'ignore';
+                    ignoreOption.textContent = 'このキャラ名を無視';
+                    select.appendChild(ignoreOption);
+
+                    candidates.forEach((candidate, index) => {
+                        if (candidate.isBattleStart) {
+                            return;
+                        }
+                        const option = document.createElement('option');
+                        option.value = String(index);
+                        option.textContent = `${candidate.seconds === null ? '時刻不明' : formatSecondsToTime(candidate.seconds)} ${candidate.name}`;
+                        select.appendChild(option);
+                    });
+
+                    select.value = row.candidateIndex === null ? 'ignore' : String(row.candidateIndex);
+                    select.addEventListener('change', () => {
+                        row.candidateIndex = select.value === 'ignore' ? null : Number(select.value);
+                        renderTimelogPreview(rows, candidates);
+                    });
+                    nameCell.appendChild(select);
+                }
+
+                row.warnings.forEach((warning) => {
+                    const warningLine = document.createElement('div');
+                    warningLine.textContent = warning;
+                    warningCell.appendChild(warningLine);
+                });
+                if (row.candidateIndex !== null) {
+                    const candidate = candidates[row.candidateIndex];
+                    if (candidate && candidate.seconds !== null && row.seconds !== null && candidate.seconds !== row.seconds) {
+                        const mismatch = document.createElement('div');
+                        mismatch.textContent = `対応行の時刻は${formatSecondsToTime(candidate.seconds)}です。既存の時刻は変更しません`;
+                        warningCell.appendChild(mismatch);
+                    }
+                    if ((assignmentCounts.get(row.candidateIndex) || 0) > 1) {
+                        const duplicate = document.createElement('div');
+                        duplicate.className = 'board-timelog-error';
+                        duplicate.textContent = '複数の入力行が同じ既存行に対応しています。候補を変更してください';
+                        warningCell.appendChild(duplicate);
+                    }
+                }
+                if (row.error) {
+                    const errorLine = document.createElement('div');
+                    errorLine.className = 'board-timelog-error';
+                    errorLine.textContent = row.error;
+                    warningCell.appendChild(errorLine);
+                }
+
+                tableRow.append(lineCell, timeCell, inputNameCell, nameCell, statusCell, autoCell, warningCell);
+                body.appendChild(tableRow);
+            });
+
+            preview.hidden = false;
+            const hasErrors = rows.some((row) => row.error) || hasDuplicateAssignments;
+            applyButton.disabled = hasErrors;
+            status.textContent = hasErrors
+                ? '読み取れない行、または重複した対応があります。内容を修正してから反映してください。'
+                : '対応先を確認し、「SET状態を反映」を押してください。既存TLの行・時刻・名前は変更されません。';
+            applyButton.dataset.previewReady = hasErrors ? 'false' : 'true';
+        }
+
+        function applyImportedTimelog(rows, candidates) {
+            const existingRows = getMainRows();
+            if (existingRows.length === 0 || rows.length === 0) {
+                throw new Error('反映先のUB行がありません');
+            }
+
+            const desiredByRow = new Map();
+            rows.forEach((row) => {
+                if (row.candidateIndex === null) {
+                    return;
+                }
+                const candidate = candidates[row.candidateIndex];
+                if (candidate) {
+                    desiredByRow.set(candidate.row, row);
+                }
+            });
+
+            existingRows.forEach((existingRow) => {
+                existingRow.querySelectorAll('.ub-party-cell .ub-icon-box').forEach((icon) => setIconActive(icon, false));
+                const autoIcon = existingRow.querySelector('.ub-auto-cell .ub-icon-box');
+                if (autoIcon) {
+                    setIconActive(autoIcon, false);
+                }
+                existingRow.dataset.activeIcons = '[]';
+                existingRow.dataset.autoActive = 'false';
+            });
+
+            const previousSetByColumn = Array(PARTY_COLUMN_COUNT).fill(false);
+            let previousAuto = false;
+            existingRows.forEach((existingRow) => {
+                const imported = desiredByRow.get(existingRow);
+                const isBattleStart = existingRow.dataset.isBattleStart === 'true';
+                const partyIcons = existingRow.querySelectorAll('.ub-party-cell .ub-icon-box');
+                const activeIndexes = [];
+
+                for (let index = 0; index < PARTY_COLUMN_COUNT; index += 1) {
+                    const icon = partyIcons[index];
+                    if (!icon) {
+                        continue;
+                    }
+                    const active = imported
+                        ? (isBattleStart ? imported.statuses[index] : imported.statuses[index] !== previousSetByColumn[index])
+                        : false;
+                    setIconActive(icon, active);
+                    if (active) {
+                        activeIndexes.push(index);
+                    }
+                    previousSetByColumn[index] = computeSet(active, previousSetByColumn[index], isBattleStart);
+                }
+
+                const autoIcon = existingRow.querySelector('.ub-auto-cell .ub-icon-box');
+                if (autoIcon) {
+                    const targetAuto = imported
+                        ? (imported.auto === null ? previousAuto : imported.auto)
+                        : null;
+                    const activeAuto = imported && targetAuto !== null
+                        ? (isBattleStart ? targetAuto : targetAuto !== previousAuto)
+                        : false;
+                    setIconActive(autoIcon, activeAuto);
+                    previousAuto = computeSet(activeAuto, previousAuto, isBattleStart);
+                }
+
+                existingRow.dataset.activeIcons = JSON.stringify(activeIndexes);
+                if (autoIcon) {
+                    existingRow.dataset.autoActive = isIconActive(autoIcon) ? 'true' : 'false';
+                }
+            });
+
+            updateSetBubbles();
+            return desiredByRow.size;
+        }
+
         function parseActiveIconsFromRow(row) {
             const raw = row.dataset.activeIcons;
             if (!raw) {
@@ -1464,6 +1804,72 @@
         if (saveButton) {
             saveButton.addEventListener('click', submitSave);
         }
+        const timelogToggle = document.getElementById('board-timelog-toggle');
+        const timelogPanel = document.getElementById('board-timelog-panel');
+        const timelogInput = document.getElementById('board-timelog-input');
+        const previewTimelogButton = document.getElementById('board-timelog-preview-button');
+        const applyTimelogButton = document.getElementById('board-timelog-apply-button');
+        let importedTimelogRows = [];
+        let timelogCandidates = [];
+
+        if (timelogToggle instanceof HTMLButtonElement && timelogPanel instanceof HTMLElement) {
+            timelogToggle.addEventListener('click', () => {
+                const isExpanded = timelogToggle.getAttribute('aria-expanded') === 'true';
+                timelogToggle.setAttribute('aria-expanded', isExpanded ? 'false' : 'true');
+                timelogPanel.hidden = isExpanded;
+            });
+        }
+
+        function invalidateTimelogPreview() {
+            const preview = document.getElementById('board-timelog-preview');
+            const status = document.getElementById('board-timelog-status');
+            if (preview instanceof HTMLElement) {
+                preview.hidden = true;
+            }
+            if (applyTimelogButton instanceof HTMLButtonElement) {
+                applyTimelogButton.disabled = true;
+                applyTimelogButton.dataset.previewReady = 'false';
+            }
+            if (status instanceof HTMLElement) {
+                status.textContent = 'テキストを変更しました。反映する前に再度プレビューしてください。';
+            }
+        }
+
+        if (timelogInput instanceof HTMLTextAreaElement) {
+            timelogInput.addEventListener('input', invalidateTimelogPreview);
+        }
+
+        if (previewTimelogButton && timelogInput instanceof HTMLTextAreaElement) {
+            previewTimelogButton.addEventListener('click', () => {
+                importedTimelogRows = parseImportedTimelog(timelogInput.value);
+                timelogCandidates = collectTimelogCandidates();
+                renderTimelogPreview(importedTimelogRows, timelogCandidates);
+            });
+        }
+
+        if (applyTimelogButton) {
+            applyTimelogButton.addEventListener('click', () => {
+                if (applyTimelogButton.dataset.previewReady !== 'true') {
+                    return;
+                }
+                const status = document.getElementById('board-timelog-status');
+                try {
+                    const appliedCount = applyImportedTimelog(importedTimelogRows, timelogCandidates);
+                    applyTimelogButton.dataset.previewReady = 'false';
+                    applyTimelogButton.disabled = true;
+                    if (status instanceof HTMLElement) {
+                        const skippedCount = importedTimelogRows.length - appliedCount;
+                        status.textContent = `${appliedCount}行のSET／Auto状態を反映しました${skippedCount > 0 ? `（${skippedCount}行は対応先がないため未反映）` : ''}。TLの行・時刻・名前は変更していません。保存するまで記事には登録されません。`;
+                    }
+                } catch (error) {
+                    console.error('タイムラインテキストの反映に失敗しました。', error);
+                    if (status instanceof HTMLElement) {
+                        status.textContent = error instanceof Error ? error.message : 'テキストを反映できませんでした。';
+                    }
+                }
+            });
+        }
+
         const discardButton = document.getElementById('board-discard-button');
         if (discardButton) {
             discardButton.addEventListener('click', submitDiscard);
