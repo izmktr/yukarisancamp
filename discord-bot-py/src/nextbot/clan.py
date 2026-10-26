@@ -1793,20 +1793,31 @@ class Clan(MessageRouter):
 
     async def DamageChannelMessage(self,  message: discord.Message, member: discord.Member) -> DamageControl | None:
         # 残りHP入力
+        explicit_hp = re.fullmatch(r'(?:残り|remain)\s+(\d+)\s+(\d+)\s*', message.content)
         m = re.match(r'([@＠])([\s　]*)(\d+)', message.content)
-        if m:
+        if explicit_hp or m:
             dclist = [dc for dc in self.damagecontrol if dc.channel == message.channel]
-            if len(dclist) == 1:
-                dc = dclist[0]
-            else:
-                actlist = [m for m in dclist if m.active]
-                if len(actlist) == 1:
-                    dc = actlist[0]
-                else:
-                    self.TemporaryMessage(message.channel, 'ボスが確定しません')
+            if explicit_hp:
+                boss = int(explicit_hp.group(1))
+                dc = next((dc for dc in dclist if dc.bossindex + 1 == boss), None)
+                if dc is None:
+                    self.TemporaryMessage(message.channel, '指定したボスはこのダメコンチャンネルに設定されていません')
                     return None
+                remainhp = int(explicit_hp.group(2))
+            elif m is not None:
+                remainhp = int(m.group(3))
+                if len(dclist) == 1:
+                    dc = dclist[0]
+                else:
+                    actlist = [dc for dc in dclist if dc.active]
+                    if len(actlist) == 1:
+                        dc = actlist[0]
+                    else:
+                        self.TemporaryMessage(message.channel, 'ボスが確定しません')
+                        return None
+            else:
+                return None
 
-            remainhp = int(m.group(3))
             dc.RemainHp(remainhp)
 
             #supabaseに残りHPを送信

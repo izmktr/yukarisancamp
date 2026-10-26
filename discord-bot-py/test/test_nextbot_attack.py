@@ -794,6 +794,35 @@ class AttackTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(dc.active)
         dc.SendResult.assert_awaited_once()
 
+    async def test_explicit_remaining_hp_selects_boss_in_shared_channel(self) -> None:
+        clan, _member, supabase = self.create_clan()
+        clan.clanbattle_setting = {"yearmonth": "202610", "bossHp": [10000] * 5}
+        channel = object()
+        for dc in clan.damagecontrol:
+            dc.SetChannel(cast(discord.TextChannel, channel))
+
+        for content, hp in [("残り 3 5000", 5000), ("remain 3 0", 0)]:
+            message = types.SimpleNamespace(content=content, channel=channel)
+            result = await clan.DamageChannelMessage(cast(discord.Message, message), cast(discord.Member, self.create_discord_member()))
+
+            self.assertIs(result, clan.damagecontrol[2])
+            self.assertEqual(clan.damagecontrol[2].remainhp, hp)
+            self.assertTrue(clan.damagecontrol[2].active)
+            self.assertFalse(clan.damagecontrol[0].active)
+
+    async def test_explicit_remaining_hp_rejects_boss_in_other_channel(self) -> None:
+        clan, _member, _supabase = self.create_clan()
+        channel = object()
+        clan.damagecontrol[0].SetChannel(cast(discord.TextChannel, channel))
+        clan.TemporaryMessage = MagicMock()
+        message = types.SimpleNamespace(content="remain 3 5000", channel=channel)
+
+        result = await clan.DamageChannelMessage(cast(discord.Message, message), cast(discord.Member, self.create_discord_member()))
+
+        self.assertIsNone(result)
+        self.assertEqual(clan.damagecontrol[2].remainhp, 0)
+        clan.TemporaryMessage.assert_called_once()
+
     async def test_x_damage_input_saves_skull_in_comment(self) -> None:
         clan, member, _supabase = self.create_clan()
         member.Attack(3, 1)
