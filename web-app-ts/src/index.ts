@@ -3506,6 +3506,8 @@ async function deleteCharaImageSafely(imageKey: string | null): Promise<void> {
 app.get('/chara-check', ensureAdmin, async (req, res) => {
   let characters: { name: string; imageUrl: string | null }[] = [];
   let unregisteredNames: { name: string; count: number }[] = [];
+  let unregisteredBossNames: string[] = [];
+  let registeredNames = new Set<string>();
   let loadError = '';
 
   try {
@@ -3517,7 +3519,7 @@ app.get('/chara-check', ensureAdmin, async (req, res) => {
       }))
       .sort((left, right) => left.name.localeCompare(right.name, 'ja'));
 
-    const registeredNames = new Set(rows.map((row) => row.name));
+    registeredNames = new Set(rows.map((row) => row.name));
     try {
       const counts = await countCurrentMonthBoardCharacterNames();
       unregisteredNames = Array.from(counts)
@@ -3532,12 +3534,26 @@ app.get('/chara-check', ensureAdmin, async (req, res) => {
     loadError = 'キャラ一覧の読み込みに失敗しました。';
   }
 
+  const supabaseConfig = getSupabaseConfig();
+  if (supabaseConfig && !loadError) {
+    try {
+      const clanBattleState = await supabaseSelectClanBattleState(supabaseConfig);
+      unregisteredBossNames = Array.from(new Set((clanBattleState?.bossname || [])
+        .map((name) => name.trim())
+        .filter((name) => name.length > 0 && !registeredNames.has(name))))
+        .sort((left, right) => left.localeCompare(right, 'ja'));
+    } catch (error) {
+      console.error('Failed to collect clanbattle boss names:', error);
+    }
+  }
+
   res.render('chara-check', {
     pageTitle: 'キャラ確認',
     currentPage: 'chara-check',
     ...getAuthViewData(req),
     characters,
     unregisteredNames,
+    unregisteredBossNames,
     flash: getCharaFlashFromQuery(req),
     loadError
   });

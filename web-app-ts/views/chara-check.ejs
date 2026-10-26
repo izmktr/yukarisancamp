@@ -41,6 +41,21 @@
         </div>
     <% } %>
 
+    <% if (unregisteredBossNames.length > 0) { %>
+        <div class="card">
+            <h3>クラバト設定にある未登録のボス名</h3>
+            <p>クラバト設定に登録されている、未登録のキャラ名です。（<%= unregisteredBossNames.length %>件）</p>
+            <ul class="chara-unregistered-list">
+                <% unregisteredBossNames.forEach((name) => { %>
+                    <li class="chara-unregistered-item">
+                        <span class="chara-unregistered-name"><%= name %></span>
+                        <button type="button" class="btn chara-add-button chara-register-prefill" data-name="<%= name %>">登録</button>
+                    </li>
+                <% }) %>
+            </ul>
+        </div>
+    <% } %>
+
     <% if (characters.length === 0) { %>
         <div class="card">
             <p>キャラデータが見つかりませんでした。</p>
