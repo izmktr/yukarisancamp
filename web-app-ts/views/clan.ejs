@@ -4,43 +4,42 @@
     <%
         const allMembers = Array.isArray(data.members) ? data.members : [];
         const operableMembers = Array.isArray(data.operableMembers) ? data.operableMembers : [];
-        const activeBossNumbers = Array.from(new Set(allMembers
-            .map((member) => Number(member.attackboss))
-            .filter((attackBoss) => Number.isInteger(attackBoss) && attackBoss >= 1 && attackBoss <= 5)))
-            .sort((left, right) => left - right);
         const operableAttackingBossNumbers = Array.from(new Set(operableMembers
             .map((member) => Number(member.attackboss))
             .filter((attackBoss) => Number.isInteger(attackBoss) && attackBoss >= 1 && attackBoss <= 5)))
             .sort((left, right) => left - right);
     %>
-    <% if (activeBossNumbers.length > 0) { %>
-        <label class="clan-show-all-active-toggle">
-            <input id="clan-show-all-active-checkbox" type="checkbox" />
-            すべての攻撃中を表示
-        </label>
-    <% } %>
+    <label class="clan-show-all-active-toggle">
+        <input id="clan-show-all-active-checkbox" type="checkbox" />
+        すべての攻撃中を表示
+    </label>
 
-    <% operableAttackingBossNumbers.forEach((bossNumber) => { %>
+    <% [...operableAttackingBossNumbers, ...[1, 2, 3, 4, 5].filter((bossNumber) => !operableAttackingBossNumbers.includes(bossNumber))].forEach((bossNumber) => { %>
         <%
             const activeBossIndex = bossNumber - 1;
             const activeBossName = Array.isArray(data.bossNames) && typeof data.bossNames[activeBossIndex] === 'string' && data.bossNames[activeBossIndex].trim()
                 ? data.bossNames[activeBossIndex].trim()
                 : `ボス ${bossNumber}`;
-            const activeBossHpValue = Array.isArray(data.bossHp) ? Number(data.bossHp[activeBossIndex]) : NaN;
+            const rawBossHp = Array.isArray(data.bossHp) ? data.bossHp[activeBossIndex] : null;
+            const activeBossHpValue = rawBossHp == null ? NaN : Number(rawBossHp);
             const activeBossHp = Number.isFinite(activeBossHpValue) ? activeBossHpValue.toLocaleString('ja-JP') : '未設定';
             const activeAttackMembers = sortClanAttackMembers(Array.isArray(allMembers)
                 ? allMembers.filter((member) => Number(member.attackboss) === bossNumber)
                 : []);
             const operableAttackersForBoss = operableMembers.filter((member) => Number(member.attackboss) === bossNumber);
+            const hpOperator = operableAttackersForBoss[0] || operableMembers[0];
+            const isOtherBoss = !operableAttackingBossNumbers.includes(bossNumber);
+            const currentBossLap = data.clan && Array.isArray(data.clan.bosslaps) ? data.clan.bosslaps[activeBossIndex] : null;
             const bossLapDisplay = activeAttackMembers.length > 0 && Number.isInteger(Number(activeAttackMembers[0].attacklap))
                 ? Number(activeAttackMembers[0].attacklap)
-                : '-';
+                : currentBossLap != null && Number.isInteger(Number(currentBossLap)) ? Number(currentBossLap) : '-';
         %>
-        <section class="clan-attack-active-panel" aria-labelledby="clan-attack-active-title-<%= bossNumber %>" data-boss-index="<%= bossNumber %>" data-boss-hp="<%= Number.isFinite(activeBossHpValue) ? Math.trunc(activeBossHpValue) : '' %>" data-acting-member-id="<%= operableAttackersForBoss.length > 0 ? operableAttackersForBoss[0].memberid : '' %>">
+        <section class="clan-attack-active-panel <%= isOtherBoss ? 'clan-attack-active-panel-other' : '' %>" aria-labelledby="clan-attack-active-title-<%= bossNumber %>" data-boss-index="<%= bossNumber %>" data-boss-hp="<%= Number.isFinite(activeBossHpValue) ? Math.trunc(activeBossHpValue) : '' %>" data-acting-member-id="<%= hpOperator ? hpOperator.memberid : '' %>" <%- isOtherBoss ? 'style="display: none;"' : '' %>>
             <div class="clan-attack-active-header">
-                <h2 id="clan-attack-active-title-<%= bossNumber %>">攻撃中</h2>
+                <h2 id="clan-attack-active-title-<%= bossNumber %>"><%= activeAttackMembers.length > 0 ? '攻撃中' : 'ボス情報' %></h2>
                 <div class="clan-active-boss-hp-block" data-boss-index="<%= bossNumber %>">
                     <p><strong><%= bossLapDisplay %>周目</strong>：<%= activeBossName %>、HP <span class="clan-active-boss-hp-display" data-boss-index="<%= bossNumber %>"><%= activeBossHp %></span></p>
+                    <% if (hpOperator) { %>
                     <div class="clan-active-boss-hp-actions">
                         <button type="button" class="btn btn-primary clan-active-boss-hp-edit-button">変更</button>
                         <input
@@ -57,10 +56,14 @@
                         <button type="button" class="btn btn-danger clan-active-boss-hp-cancel-button" style="display: none;">破棄</button>
                     </div>
                     <p class="clan-active-boss-hp-status settings-status" aria-live="polite"></p>
+                    <% } %>
                 </div>
             </div>
 
             <div class="clan-attack-member-list">
+                <% if (activeAttackMembers.length === 0) { %>
+                    <p class="clan-empty">攻撃中のメンバーはいません。</p>
+                <% } %>
                 <% activeAttackMembers.forEach((member) => { %>
                     <%- include('partials/clan-attack-member-row', { member, attackingMembers: activeAttackMembers, bossHp: activeBossHpValue }) %>
                 <% }); %>
@@ -95,32 +98,6 @@
                     <p class="clan-attack-active-action-status settings-status" aria-live="polite"></p>
                 </div>
             <% }); %>
-        </section>
-    <% }); %>
-
-    <% activeBossNumbers.filter((bossNumber) => !operableAttackingBossNumbers.includes(bossNumber)).forEach((bossNumber) => { %>
-        <%
-            const activeBossIndex = bossNumber - 1;
-            const activeBossName = Array.isArray(data.bossNames) && typeof data.bossNames[activeBossIndex] === 'string' && data.bossNames[activeBossIndex].trim()
-                ? data.bossNames[activeBossIndex].trim()
-                : `ボス ${bossNumber}`;
-            const activeBossHpValue = Array.isArray(data.bossHp) ? Number(data.bossHp[activeBossIndex]) : NaN;
-            const activeBossHp = Number.isFinite(activeBossHpValue) ? activeBossHpValue.toLocaleString('ja-JP') : '未設定';
-            const activeAttackMembers = sortClanAttackMembers(Array.isArray(allMembers)
-                ? allMembers.filter((member) => Number(member.attackboss) === bossNumber)
-                : []);
-        %>
-        <section class="clan-attack-active-panel clan-attack-active-panel-other" aria-labelledby="clan-attack-active-title-other-<%= bossNumber %>" data-boss-index="<%= bossNumber %>" data-boss-hp="<%= Number.isFinite(activeBossHpValue) ? Math.trunc(activeBossHpValue) : '' %>" style="display: none;">
-            <div class="clan-attack-active-header">
-                <h2 id="clan-attack-active-title-other-<%= bossNumber %>">攻撃中</h2>
-                <p><strong><%= activeAttackMembers.length > 0 && Number.isInteger(Number(activeAttackMembers[0].attacklap)) ? Number(activeAttackMembers[0].attacklap) : '-' %>周目</strong>：<%= activeBossName %>、HP <span class="clan-active-boss-hp-display" data-boss-index="<%= bossNumber %>"><%= activeBossHp %></span></p>
-            </div>
-
-            <div class="clan-attack-member-list">
-                <% activeAttackMembers.forEach((member) => { %>
-                    <%- include('partials/clan-attack-member-row', { member, attackingMembers: activeAttackMembers, bossHp: activeBossHpValue }) %>
-                <% }); %>
-            </div>
         </section>
     <% }); %>
 
@@ -582,12 +559,14 @@
         blocks.forEach((block) => {
             const panel = block.closest('.clan-attack-active-panel');
             const actingMemberId = panel ? String(panel.getAttribute('data-acting-member-id') || '') : '';
+            const bossIndex = Number(block.getAttribute('data-boss-index'));
             const editButton = block.querySelector('.clan-active-boss-hp-edit-button');
             const saveButton = block.querySelector('.clan-active-boss-hp-save-button');
             const cancelButton = block.querySelector('.clan-active-boss-hp-cancel-button');
             const hpInput = block.querySelector('.clan-active-boss-hp-input');
             const status = block.querySelector('.clan-active-boss-hp-status');
-            if (!editButton || !saveButton || !cancelButton || !hpInput || !actingMemberId) {
+            if (!editButton || !saveButton || !cancelButton || !hpInput || !actingMemberId
+                || !Number.isInteger(bossIndex) || bossIndex < 1 || bossIndex > 5) {
                 return;
             }
 
@@ -632,7 +611,7 @@
                 }
 
                 const hp = Number(hpInput.value);
-                if (!Number.isInteger(hp) || hp < 0) {
+                if (!Number.isSafeInteger(hp) || hp < 0) {
                     setStatus('HPは0以上の整数で入力してください。', 'error');
                     return;
                 }
@@ -647,7 +626,7 @@
                         headers: {
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify({ hp, actingMemberId })
+                        body: JSON.stringify({ hp, actingMemberId, bossIndex })
                     });
 
                     if (!response.ok) {

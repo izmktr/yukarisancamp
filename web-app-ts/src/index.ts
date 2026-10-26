@@ -3208,8 +3208,14 @@ app.post('/api/clan/attack/message', ensureDiscordServerLinked, express.json(), 
 
 app.post('/api/clan/active-boss-hp/save', ensureDiscordServerLinked, express.json(), async (req, res) => {
   const hp = Number(req.body?.hp);
-  if (!Number.isInteger(hp) || hp < 0) {
+  if (!Number.isSafeInteger(hp) || hp < 0) {
     return res.status(400).json({ error: 'Invalid hp' });
+  }
+  const requestedBossIndex = req.body?.bossIndex;
+  if (requestedBossIndex !== undefined
+    && (typeof requestedBossIndex !== 'number' || !Number.isInteger(requestedBossIndex)
+      || requestedBossIndex < 1 || requestedBossIndex > 5)) {
+    return res.status(400).json({ error: 'Invalid boss index' });
   }
 
   const config = getSupabaseConfig();
@@ -3243,12 +3249,12 @@ app.post('/api/clan/active-boss-hp/save', ensureDiscordServerLinked, express.jso
       return res.status(actingResult.status).json({ error: actingResult.error });
     }
     const currentMember = actingResult.member;
-    if (currentMember.attackboss === 0) {
-      return res.status(409).json({ error: 'Attack is not active' });
+    const bossIndex = requestedBossIndex ?? currentMember.attackboss;
+    if (!Number.isInteger(bossIndex) || bossIndex < 1 || bossIndex > 5) {
+      return res.status(400).json({ error: 'Invalid boss index' });
     }
 
     const clanBattleState = await ensureClanBattleStateFromSupabase(config);
-    const bossIndex = currentMember.attackboss;
     const bossStates = await supabaseSelectClanBossStates(config, clan.clanid, clanBattleState.yearmonth);
     const targetState = bossStates.find((row) => row.boss_index === bossIndex) || null;
     const settingMaxHp = Number(clanBattleState.bossHp[bossIndex - 1]);

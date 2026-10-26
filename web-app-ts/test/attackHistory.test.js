@@ -89,6 +89,7 @@ test('history saves report missing records and database failures', async () => {
 
 test('history tables group self and proxy members, with damage between boss and state', async () => {
   const html = await ejs.renderFile(path.join(__dirname, '../views/clan.ejs'), {
+    sortClanAttackMembers: members => members,
     clanPageData: {
       clan: { name: 'Test clan', bosslaps: [] }, members: [],
       operableMembers: [{ memberid: '200', name: 'Self', isSelf: true }, { memberid: '300', name: 'Proxy', isSelf: false }],
