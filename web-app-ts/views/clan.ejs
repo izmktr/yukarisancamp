@@ -301,20 +301,35 @@
                 <% if (attackHistories.length === 0) { %>
                     <p class="clan-empty">本日の凸履歴はありません。</p>
                 <% } else { %>
+                    <% Array.from(new Set(attackHistories.map((history) => history.memberid))).forEach((memberid) => { %>
+                    <%
+                        const historyMember = operableMembers.find((member) => member.memberid === memberid);
+                        const historyMemberName = historyMember ? (historyMember.name || 'Unknown') : (memberid || 'Unknown');
+                        const sameMemberHistories = attackHistories.filter((history) => history.memberid === memberid);
+                    %>
                     <div class="clan-attack-history-table-wrapper">
                         <table class="clan-attack-history-table">
+                            <caption><%= historyMemberName %><%= historyMember && !historyMember.isSelf ? '（代理）' : '' %></caption>
+                            <colgroup>
+                                <col class="clan-history-sortie-column">
+                                <col class="clan-history-lap-column">
+                                <col>
+                                <col class="clan-history-damage-column">
+                                <col class="clan-history-state-column">
+                                <col class="clan-history-actions-column">
+                            </colgroup>
                             <thead>
                                 <tr>
-                                    <th>メンバー</th>
                                     <th>凸数</th>
                                     <th>周回数</th>
                                     <th>ボス</th>
+                                    <th>ダメージ</th>
                                     <th>状態</th>
                                     <th>操作</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <% attackHistories.forEach((history) => { %>
+                                <% sameMemberHistories.forEach((history) => { %>
                                     <%
                                         const bossNumber = Number(history.boss);
                                         const bossIndex = bossNumber > 0 ? (bossNumber - 1) % 5 : -1;
@@ -322,9 +337,6 @@
                                             ? bossNames[bossIndex].trim()
                                             : '';
                                         const bossName = configuredBossName || (bossIndex >= 0 ? `ボス ${bossIndex + 1}` : 'ボス不明');
-                                        const historyMember = operableMembers.find((member) => member.memberid === history.memberid);
-                                        const historyMemberName = historyMember ? (historyMember.name || 'Unknown') : (history.memberid || 'Unknown');
-                                        const sameMemberHistories = attackHistories.filter((otherHistory) => otherHistory.memberid === history.memberid);
                                         const hasSameSortieHistory = sameMemberHistories.some((otherHistory) => (
                                             Number(otherHistory.id) !== Number(history.id)
                                             && Number(otherHistory.sortie) === Number(history.sortie)
@@ -340,13 +352,11 @@
                                         data-member-id="<%= history.memberid || '' %>"
                                         data-original-attacklap="<%= Number.isInteger(history.attacklap) ? Number(history.attacklap) : '' %>"
                                         data-original-boss="<%= bossNumber %>"
+                                        data-original-damage="<%= history.damage ?? '' %>"
                                         data-original-defeat="<%= history.defeat === true ? 'true' : 'false' %>"
                                         data-original-overtime="<%= Number(history.overtime) %>"
                                         data-fixed-overtime="<%= hasEditableOvertime ? '' : '0' %>"
                                     >
-                                        <td>
-                                            <span><%= historyMemberName %><%= historyMember && !historyMember.isSelf ? '（代理）' : '' %></span>
-                                        </td>
                                         <td>
                                             <span><%= Number(history.sortie) %>凸</span>
                                         </td>
@@ -362,6 +372,10 @@
                                                     <option value="<%= bossOption %>" <%= bossOption === bossNumber ? 'selected' : '' %>><%= optionName %></option>
                                                 <% } %>
                                             </select>
+                                        </td>
+                                        <td class="clan-history-damage-cell">
+                                            <span class="clan-history-display"><%= history.damage == null ? '-' : Number(history.damage).toLocaleString('ja-JP') %></span>
+                                            <input class="clan-history-input clan-history-damage-input" type="text" inputmode="numeric" value="<%= history.damage == null ? '' : Number(history.damage).toLocaleString('ja-JP') %>" aria-label="ダメージ" />
                                         </td>
                                         <td>
                                             <span class="clan-history-display"><%= history.defeat === true
@@ -392,6 +406,7 @@
                             </tbody>
                         </table>
                     </div>
+                    <% }); %>
                 <% } %>
                 <p id="clan-history-status" class="settings-status" aria-live="polite"></p>
             </section>
@@ -702,10 +717,15 @@
             rows.forEach((row) => {
                 const attacklapInput = row.querySelector('.clan-history-attacklap-input');
                 const bossInput = row.querySelector('.clan-history-boss-input');
+                const damageInput = row.querySelector('.clan-history-damage-input');
                 const defeatInput = row.querySelector('.clan-history-defeat-input');
                 const overtimeInput = row.querySelector('.clan-history-overtime-input');
                 if (attacklapInput) attacklapInput.value = row.getAttribute('data-original-attacklap') || '';
                 if (bossInput) bossInput.value = row.getAttribute('data-original-boss') || '';
+                if (damageInput) {
+                    const originalDamage = row.getAttribute('data-original-damage') || '';
+                    damageInput.value = originalDamage === '' ? '' : Number(originalDamage).toLocaleString('ja-JP');
+                }
                 if (defeatInput) defeatInput.value = row.getAttribute('data-original-defeat') || 'false';
                 if (overtimeInput) overtimeInput.value = row.getAttribute('data-original-overtime') || '0';
                 updateOvertimeVisibility(row);
@@ -766,6 +786,8 @@
                 const memberid = row.getAttribute('data-member-id') || '';
                 const attacklap = Number(row.querySelector('.clan-history-attacklap-input')?.value);
                 const boss = Number(row.querySelector('.clan-history-boss-input')?.value);
+                const damageText = (row.querySelector('.clan-history-damage-input')?.value || '').replace(/,/g, '').trim();
+                const damage = damageText === '' ? null : Number(damageText);
                 const defeat = row.querySelector('.clan-history-defeat-input')?.value === 'true';
                 const fixedOvertime = row.getAttribute('data-fixed-overtime');
                 const overtime = fixedOvertime === '0'
@@ -778,7 +800,11 @@
                     setStatus('周回数は0以上、持ち越し時間は0または20～90の整数で入力してください。', 'error');
                     return;
                 }
-                histories.push({ id, memberid, attacklap, boss, defeat, overtime });
+                if (damage !== null && (!/^\d+$/.test(damageText) || !Number.isSafeInteger(damage))) {
+                    setStatus('ダメージは0以上の整数で入力してください（未入力も可）。', 'error');
+                    return;
+                }
+                histories.push({ id, memberid, attacklap, boss, damage, defeat, overtime });
             }
 
             saveButton.disabled = true;

@@ -1559,7 +1559,7 @@ async function supabaseSelectAttackHistories(
 ): Promise<AttackHistoryRow[]> {
   const endpointUrl = getSupabaseTableEndpoint(config, SUPABASE_ATTACK_HISTORIES_TABLE);
   const query = new URLSearchParams({
-    select: 'id,day,clanid,memberid,sortie,boss,attacklap,overtime,defeat',
+    select: 'id,day,clanid,memberid,sortie,boss,attacklap,overtime,defeat,damage',
     clanid: `eq.${member.clanid}`,
     memberid: `eq.${member.memberid}`,
     day: `eq.${day}`,
@@ -2155,6 +2155,7 @@ type AttackHistoryEditInput = {
   memberid: string;
   attacklap: number;
   boss: number;
+  damage: number | null;
   defeat: boolean;
   overtime: number;
 };
@@ -2169,19 +2170,21 @@ function normalizeAttackHistoryEditInput(raw: unknown): AttackHistoryEditInput |
   const memberid = typeof source.memberid === 'string' ? source.memberid.trim() : '';
   const attacklap = Number(source.attacklap);
   const boss = Number(source.boss);
+  const damage = source.damage;
   const defeat = source.defeat;
   const overtime = Number(source.overtime);
   if (!Number.isInteger(id) || id < 1
     || !memberid
     || !Number.isInteger(attacklap) || attacklap < 0
     || !Number.isInteger(boss) || boss < 1 || boss > 5
+    || (damage !== null && (typeof damage !== 'number' || !Number.isSafeInteger(damage) || damage < 0))
     || typeof defeat !== 'boolean'
     || !Number.isInteger(overtime)
     || (defeat && overtime !== 0 && (overtime < 20 || overtime > 90))) {
     return null;
   }
 
-  return { id, memberid, attacklap, boss, defeat, overtime: defeat ? overtime : 0 };
+  return { id, memberid, attacklap, boss, damage, defeat, overtime: defeat ? overtime : 0 };
 }
 
 async function supabaseUpdateAttackHistory(
@@ -2207,6 +2210,7 @@ async function supabaseUpdateAttackHistory(
     body: JSON.stringify({
       attacklap: input.attacklap,
       boss: input.boss,
+      damage: input.damage,
       defeat: input.defeat,
       overtime: input.overtime,
       sortiecount: input.defeat ? 1 : 2,

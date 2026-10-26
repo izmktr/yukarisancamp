@@ -123,6 +123,23 @@
 .clan-workspace .clan-attack-active-header p { margin: 0; }
 .clan-workspace .clan-attack-message-input { min-width: 0; }
 .clan-workspace .clan-mobile-boss-label { display: none; }
+.clan-workspace .clan-attack-history-table-wrapper + .clan-attack-history-table-wrapper { margin-top: 20px; }
+.clan-workspace .clan-attack-history-table { min-width: 650px; }
+.clan-workspace .clan-attack-history-table caption {
+    padding: 0 0 10px;
+    text-align: left;
+    font-weight: 600;
+}
+.clan-workspace .clan-attack-history-table th,
+.clan-workspace .clan-attack-history-table td { padding: 8px 6px; }
+.clan-workspace .clan-history-sortie-column { width: 3.5rem; }
+.clan-workspace .clan-history-lap-column { width: 5rem; }
+.clan-workspace .clan-history-damage-column { width: calc(7ch + 2rem); }
+.clan-workspace .clan-history-state-column { width: 14rem; }
+.clan-workspace .clan-history-actions-column { width: 5rem; }
+.clan-workspace .clan-history-damage-cell { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.clan-workspace .clan-history-damage-input { text-align: right; }
+.clan-workspace .clan-history-state-editor { grid-template-columns: minmax(90px, 1fr) minmax(70px, 0.7fr) auto; }
 .clan-workspace .clan-management-modal-dialog {
     max-height: calc(100dvh - 32px);
     overflow-y: auto;
@@ -214,11 +231,6 @@
     .clan-workspace .memberhistory-table tr { border: 1px solid var(--clan-border); border-radius: 10px; margin-bottom: 12px; }
     .clan-workspace .memberhistory-member-cell { background: #f6f8fb; }
     .clan-workspace .memberhistory-table td:last-child { border-bottom: 0; }
-    /* Editing needs room for lap, boss and carry-over fields. Scroll only the
-       history table, never the entire page. */
-    .clan-workspace .clan-attack-history-table { min-width: 640px; }
-    .clan-workspace .clan-history-state-editor { grid-template-columns: minmax(0, 1fr) auto; }
-    .clan-workspace .clan-history-defeat-input { grid-column: 1 / -1; }
     .clan-workspace .clan-defeat-buttons { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); width: 100%; }
     .clan-workspace .clan-defeat-buttons > .btn { min-width: 0; padding-inline: 4px; }
 }
