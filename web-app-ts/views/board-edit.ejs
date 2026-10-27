@@ -988,7 +988,7 @@
         function importedNameSimilarity(left, right) {
             const a = Array.from(normalizeImportedName(left));
             const b = Array.from(normalizeImportedName(right));
-            if (a.length === 0 || b.length === 0 || !a.some((character) => b.includes(character))) {
+            if (a.length === 0 || b.length === 0) {
                 return 0;
             }
 
@@ -1008,10 +1008,38 @@
             return 1 - (previous[b.length] / Math.max(a.length, b.length));
         }
 
+        function importedNameMatchScore(left, right) {
+            const a = Array.from(normalizeImportedName(left));
+            const b = Array.from(normalizeImportedName(right));
+            if (a.length === 0 || b.length === 0) {
+                return 0;
+            }
+
+            let previous = Array(b.length + 1).fill(0);
+            for (let i = 1; i <= a.length; i += 1) {
+                const current = Array(b.length + 1).fill(0);
+                for (let j = 1; j <= b.length; j += 1) {
+                    current[j] = a[i - 1] === b[j - 1]
+                        ? previous[j - 1] + 1
+                        : Math.max(previous[j], current[j - 1]);
+                }
+                previous = current;
+            }
+
+            return previous[b.length] / Math.min(a.length, b.length);
+        }
+
         function parseImportedTimelog(text) {
+            const SETON = '〇○◯oO';
+            const SETOFF = '×xXーｰ－-―—−';
+            const AUTOON = 'on|オン';
+            const AUTOOFF = 'off|オフ';
             let previousSeconds = null;
             const rows = [];
-            const symbolPattern = /[〇○◯oOxX×ーｰ－\-―—−]/g;
+            const setOffPattern = new RegExp(`[${SETOFF.replace(/-/g, '\\-')}]`);
+            const symbolPattern = new RegExp(`[${SETON}${SETOFF.replace(/-/g, '\\-')}]`, 'g');
+            const autoPattern = new RegExp(`(?:\\bauto\\s+)?(?:\\b(?:${AUTOON}|${AUTOOFF})\\b|(?:${AUTOON}|${AUTOOFF}))[。．.、,，！!]*\\s*$`, 'i');
+            const autoOnPattern = new RegExp(`^(?:${AUTOON})$`, 'i');
             const normalizedText = text.replace(/[０-９]/g, (digit) => String.fromCharCode(digit.charCodeAt(0) - 0xFEE0)).replace(/：/g, ':');
 
             normalizedText.split(/\r?\n/).forEach((rawLine, index) => {
@@ -1022,7 +1050,7 @@
                 const timeMatch = rawLine.match(/^\s*(\d{1,2}):(\d{2})/);
                 const line = (timeMatch ? rawLine.slice(timeMatch[0].length) : rawLine)
                     .replace(/（[^）]*）|\([^)]*\)|\[[^\]]*\]/g, ' ');
-                const autoMatch = line.match(/(?:\bauto\s+)?\b(on|off)\b[。．.、,，！!]*\s*$|(?:オン|オフ)[。．.、,，！!]*\s*$/i);
+                const autoMatch = line.match(autoPattern);
                 const lineBeforeAuto = autoMatch ? line.slice(0, autoMatch.index).trimEnd() : line;
                 const matches = Array.from(lineBeforeAuto.matchAll(symbolPattern));
                 const warnings = [];
@@ -1057,10 +1085,10 @@
                 const rawName = lineBeforeAuto.slice(0, statusStart)
                     .replace(/^[\s　:：|｜,，、]+|[\s　:：|｜,，、]+$/g, '')
                     .trim();
-                const statuses = statusMatches.map((match) => !/[×xXーｰ－\-―—−]/.test(match[0]));
-                const autoValue = autoMatch ? (autoMatch[1] || autoMatch[0]).replace(/[。．.、,，！!]/g, '').trim() : '';
+                const statuses = statusMatches.map((match) => !setOffPattern.test(match[0]));
+                const autoValue = autoMatch ? autoMatch[0].replace(/^auto\s+/i, '').replace(/[。．.、,，！!]/g, '').trim() : '';
                 const auto = autoMatch
-                    ? (/^(?:オン|on)$/i.test(autoValue))
+                    ? autoOnPattern.test(autoValue)
                     : null;
 
                 rows.push({
@@ -1101,12 +1129,15 @@
 
             const ranked = candidates.map((candidate, index) => ({
                 index,
+                matchScore: importedNameMatchScore(row.name, candidate.name),
                 similarity: importedNameSimilarity(row.name, candidate.name),
                 timeDifference: row.seconds === null || candidate.seconds === null
                     ? Number.POSITIVE_INFINITY
                     : Math.abs(row.seconds - candidate.seconds)
             })).filter((candidate) => !candidates[candidate.index].isBattleStart)
-                .sort((left, right) => right.similarity - left.similarity || left.timeDifference - right.timeDifference);
+                .sort((left, right) => right.matchScore - left.matchScore
+                    || right.similarity - left.similarity
+                    || left.timeDifference - right.timeDifference);
 
             return ranked.length > 0 && ranked[0].similarity > 0 ? ranked[0].index : null;
         }
