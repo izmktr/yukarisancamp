@@ -1595,6 +1595,7 @@ class Clan(MessageRouter):
             if not memberid:
                 return
             member = self.members.get(memberid)
+            old_dc_input = None if member is None else (member.boss, member.sortie, member.damage, member.message)
             old_state = None if member is None else (
                 member.name,
                 member.mention,
@@ -1626,7 +1627,10 @@ class Clan(MessageRouter):
                 # 完了・討伐は履歴が増えて attacktime が変わる。変わらなければキャンセル
                 await self._OnRealtimeAttackEnded(member, old_state[4], old_state[3] != new_state[3])
 
-            if member is not None and member.IsAttack():
+            new_dc_input = None if member is None else (member.boss, member.sortie, member.damage, member.message)
+            # 討伐でダメコンを終了した後、攻撃中メンバーの無関係な更新で次周分が復活しないよう、
+            # ダメージ・コメント・攻撃開始に変化があった時だけ反映する
+            if member is not None and member.IsAttack() and old_dc_input != new_dc_input:
                 dc = self.damagecontrol[member.boss - 1]
                 if member.damage > 0 or len(member.message) > 0:
                     dc.SetDamage(member, member.damage, member.message)
