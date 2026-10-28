@@ -3,40 +3,125 @@
   <% if (loadError) { %>
     <p role="alert"><%= loadError %></p><a href="/clan-plan">再読み込み</a>
   <% } else { %>
-    <p>基準日：<%= data.baseDate %>（日本時間5時切り替え）</p>
+    <p>対象日：<%= data.baseDate %><% if (summary.inPeriod) { %>（<%= Math.round((Date.parse(`${data.baseDate}T00:00:00Z`) - Date.parse(`${data.startDate}T00:00:00Z`)) / 86400000) + 1 %>日目）<% } %></p>
     <a href="/clan-plan">最新の集計に更新</a>
     <% if (!summary.inPeriod) { %><p>開催期間外、または開催日未設定です。前日比較・予想着地は表示しません。</p><% } %>
     <% if (summary.inPeriod && !summary.hasPrevious) { %><p>開催初日のため、前日比較・予想着地は算出できません。</p><% } %>
-    <div class="plan-boss-grid">
-    <% summary.bosses.forEach(b => { %>
-      <section class="plan-boss-card">
-        <h3><%= b.boss %>：<%= data.bossNames[b.boss - 1] || `ボス${b.boss}` %></h3>
-        <p class="plan-progress"><%= b.lap %>周目 + <%= b.current %>凸</p>
-        <p>平均：<%= b.average === null ? '算出不可' : `${b.average.toFixed(1)}凸` %></p>
-        <% if (b.landing) { %><p class="plan-landing">予想着地：<%= b.landing.lap %>周目 + <%= b.landing.attacks %>凸</p><% } %>
-        <dl class="plan-counts">
-          <dt>前日（予定）</dt><dd><%= summary.hasPrevious ? `${b.planned}凸` : '—' %></dd>
-          <dt>本日（済み）</dt><dd><%= summary.inPeriod ? `${b.done}凸` : '—' %></dd>
-          <dt>残り見込み</dt><dd><%= summary.hasPrevious ? `${b.remaining}凸` : '—' %></dd>
-        </dl>
-      </section>
-    <% }); %>
+    <%
+      const totals = summary.bosses.reduce((total, b) => ({
+        average: total.average === null || b.average === null ? null : total.average + b.average,
+        planned: total.planned + b.planned,
+        done: total.done + b.done,
+        remaining: total.remaining + b.remaining
+      }), { average: 0, planned: 0, done: 0, remaining: 0 });
+      const unknown = totals.planned - totals.done - totals.remaining;
+    %>
+    <table class="plan-summary-table">
+      <caption>ボスごとの進行状況</caption>
+      <thead>
+        <tr>
+          <th scope="col">項目</th>
+          <% summary.bosses.forEach(b => { %>
+            <% const bossImageUrl = bossImageUrls[b.boss - 1]; %>
+            <th scope="col">
+              <span class="plan-boss-portrait">
+                <% if (bossImageUrl) { %>
+                  <img class="plan-boss-image" src="<%= bossImageUrl %>" alt="" width="48" height="48" onerror="console.warn('ボス画像の読み込みに失敗しました', this.src); this.hidden = true; this.nextElementSibling.hidden = false;" />
+                <% } %>
+                <span class="plan-boss-image-missing" <%= bossImageUrl ? 'hidden' : '' %> title="画像がありません">ボス<%= b.boss %></span>
+              </span>
+              <% if (data.bossNames[b.boss - 1]) { %>
+                <span class="plan-boss-name"><%= data.bossNames[b.boss - 1] %></span>
+              <% } %>
+            </th>
+          <% }); %>
+          <th scope="col">合計</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="plan-progress">
+          <th scope="row">現在</th>
+          <% summary.bosses.forEach(b => { %>
+            <td><span class="plan-lap"><%= b.lap %>周目</span> <span class="plan-attacks">+ <%= b.current %>凸</span></td>
+          <% }); %>
+          <td>—</td>
+        </tr>
+        <tr>
+          <th scope="row">平均</th>
+          <% summary.bosses.forEach(b => { %><td><%= b.average === null ? '算出不可' : `${b.average.toFixed(1)}凸` %></td><% }); %>
+          <td><%= totals.average === null ? '算出不可' : `${totals.average.toFixed(1)}凸` %></td>
+        </tr>
+        <tr class="plan-landing">
+          <th scope="row">予想着地</th>
+          <% summary.bosses.forEach(b => { %>
+            <td><% if (b.landing) { %><span class="plan-lap"><%= b.landing.lap %>周目</span> <span class="plan-attacks">+ <%= b.landing.attacks %>凸</span><% } else { %>—<% } %></td>
+          <% }); %>
+          <td>—</td>
+        </tr>
+        <tr>
+          <th scope="row">前日<span class="plan-label-detail">（予定）</span></th>
+          <% summary.bosses.forEach(b => { %><td><%= summary.hasPrevious ? `${b.planned}凸` : '—' %></td><% }); %>
+          <td><%= summary.hasPrevious ? `${totals.planned}凸` : '—' %></td>
+        </tr>
+        <tr>
+          <th scope="row">本日<span class="plan-label-detail">（済み）</span></th>
+          <% summary.bosses.forEach(b => { %><td><%= summary.inPeriod ? `${b.done}凸` : '—' %></td><% }); %>
+          <td><%= summary.inPeriod ? `${totals.done}凸` : '—' %></td>
+        </tr>
+        <tr>
+          <th scope="row">残り見込み</th>
+          <% summary.bosses.forEach(b => { %><td><%= summary.hasPrevious ? `${b.remaining}凸` : '—' %></td><% }); %>
+          <td><%= summary.hasPrevious ? `${totals.remaining}凸` : '—' %><% if (summary.hasPrevious) { %><span class="plan-unknown<%= unknown === 0 ? ' is-empty' : '' %>"<% if (unknown === 0) { %> aria-hidden="true"<% } %>>(不明:<%= unknown %>凸)</span><% } %></td>
+        </tr>
+      </tbody>
+    </table>
+    <p>平均は今開催の23周目から各ボスの現在周回の直前までを集計。残り見込みは、赤チェック（予定超過）がないメンバーの未消化予定だけを集計します。不明は前日合計−（本日合計＋残り見込み合計）です。予想着地は本凸数からの概算です。</p>
+    <h3>メンバー</h3>
+    <div id="plan-members-help" class="plan-member-legend">
+      <span><img src="/images/plan-pending.svg" alt="" width="24" height="24" />未消化の予定</span>
+      <span><img src="/images/plan-completed.svg" alt="" width="24" height="24" />予定どおりの実績</span>
+      <span><img src="/images/plan-extra.svg" alt="" width="24" height="24" />予定超過の実績</span>
+      <p>1アイコンにつき1凸。予定は前日、実績は当日の本凸です。凸履歴から自動表示され、クリック操作はできません。—は0凸（算出不可の場合も—）です。緑・赤のチェックが合計3つ以上のメンバーは灰色の背景で下に表示します。</p>
     </div>
-    <p>平均は今開催の23周目から各ボスの現在周回の直前までを集計。残り見込みは前日−本日で、負数になる場合があります。予想着地は本凸数からの概算です。</p>
-    <h3>移動メンバー</h3>
-    <% if (!summary.hasPrevious) { %><p>前日比較は算出できません。</p>
-    <% } else if (!summary.movement.length) { %><p>移動メンバーはいません。</p><% } else { %>
-      <div class="plan-table-scroll"><table class="plan-movement-table">
-        <thead><tr><th>メンバー</th><th>移動元候補</th><th>移動先</th></tr></thead>
-        <tbody><% summary.movement.forEach(m => { %>
-          <tr><th scope="row"><%= m.name %></th>
-          <% [m.from, m.to].forEach(values => { %><td>
-            <% if (!values.some(n => n > 0)) { %>—<% } %>
-            <% values.forEach((n, i) => { if (n > 0) { %><div><%= i + 1 %>：<%= data.bossNames[i] || `ボス${i + 1}` %> × <%= n %>凸</div><% } }); %>
-          </td><% }); %></tr>
-        <% }); %></tbody>
-      </table></div>
+    <% if (!summary.hasPrevious) { %><p>前日比較は算出できません。予定は—表示です。</p><% } %>
+    <% if (!summary.memberPlans.length) { %><p>メンバーがいません。</p><% } else { %>
+      <div class="plan-members-scroll" role="region" aria-label="メンバーごとの予定と実績" tabindex="0">
+      <table class="plan-members-table" aria-label="メンバーごとの予定と実績" aria-describedby="plan-members-help">
+        <thead><tr><th scope="col">名前</th><% summary.bosses.forEach(b => { %><th scope="col" title="<%= data.bossNames[b.boss - 1] || `ボス${b.boss}` %>">ボス<%= b.boss %></th><% }); %></tr></thead>
+        <%
+          const sortedMemberPlans = summary.memberPlans
+            .map(m => ({ ...m, isComplete: summary.inPeriod && m.done.reduce((total, n) => total + n, 0) >= 3 }))
+            .sort((a, b) => Number(a.isComplete) - Number(b.isComplete));
+          sortedMemberPlans.forEach(m => {
+        %>
+          <tbody aria-label="<%= m.name %>">
+            <tr class="plan-member-row<%= m.isComplete ? ' is-complete' : '' %>">
+              <th scope="row"><span class="plan-member-name"><%= m.name %></span></th>
+              <% m.done.forEach((done, i) => {
+                const planned = m.planned[i];
+                const count = summary.hasPrevious ? Math.max(planned, done) : 0;
+                const extra = summary.hasPrevious ? Math.max(0, done - planned) : 0;
+                const label = `${summary.hasPrevious ? `予定 ${planned}凸` : '予定 算出不可'}、${summary.inPeriod ? `実績 ${done}凸` : '実績 算出不可'}${extra > 0 ? `、予定より${extra}凸多い` : ''}`;
+              %>
+                <td aria-label="<%= label %>" title="<%= label %>">
+                  <% if (count > 0) { %>
+                    <span class="plan-member-icons" style="--plan-icon-count: <%= count %>;" aria-hidden="true">
+                      <% for (let slot = 0; slot < count; slot++) {
+                        const state = slot < planned ? (slot < done ? 'completed' : 'pending') : 'extra';
+                      %>
+                        <img src="/images/plan-<%= state %>.svg" alt="" width="48" height="48" />
+                      <% } %>
+                    </span>
+                  <% } else if (summary.inPeriod && !summary.hasPrevious) { %>
+                    <span class="plan-member-unavailable">実績 <%= done %>凸</span>
+                  <% } else { %><span aria-hidden="true">—</span><% } %>
+                </td>
+              <% }); %>
+            </tr>
+          </tbody>
+        <% }); %>
+      </table>
+      </div>
     <% } %>
-    <p>同じメンバー・同じボスの前日と本日を相殺した差分です。移動元候補は未消化分であり、移動先との対応は確定していません。</p>
   <% } %>
 </div>

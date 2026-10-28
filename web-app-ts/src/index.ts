@@ -360,6 +360,7 @@ import {
   listCharacters,
   normalizeCharacterName,
   refreshCharacterCache,
+  resolveCharacterImageUrl,
   renameCharacter,
   setCharacterImageKey,
   uploadCharaImage
@@ -503,6 +504,7 @@ app.get('/clan-plan', ensureDiscordServerLinked, async (req, res) => {
     res.render('clan-plan', {
       ...getAuthViewData(req), pageTitle: 'プラン', currentPage: 'clan-plan',
       data, summary: buildClanPlan(data.bossHistories, data.members, data.clan.bosslaps, data.baseDate, data.startDate, data.endDate),
+      bossImageUrls: data.bossNames.map(name => resolveCharacterImageUrl(name)),
       loadError: ''
     });
   } catch (error) {

@@ -26,11 +26,13 @@ export function buildClanPlan(histories: History[], members: { memberid: string;
   const attacks = selectMainAttacks(histories.filter(r => String(r.day) >= start && String(r.day) <= end && String(r.day) <= today));
   const count = (day: string, boss: number, member?: string) => attacks.filter(r => r.day === day && r.boss === boss && (member === undefined || r.memberid === member)).length;
   const ids = [...new Set([...members.map(m => m.memberid), ...attacks.map(r => r.memberid).filter((id): id is string => !!id)])];
-  const movement = ids.map(id => {
-    const from = Array.from({ length: 5 }, (_, i) => Math.max(0, count(yesterday, i + 1, id) - count(today, i + 1, id)));
-    const to = Array.from({ length: 5 }, (_, i) => Math.max(0, count(today, i + 1, id) - count(yesterday, i + 1, id)));
-    return { name: members.find(m => m.memberid === id)?.name || id, from, to };
-  }).filter(m => m.to.some(n => n > 0));
+  const memberPlans = ids.map(id => ({
+    memberid: id,
+    name: members.find(m => m.memberid === id)?.name || id,
+    planned: Array.from({ length: 5 }, (_, i) => count(yesterday, i + 1, id)),
+    done: Array.from({ length: 5 }, (_, i) => count(today, i + 1, id))
+  }));
+  const predictableMembers = memberPlans.filter(m => !m.done.some((done, i) => done > m.planned[i]));
   const bosses = Array.from({ length: 5 }, (_, i) => {
     const boss = i + 1;
     const lap = laps[i];
@@ -39,7 +41,7 @@ export function buildClanPlan(histories: History[], members: { memberid: string;
     const average = lap > 23 && completed > 0 ? completed / (lap - 23) : null;
     const planned = count(yesterday, boss);
     const done = count(today, boss);
-    const remaining = planned - done;
+    const remaining = predictableMembers.reduce((total, m) => total + Math.max(0, m.planned[i] - m.done[i]), 0);
     let landing: { lap: number; attacks: number } | null = null;
     if (inPeriod && today > start && average && remaining > 0) {
       const total = current + remaining;
@@ -48,5 +50,5 @@ export function buildClanPlan(histories: History[], members: { memberid: string;
     }
     return { boss, lap, current, average, planned, done, remaining, landing };
   });
-  return { bosses, movement: inPeriod && today > start ? movement : [], inPeriod, hasPrevious: inPeriod && today > start };
+  return { bosses, memberPlans, inPeriod, hasPrevious: inPeriod && today > start };
 }
