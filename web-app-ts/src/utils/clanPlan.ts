@@ -3,7 +3,7 @@ type History = {
   sortie: number; sortiecount?: number; boss: number; attacklap: number | null; overtime: number;
 };
 
-export function selectMainAttacks(histories: History[]): History[] {
+function selectMainAttacksWithoutLapFilter(histories: History[]): History[] {
   const groups = new Map<string, History[]>();
   for (const row of histories) {
     const key = JSON.stringify([row.clanid, row.day, row.memberid, row.sortie]);
@@ -14,8 +14,12 @@ export function selectMainAttacks(histories: History[]): History[] {
     const selected = sorted.find(r => r.sortiecount === 2)
       || sorted.find(r => r.sortiecount === 1 && r.overtime > 0 && r.overtime <= 50)
       || sorted.find(r => r.sortiecount === 1 && r.overtime === 0);
-    return selected && selected.attacklap !== null && selected.attacklap >= 23 ? [selected] : [];
+    return selected ? [selected] : [];
   });
+}
+
+export function selectMainAttacks(histories: History[]): History[] {
+  return selectMainAttacksWithoutLapFilter(histories).filter(r => r.attacklap !== null && r.attacklap >= 23);
 }
 
 export function buildClanPlan(histories: History[], members: { memberid: string; name: string }[], laps: number[], today: string, start: string, end: string) {
@@ -23,7 +27,10 @@ export function buildClanPlan(histories: History[], members: { memberid: string;
   previous.setUTCDate(previous.getUTCDate() - 1);
   const yesterday = previous.toISOString().slice(0, 10);
   const inPeriod = !!start && !!end && today >= start && today <= end;
-  const attacks = selectMainAttacks(histories.filter(r => String(r.day) >= start && String(r.day) <= end && String(r.day) <= today));
+  const allAttacks = selectMainAttacksWithoutLapFilter(histories.filter(r => String(r.day) >= start && String(r.day) <= end && String(r.day) <= today));
+  const attacks = allAttacks.filter(r => r.attacklap !== null && r.attacklap >= 23);
+  const previousAttacks = allAttacks.filter(r => r.day === yesterday).length;
+  const completedAttacks = allAttacks.filter(r => r.day === today).length;
   const count = (day: string, boss: number, member?: string) => attacks.filter(r => r.day === day && r.boss === boss && (member === undefined || r.memberid === member)).length;
   const ids = [...new Set([...members.map(m => m.memberid), ...attacks.map(r => r.memberid).filter((id): id is string => !!id)])];
   const memberPlans = ids.map(id => ({
@@ -50,5 +57,5 @@ export function buildClanPlan(histories: History[], members: { memberid: string;
     }
     return { boss, lap, current, average, planned, done, remaining, landing };
   });
-  return { bosses, memberPlans, inPeriod, hasPrevious: inPeriod && today > start };
+  return { bosses, memberPlans, previousAttacks, completedAttacks, inPeriod, hasPrevious: inPeriod && today > start };
 }

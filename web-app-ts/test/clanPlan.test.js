@@ -85,6 +85,8 @@ const planData = {
   bossNames: ['とても長いボス名'.repeat(8), 'Two', '', 'Four', '<Five>']
 };
 const planSummary = {
+  previousAttacks: 30,
+  completedAttacks: 25,
   inPeriod: true,
   hasPrevious: true,
   memberPlans: [{ memberid: 'm', name: 'Member', planned: [1, 0, 2, 3, 0], done: [1, 1, 1, 3, 0] }],
@@ -208,6 +210,8 @@ test('completed members sort last stably and get gray rows based on all actual c
 test('remaining total puts unknown on a separate line and hides only zero or unavailable unknown', async () => {
   const summary = {
     ...planSummary,
+    previousAttacks: 60,
+    completedAttacks: 14,
     bosses: planSummary.bosses.map((b, i) => ({
       ...b, planned: i === 0 ? 60 : 0, done: i === 0 ? 14 : 0, remaining: i === 0 ? 34 : 0
     }))
@@ -217,7 +221,8 @@ test('remaining total puts unknown on a separate line and hides only zero or una
   assert.match(await renderPlan(), /class="plan-unknown is-empty" aria-hidden="true">\(不明:0凸\)/);
   assert.doesNotMatch(await renderPlan({ ...summary, hasPrevious: false }), /class="plan-unknown"/);
   const negative = summaryRows(await renderPlan({
-    ...summary, bosses: summary.bosses.map(b => ({ ...b, planned: 0, done: 1, remaining: 0 }))
+    ...summary, previousAttacks: 0, completedAttacks: 5,
+    bosses: summary.bosses.map(b => ({ ...b, planned: 0, done: 1, remaining: 0 }))
   }));
   assert.match(negative[5], /\(不明:-5凸\)/);
 });
@@ -297,13 +302,35 @@ test('member table shows idle members, escapes names and distinguishes unavailab
 
 test('plan totals sum unrounded averages and preserve zero counts', async () => {
   const rows = summaryRows(await renderPlan({
-    ...planSummary,
+    ...planSummary, previousAttacks: 0, completedAttacks: 0,
     bosses: planSummary.bosses.map(b => ({ ...b, average: 3.25, planned: 0, done: 0, remaining: 0 }))
   }));
   assert.deepEqual(cellText(rows[1]), [...Array(5).fill('3.3凸'), '16.3凸']);
   for (const index of [3, 4, 5]) {
     assert.deepEqual(cellText(rows[index]), Array(6).fill('0凸'));
   }
+});
+
+test('previous and current totals include early laps without counting carry-over twice', async () => {
+  const members = [{ memberid: 'm', name: 'Member' }, { memberid: 'idle', name: 'Idle' }];
+  const histories = [
+    row({ attacklap: 22 }),
+    row({ id: 2, day: '2026-10-25', attacklap: 22, sortiecount: 1, overtime: 60 }),
+    row({ id: 3, day: '2026-10-25', attacklap: 23, sortiecount: 1, overtime: 0, boss: 2 }),
+    row({ id: 4, day: '2026-10-25', attacklap: 22, sortie: 2 }),
+    row({ id: 5, day: '2026-10-25', attacklap: 23, sortie: 3, sortiecount: 1, overtime: 60 })
+  ];
+  const result = buildClanPlan(histories, members, [24, 24, 24, 24, 24],
+    '2026-10-25', '2026-10-24', '2026-10-29');
+  assert.equal(result.previousAttacks, 1);
+  assert.equal(result.completedAttacks, 2);
+  assert.equal(result.bosses.reduce((sum, b) => sum + b.done, 0), 1);
+  assert.equal(result.bosses.reduce((sum, b) => sum + b.planned, 0), 0);
+  assert.equal(result.bosses.reduce((sum, b) => sum + b.remaining, 0), 0);
+  assert.match(summaryRows(await renderPlan(result))[5], /\(不明:-1凸\)/);
+  const empty = buildClanPlan([], [], [23, 23, 23, 23, 23], '2026-10-25', '2026-10-24', '2026-10-29');
+  assert.equal(empty.previousAttacks, 0);
+  assert.equal(empty.completedAttacks, 0);
 });
 
 test('plan load errors still show the retry link without a summary table', async () => {

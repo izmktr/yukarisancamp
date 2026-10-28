@@ -14,7 +14,7 @@
         done: total.done + b.done,
         remaining: total.remaining + b.remaining
       }), { average: 0, planned: 0, done: 0, remaining: 0 });
-      const unknown = totals.planned - totals.done - totals.remaining;
+      const unknown = summary.previousAttacks - summary.completedAttacks - totals.remaining;
     %>
     <table class="plan-summary-table">
       <caption>ボスごとの進行状況</caption>
@@ -75,7 +75,7 @@
         </tr>
       </tbody>
     </table>
-    <p>平均は今開催の23周目から各ボスの現在周回の直前までを集計。残り見込みは、赤チェック（予定超過）がないメンバーの未消化予定だけを集計します。不明は前日合計−（本日合計＋残り見込み合計）です。予想着地は本凸数からの概算です。</p>
+    <p>平均は今開催の23周目から各ボスの現在周回の直前までを集計。残り見込みは、赤チェック（予定超過）がないメンバーの未消化予定だけを集計します。不明は前日の本凸数−（当日の消化済み本凸＋残り見込み合計）です。不明の算出では前日・当日とも22周目以前を含め、負数になる場合もあります。予想着地は本凸数からの概算です。</p>
     <h3>メンバー</h3>
     <div id="plan-members-help" class="plan-member-legend">
       <span><img src="/images/plan-pending.svg" alt="" width="24" height="24" />未消化の予定</span>
