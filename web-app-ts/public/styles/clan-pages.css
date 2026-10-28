@@ -259,7 +259,7 @@
     .plan-summary-table th, .plan-summary-table td { padding: 8px 3px; }
     .plan-summary-table thead th:first-child { width: 5rem; }
     .plan-summary-table thead th:last-child { width: 6rem; }
-    .plan-boss-name { font-size: 0.6875rem; }
+    .plan-summary-table .plan-boss-name { display: none; }
     .plan-lap, .plan-attacks { display: block; }
 }
 .plan-members-scroll { overflow-x: auto; }

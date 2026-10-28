@@ -126,7 +126,7 @@ test('plan summary renders five boss columns, totals and all six metrics alongsi
   const html = await renderPlan();
   const rows = summaryRows(html);
   const summaryTable = html.match(/<table class="plan-summary-table">[\s\S]*?<\/table>/)[0];
-  assert.equal((summaryTable.match(/<th scope="col">/g) || []).length, 7);
+  assert.equal((summaryTable.match(/<th scope="col"(?=[ >])/g) || []).length, 7);
   assert.match(html, /<th scope="col">合計<\/th>\s*<\/tr>/);
   assert.equal(rows.length, 6);
   rows.forEach(rowHtml => assert.equal(cellText(rowHtml).length, 6));

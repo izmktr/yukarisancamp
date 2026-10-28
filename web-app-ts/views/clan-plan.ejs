@@ -23,7 +23,7 @@
           <th scope="col">項目</th>
           <% summary.bosses.forEach(b => { %>
             <% const bossImageUrl = bossImageUrls[b.boss - 1]; %>
-            <th scope="col">
+            <th scope="col" aria-label="<%= data.bossNames[b.boss - 1] || `ボス${b.boss}` %>">
               <span class="plan-boss-portrait">
                 <% if (bossImageUrl) { %>
                   <img class="plan-boss-image" src="<%= bossImageUrl %>" alt="" width="48" height="48" onerror="console.warn('ボス画像の読み込みに失敗しました', this.src); this.hidden = true; this.nextElementSibling.hidden = false;" />
