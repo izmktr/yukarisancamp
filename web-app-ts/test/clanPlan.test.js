@@ -3,6 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs');
+const vm = require('node:vm');
 const ejs = require('ejs');
 const { selectMainAttacks, buildClanPlan } = require('../src/utils/clanPlan');
 const row = (extra = {}) => ({ id: 1, clanid: 'c', memberid: 'm', day: '2026-10-24', sortie: 1, sortiecount: 2, boss: 1, attacklap: 23, overtime: 0, ...extra });
@@ -185,6 +186,53 @@ test('member plans include idle and unchanged members, keep identities and match
 
 const memberTable = html => html.match(/<table class="plan-members-table"[\s\S]*?<\/table>/)[0];
 
+test('boss buttons sort pending members first, keep completed members last and reset ties to initial order', async () => {
+  const html = await renderPlan();
+  const tableHtml = memberTable(html);
+  assert.equal((tableHtml.match(/class="plan-member-boss-sort"/g) || []).length, 5);
+  assert.doesNotMatch(tableHtml, /plan-boss-name/);
+  assert.match(tableHtml, /data-pending="true"/);
+  const createMember = (name, pending, complete = false) => ({
+    name,
+    rows: [{
+      classList: { contains: cls => cls === 'is-complete' && complete },
+      cells: [{}, ...pending.map(value => ({ dataset: { pending: String(value) } }))]
+    }]
+  });
+  const members = [
+    createMember('A', [true, false]),
+    createMember('B', [false, true]),
+    createMember('C', [true, true]),
+    createMember('Complete', [true, true], true)
+  ];
+  const order = members.slice();
+  const buttons = Array.from({ length: 2 }, (_, index) => {
+    const header = { setAttribute(key, value) { this[key] = value; } };
+    return {
+      dataset: { bossIndex: String(index) },
+      addEventListener(event, callback) { this.click = callback; },
+      setAttribute(key, value) { this[key] = value; },
+      closest: () => header
+    };
+  });
+  const table = {
+    tBodies: members,
+    querySelectorAll: () => buttons,
+    appendChild(body) { order.splice(order.indexOf(body), 1); order.push(body); }
+  };
+  const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
+  vm.runInNewContext(script, { document: { querySelector: () => table } });
+  buttons[1].click();
+  assert.deepEqual(order.map(m => m.name), ['B', 'C', 'A', 'Complete']);
+  assert.equal(buttons[1]['aria-pressed'], 'true');
+  assert.equal(buttons[1].closest()['aria-sort'], 'other');
+  buttons[0].click();
+  assert.deepEqual(order.map(m => m.name), ['A', 'C', 'B', 'Complete']);
+  assert.equal(buttons[1]['aria-pressed'], 'false');
+  buttons[0].click();
+  assert.deepEqual(order.map(m => m.name), ['A', 'C', 'B', 'Complete']);
+});
+
 test('completed members sort last stably and get gray rows based on all actual checks', async () => {
   const memberPlans = [
     { memberid: 'green', name: 'Green', planned: [1, 1, 1, 0, 0], done: [1, 1, 1, 0, 0] },
@@ -231,7 +279,7 @@ test('member table combines pending, completed and extra SVGs in one row per mem
   const table = memberTable(await renderPlan());
   assert.match(table, /<th scope="col">名前<\/th>/);
   for (let boss = 1; boss <= 5; boss++) {
-    assert.ok(table.includes(`>ボス${boss}</th>`));
+    assert.ok(table.includes(`data-boss-index="${boss - 1}"`));
   }
   assert.equal((table.match(/<tr class="plan-member-row\b/g) || []).length, 1);
   assert.equal((table.match(/<td\b/g) || []).length, 5);
@@ -342,15 +390,15 @@ test('plan load errors still show the retry link without a summary table', async
 
 test('plan boss portraits use registered URLs and numbered placeholders for missing images', async () => {
   const html = await renderPlan(planSummary, '', ['https://example.test/one.png', null, null, null, 'https://example.test/five.png']);
-  assert.equal((html.match(/<img class="plan-boss-image"/g) || []).length, 2);
+  assert.equal((html.match(/<img class="plan-boss-image"/g) || []).length, 4);
   assert.doesNotMatch(html, /plan-boss-number/);
   assert.match(html, /src="https:\/\/example.test\/one.png" alt=""/);
   assert.match(html, /src="https:\/\/example.test\/five.png" alt=""/);
-  assert.equal((html.match(/class="plan-boss-image-missing" hidden/g) || []).length, 2);
+  assert.equal((html.match(/class="plan-boss-image-missing" hidden/g) || []).length, 4);
   assert.match(html, /class="plan-boss-image-missing"\s+title="画像がありません">ボス2/);
   assert.match(html, /this.hidden = true; this.nextElementSibling.hidden = false;/);
   assert.match(html, new RegExp(planData.bossNames[0]));
   const withoutImages = await renderPlan();
   assert.doesNotMatch(withoutImages, /<img class="plan-boss-image"/);
-  assert.equal((withoutImages.match(/class="plan-boss-image-missing"/g) || []).length, 5);
+  assert.equal((withoutImages.match(/class="plan-boss-image-missing"/g) || []).length, 10);
 });

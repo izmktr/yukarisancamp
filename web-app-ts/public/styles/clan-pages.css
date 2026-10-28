@@ -268,6 +268,8 @@
 .plan-members-table thead th { background: #f6f8fb; color: #3d4666; font-weight: 600; border-bottom: 1px solid var(--clan-border); }
 .plan-members-table thead th:first-child { width: 10rem; }
 .plan-members-table tbody th { text-align: left; }
+.plan-member-boss-sort { display: block; width: 100%; padding: 4px; border: 2px solid transparent; border-radius: 8px; background: transparent; cursor: pointer; }
+.plan-member-boss-sort:hover, .plan-member-boss-sort[aria-pressed="true"] { background: #e9edf5; border-color: var(--clan-accent); }
 .plan-members-table tbody + tbody tr:first-child > * { border-top: 1px solid var(--clan-border); }
 .plan-members-table .plan-member-row.is-complete > * { background: #e9edf2; }
 .plan-member-name { display: block; }

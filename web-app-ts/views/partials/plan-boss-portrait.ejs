@@ -1,0 +1,6 @@
+<span class="plan-boss-portrait">
+  <% if (imageUrl) { %>
+    <img class="plan-boss-image" src="<%= imageUrl %>" alt="" width="48" height="48" onerror="console.warn('ボス画像の読み込みに失敗しました', this.src); this.hidden = true; this.nextElementSibling.hidden = false;" />
+  <% } %>
+  <span class="plan-boss-image-missing" <%= imageUrl ? 'hidden' : '' %> title="画像がありません">ボス<%= boss %></span>
+</span>

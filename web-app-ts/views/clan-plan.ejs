@@ -24,12 +24,7 @@
           <% summary.bosses.forEach(b => { %>
             <% const bossImageUrl = bossImageUrls[b.boss - 1]; %>
             <th scope="col" aria-label="<%= data.bossNames[b.boss - 1] || `ボス${b.boss}` %>">
-              <span class="plan-boss-portrait">
-                <% if (bossImageUrl) { %>
-                  <img class="plan-boss-image" src="<%= bossImageUrl %>" alt="" width="48" height="48" onerror="console.warn('ボス画像の読み込みに失敗しました', this.src); this.hidden = true; this.nextElementSibling.hidden = false;" />
-                <% } %>
-                <span class="plan-boss-image-missing" <%= bossImageUrl ? 'hidden' : '' %> title="画像がありません">ボス<%= b.boss %></span>
-              </span>
+              <%- include('partials/plan-boss-portrait', { imageUrl: bossImageUrl, boss: b.boss }) %>
               <% if (data.bossNames[b.boss - 1]) { %>
                 <span class="plan-boss-name"><%= data.bossNames[b.boss - 1] %></span>
               <% } %>
@@ -87,7 +82,13 @@
     <% if (!summary.memberPlans.length) { %><p>メンバーがいません。</p><% } else { %>
       <div class="plan-members-scroll" role="region" aria-label="メンバーごとの予定と実績" tabindex="0">
       <table class="plan-members-table" aria-label="メンバーごとの予定と実績" aria-describedby="plan-members-help">
-        <thead><tr><th scope="col">名前</th><% summary.bosses.forEach(b => { %><th scope="col" title="<%= data.bossNames[b.boss - 1] || `ボス${b.boss}` %>">ボス<%= b.boss %></th><% }); %></tr></thead>
+        <thead><tr><th scope="col">名前</th><% summary.bosses.forEach(b => { %>
+          <th scope="col" aria-sort="none">
+            <button type="button" class="plan-member-boss-sort" data-boss-index="<%= b.boss - 1 %>" aria-pressed="false" aria-label="<%= data.bossNames[b.boss - 1] || `ボス${b.boss}` %>の未消化予定があるメンバーを上に表示">
+              <%- include('partials/plan-boss-portrait', { imageUrl: bossImageUrls[b.boss - 1], boss: b.boss }) %>
+            </button>
+          </th>
+        <% }); %></tr></thead>
         <%
           const sortedMemberPlans = summary.memberPlans
             .map(m => ({ ...m, isComplete: summary.inPeriod && m.done.reduce((total, n) => total + n, 0) >= 3 }))
@@ -103,7 +104,7 @@
                 const extra = summary.hasPrevious ? Math.max(0, done - planned) : 0;
                 const label = `${summary.hasPrevious ? `予定 ${planned}凸` : '予定 算出不可'}、${summary.inPeriod ? `実績 ${done}凸` : '実績 算出不可'}${extra > 0 ? `、予定より${extra}凸多い` : ''}`;
               %>
-                <td aria-label="<%= label %>" title="<%= label %>">
+                <td data-pending="<%= summary.hasPrevious && planned > done ? 'true' : 'false' %>" aria-label="<%= label %>" title="<%= label %>">
                   <% if (count > 0) { %>
                     <span class="plan-member-icons" style="--plan-icon-count: <%= count %>;" aria-hidden="true">
                       <% for (let slot = 0; slot < count; slot++) {
@@ -122,6 +123,31 @@
         <% }); %>
       </table>
       </div>
+      <p>ボス画像をクリックすると、そのボスの未消化予定があるメンバーを上に表示します。3凸済みのメンバーは常に一番下です。</p>
+      <script>
+        (() => {
+          const table = document.querySelector('.plan-members-table');
+          const members = Array.from(table.tBodies);
+          const buttons = Array.from(table.querySelectorAll('.plan-member-boss-sort'));
+          buttons.forEach(button => {
+            button.addEventListener('click', () => {
+              const bossIndex = Number(button.dataset.bossIndex);
+              const priority = body => {
+                const row = body.rows[0];
+                if (row.classList.contains('is-complete')) return 2;
+                return row.cells[bossIndex + 1].dataset.pending === 'true' ? 0 : 1;
+              };
+              members.slice().sort((a, b) => priority(a) - priority(b))
+                .forEach(body => table.appendChild(body));
+              buttons.forEach(candidate => {
+                const selected = candidate === button;
+                candidate.setAttribute('aria-pressed', String(selected));
+                candidate.closest('th').setAttribute('aria-sort', selected ? 'other' : 'none');
+              });
+            });
+          });
+        })();
+      </script>
     <% } %>
   <% } %>
 </div>
