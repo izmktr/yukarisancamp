@@ -8,11 +8,19 @@
             .map((member) => Number(member.attackboss))
             .filter((attackBoss) => Number.isInteger(attackBoss) && attackBoss >= 1 && attackBoss <= 5)))
             .sort((left, right) => left - right);
+        const attackingBossNumbers = Array.from(new Set(allMembers
+            .map((member) => Number(member.attackboss))
+            .filter((attackBoss) => Number.isInteger(attackBoss) && attackBoss >= 1 && attackBoss <= 5)));
     %>
-    <label class="clan-show-all-active-toggle">
-        <input id="clan-show-all-active-checkbox" type="checkbox" />
-        すべての攻撃中を表示
-    </label>
+    <div class="clan-active-panel-filters" role="group" aria-label="ボス表示">
+        <button type="button" class="clan-active-panel-filter" data-panel-mode="all" aria-pressed="false">すべて</button>
+        <button type="button" class="clan-active-panel-filter" data-panel-mode="attacking" aria-pressed="false">
+            攻撃中 <span class="clan-active-panel-filter-count"><%= attackingBossNumbers.length %></span>
+        </button>
+        <button type="button" class="clan-active-panel-filter" data-panel-mode="self" aria-pressed="true">
+            自分 <span class="clan-active-panel-filter-count"><%= operableAttackingBossNumbers.length %></span>
+        </button>
+    </div>
 
     <% [...operableAttackingBossNumbers, ...[1, 2, 3, 4, 5].filter((bossNumber) => !operableAttackingBossNumbers.includes(bossNumber))].forEach((bossNumber) => { %>
         <%
@@ -28,13 +36,13 @@
                 : []);
             const operableAttackersForBoss = operableMembers.filter((member) => Number(member.attackboss) === bossNumber);
             const hpOperator = operableAttackersForBoss[0] || operableMembers[0];
-            const isOtherBoss = !operableAttackingBossNumbers.includes(bossNumber);
+            const isSelfAttacking = operableAttackingBossNumbers.includes(bossNumber);
             const currentBossLap = data.clan && Array.isArray(data.clan.bosslaps) ? data.clan.bosslaps[activeBossIndex] : null;
             const bossLapDisplay = activeAttackMembers.length > 0 && Number.isInteger(Number(activeAttackMembers[0].attacklap))
                 ? Number(activeAttackMembers[0].attacklap)
                 : currentBossLap != null && Number.isInteger(Number(currentBossLap)) ? Number(currentBossLap) : '-';
         %>
-        <section class="clan-attack-active-panel <%= isOtherBoss ? 'clan-attack-active-panel-other' : '' %>" aria-labelledby="clan-attack-active-title-<%= bossNumber %>" data-boss-index="<%= bossNumber %>" data-boss-hp="<%= Number.isFinite(activeBossHpValue) ? Math.trunc(activeBossHpValue) : '' %>" data-acting-member-id="<%= hpOperator ? hpOperator.memberid : '' %>" <%- isOtherBoss ? 'style="display: none;"' : '' %>>
+        <section class="clan-attack-active-panel <%= isSelfAttacking ? 'clan-attack-active-panel-self' : '' %>" aria-labelledby="clan-attack-active-title-<%= bossNumber %>" data-boss-index="<%= bossNumber %>" data-is-attacking="<%= activeAttackMembers.length > 0 %>" data-is-self-attacking="<%= isSelfAttacking %>" data-boss-hp="<%= Number.isFinite(activeBossHpValue) ? Math.trunc(activeBossHpValue) : '' %>" data-acting-member-id="<%= hpOperator ? hpOperator.memberid : '' %>" <%- isSelfAttacking ? '' : 'style="display: none;"' %>>
             <div class="clan-attack-active-header">
                 <h2 id="clan-attack-active-title-<%= bossNumber %>"><%= activeAttackMembers.length > 0 ? '攻撃中' : 'ボス情報' %></h2>
                 <div class="clan-active-boss-hp-block" data-boss-index="<%= bossNumber %>">
@@ -523,13 +531,13 @@
     }
 
     function initializeClanActivePanelsVisibility() {
-        const checkbox = document.getElementById('clan-show-all-active-checkbox');
-        const otherPanels = Array.from(document.querySelectorAll('.clan-attack-active-panel-other'));
-        if (!checkbox || otherPanels.length === 0) {
+        const buttons = Array.from(document.querySelectorAll('.clan-active-panel-filter'));
+        const panels = Array.from(document.querySelectorAll('.clan-attack-active-panel'));
+        if (buttons.length === 0) {
             return;
         }
 
-        const cookieKey = 'clanShowAllActive';
+        const cookieKey = 'clanActivePanelMode';
         const readCookieValue = (key) => {
             const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             const match = document.cookie.match(new RegExp(`(?:^|; )${escapedKey}=([^;]*)`));
@@ -539,19 +547,35 @@
             document.cookie = `${key}=${encodeURIComponent(value)}; max-age=31536000; path=/; samesite=lax`;
         };
 
-        const applyVisibility = () => {
-            const shouldShow = checkbox.checked;
-            otherPanels.forEach((panel) => {
-                panel.style.display = shouldShow ? '' : 'none';
+        const applyMode = (mode) => {
+            panels.forEach((panel) => {
+                const isVisible = mode === 'all'
+                    || (mode === 'attacking' && panel.dataset.isAttacking === 'true')
+                    || (mode === 'self' && panel.dataset.isSelfAttacking === 'true');
+                panel.style.display = isVisible ? '' : 'none';
+            });
+            buttons.forEach((button) => {
+                button.setAttribute('aria-pressed', String(button.dataset.panelMode === mode));
             });
         };
 
-        checkbox.checked = readCookieValue(cookieKey) === '1';
-        checkbox.addEventListener('change', () => {
-            writeCookieValue(cookieKey, checkbox.checked ? '1' : '0');
-            applyVisibility();
+        const savedMode = readCookieValue(cookieKey);
+        const legacyShowAll = readCookieValue('clanShowAllActive') === '1';
+        const initialMode = ['all', 'attacking', 'self'].includes(savedMode)
+            ? savedMode
+            : legacyShowAll ? 'all' : 'self';
+
+        buttons.forEach((button) => {
+            button.addEventListener('click', () => {
+                const mode = button.dataset.panelMode;
+                if (!['all', 'attacking', 'self'].includes(mode)) {
+                    return;
+                }
+                writeCookieValue(cookieKey, mode);
+                applyMode(mode);
+            });
         });
-        applyVisibility();
+        applyMode(initialMode);
     }
 
     function initializeClanActiveBossHpEditor() {

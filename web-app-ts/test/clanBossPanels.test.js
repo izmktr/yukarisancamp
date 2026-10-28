@@ -30,33 +30,40 @@ const render = overrides => ejs.renderFile(templatePath, {
   clanPageData: { ...baseData, ...overrides }
 });
 
-test('idle clan still renders the toggle and all five editable boss panels', async () => {
+test('idle clan renders all three filters and five editable boss panels', async () => {
   const html = await render();
-  assert.match(html, /id="clan-show-all-active-checkbox"/);
+  assert.match(html, /data-panel-mode="all" aria-pressed="false">すべて<\/button>/);
+  assert.match(html, /data-panel-mode="attacking" aria-pressed="false">\s*攻撃中 <span class="clan-active-panel-filter-count">0<\/span>/);
+  assert.match(html, /data-panel-mode="self" aria-pressed="true">\s*自分 <span class="clan-active-panel-filter-count">0<\/span>/);
   assert.equal((html.match(/<section class="clan-attack-active-panel /g) || []).length, 5);
-  assert.equal((html.match(/clan-attack-active-panel-other"/g) || []).length, 5);
+  assert.equal((html.match(/data-is-attacking="false"/g) || []).length, 5);
+  assert.equal((html.match(/data-is-self-attacking="false"/g) || []).length, 5);
   assert.equal((html.match(/<button[^>]*clan-active-boss-hp-edit-button/g) || []).length, 5);
   assert.equal((html.match(/攻撃中のメンバーはいません。/g) || []).length, 5);
   assert.match(html, /data-boss-index="3">未設定<\/span>/);
   assert.doesNotMatch(html, /<div class="clan-operate-panel"/);
 });
 
-test('self attacks stay visible; other and idle bosses use the toggle without duplicate panels', async () => {
+test('self and other attacks are distinguished for the panel filters', async () => {
   const attacker = { ...self, attackboss: 2, attacklap: 23, overattack: 0 };
   const peer = { memberid: '300', name: 'Peer', attackboss: 4, attacklap: 24 };
   const html = await render({ members: [attacker, peer], operableMembers: [attacker] });
   assert.equal((html.match(/<section class="clan-attack-active-panel /g) || []).length, 5);
-  const ownPanel = html.match(/<section class="clan-attack-active-panel "[\s\S]*?<\/section>/)[0];
+  assert.match(html, /data-panel-mode="attacking" aria-pressed="false">\s*攻撃中 <span class="clan-active-panel-filter-count">2<\/span>/);
+  assert.match(html, /data-panel-mode="self" aria-pressed="true">\s*自分 <span class="clan-active-panel-filter-count">1<\/span>/);
+  const ownPanel = html.match(/<section class="clan-attack-active-panel clan-attack-active-panel-self"[\s\S]*?<\/section>/)[0];
   assert.match(ownPanel, /data-boss-index="2"/);
+  assert.match(ownPanel, /data-is-attacking="true" data-is-self-attacking="true"/);
   assert.doesNotMatch(ownPanel, /<section[^>]*style="display: none;"/);
   assert.match(ownPanel, /class="clan-operate-panel"/);
   assert.match(html, /data-name="Peer"/);
-  assert.equal((html.match(/clan-attack-active-panel-other"/g) || []).length, 4);
+  assert.match(html, /data-boss-index="4" data-is-attacking="true" data-is-self-attacking="false"/);
+  assert.equal((html.match(/clan-attack-active-panel-self"/g) || []).length, 1);
 });
 
 test('view-only clan users see all boss information but no HP edit buttons', async () => {
   const html = await render({ members: [], operableMembers: [] });
-  assert.match(html, /id="clan-show-all-active-checkbox"/);
+  assert.match(html, /data-panel-mode="self" aria-pressed="true"/);
   assert.equal((html.match(/<section class="clan-attack-active-panel /g) || []).length, 5);
   assert.doesNotMatch(html, /<button[^>]*clan-active-boss-hp-edit-button/);
 });

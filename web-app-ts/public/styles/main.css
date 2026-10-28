@@ -532,13 +532,66 @@ body {
     font-size: 1.05rem;
 }
 
-.clan-show-all-active-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
+.clan-active-panel-filters {
+    display: flex;
+    width: fit-content;
+    max-width: 100%;
     margin: 0.35rem 0 0.85rem;
+    overflow: hidden;
+    border: 1px solid #cbd4e4;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.clan-active-panel-filter {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 0.55rem 0.9rem;
+    border: 0;
+    border-right: 1px solid #cbd4e4;
+    background: transparent;
     color: #26334d;
+    font: inherit;
     font-weight: 600;
+    cursor: pointer;
+}
+
+.clan-active-panel-filter:last-child {
+    border-right: 0;
+}
+
+.clan-active-panel-filter[aria-pressed="true"] {
+    background: #5268b4;
+    color: #fff;
+}
+
+.clan-active-panel-filter-count {
+    min-width: 1.35rem;
+    padding: 0.05rem 0.35rem;
+    border-radius: 999px;
+    background: rgb(38 51 77 / 10%);
+    font-size: 0.8em;
+    line-height: 1.4;
+    text-align: center;
+}
+
+.clan-active-panel-filter[aria-pressed="true"] .clan-active-panel-filter-count {
+    background: rgb(255 255 255 / 22%);
+}
+
+@media (max-width: 480px) {
+    .clan-active-panel-filters {
+        display: grid;
+        width: 100%;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .clan-active-panel-filter {
+        padding-inline: 0.4rem;
+    }
 }
 
 .clan-attack-active-panel {
