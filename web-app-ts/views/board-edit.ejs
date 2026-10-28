@@ -1031,14 +1031,14 @@
 
         function parseImportedTimelog(text) {
             const SETON = '〇○◯oO';
-            const SETOFF = '×xXーｰ－-―—−';
+            const SETOFF = '×✕xXーｰ－-―—−';
             const AUTOON = 'on|オン';
             const AUTOOFF = 'off|オフ';
             let previousSeconds = null;
             const rows = [];
             const setOffPattern = new RegExp(`[${SETOFF.replace(/-/g, '\\-')}]`);
             const symbolPattern = new RegExp(`[${SETON}${SETOFF.replace(/-/g, '\\-')}]`, 'g');
-            const autoPattern = new RegExp(`(?:\\bauto\\s+)?(?:\\b(?:${AUTOON}|${AUTOOFF})\\b|(?:${AUTOON}|${AUTOOFF}))[。．.、,，！!]*\\s*$`, 'i');
+            const autoPattern = new RegExp(`(?:(?:\\bauto\\s*|オート\\s*)?)(?:\\b(?:${AUTOON}|${AUTOOFF})\\b|(?:${AUTOON}|${AUTOOFF}))[。．.、,，！!]*\\s*$`, 'i');
             const autoOnPattern = new RegExp(`^(?:${AUTOON})$`, 'i');
             const normalizedText = text.replace(/[０-９]/g, (digit) => String.fromCharCode(digit.charCodeAt(0) - 0xFEE0)).replace(/：/g, ':');
 
@@ -1047,6 +1047,7 @@
                     return;
                 }
 
+                const isFirstRow = rows.length === 0;
                 const timeMatch = rawLine.match(/^\s*(\d{1,2}):(\d{2})/);
                 const line = (timeMatch ? rawLine.slice(timeMatch[0].length) : rawLine)
                     .replace(/（[^）]*）|\([^)]*\)|\[[^\]]*\]/g, ' ');
@@ -1057,11 +1058,15 @@
                 let error = '';
                 let seconds = null;
 
-                if (timeMatch) {
+                if (isFirstRow && !timeMatch) {
+                    seconds = 90;
+                } else if (timeMatch) {
                     seconds = (Number(timeMatch[1]) * 60) + Number(timeMatch[2]);
                     if (Number(timeMatch[2]) >= 60) {
                         error = '時刻の秒は00〜59で指定してください';
                         seconds = null;
+                    } else if (isFirstRow && seconds !== 90) {
+                        error = '1行目の時刻は1:30または省略してください';
                     } else if (previousSeconds !== null && seconds > previousSeconds) {
                         warnings.push('時刻が前の行より進んでいます。入力順・時刻を保ちます');
                     }
@@ -1086,10 +1091,14 @@
                     .replace(/^[\s　:：|｜,，、]+|[\s　:：|｜,，、]+$/g, '')
                     .trim();
                 const statuses = statusMatches.map((match) => !setOffPattern.test(match[0]));
-                const autoValue = autoMatch ? autoMatch[0].replace(/^auto\s+/i, '').replace(/[。．.、,，！!]/g, '').trim() : '';
+                const autoValue = autoMatch ? autoMatch[0].replace(/^(?:auto|オート)\s*/i, '').replace(/[。．.、,，！!]/g, '').trim() : '';
                 const auto = autoMatch
                     ? autoOnPattern.test(autoValue)
                     : null;
+                const resolvedAuto = isFirstRow && auto === null ? false : auto;
+                if (isFirstRow && auto === null) {
+                    warnings.push('1行目のAutoが省略されたためOFFとして扱います');
+                }
 
                 rows.push({
                     lineNumber: index + 1,
@@ -1097,12 +1106,12 @@
                     seconds,
                     name: rawName,
                     statuses,
-                    auto,
+                    auto: resolvedAuto,
                     warnings,
                     error,
                     candidateIndex: null,
                     candidateResolved: false,
-                    isBattleStart: seconds === 90
+                    isBattleStart: isFirstRow
                 });
             });
 
