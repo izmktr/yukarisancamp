@@ -131,7 +131,7 @@
                     <div class="board-timelog-preview-table-wrap">
                         <table class="board-timelog-preview-table">
                             <thead>
-                                <tr><th>行</th><th>時刻</th><th>入力名</th><th>UB行の対応</th><th>5項目</th><th>Auto</th><th>確認事項</th></tr>
+                                <tr><th>行</th><th>時刻</th><th>入力名</th><th>コメント</th><th>UB行の対応</th><th>5項目</th><th>Auto</th><th>確認事項</th></tr>
                             </thead>
                             <tbody id="board-timelog-preview-body"></tbody>
                         </table>
@@ -1111,6 +1111,11 @@
                     error,
                     candidateIndex: null,
                     candidateResolved: false,
+                    rawLine: rawLine.trim(),
+                    addComment: false,
+                    ignoreError: false,
+                    errors: [],
+                    isIgnored: false,
                     isBattleStart: isFirstRow
                 });
             });
@@ -1126,14 +1131,47 @@
                     index,
                     name,
                     seconds: parseTimeToSeconds(getRowTimeText(row)),
-                    isBattleStart: row.dataset.isBattleStart === 'true'
+                    isBattleStart: row.dataset.isBattleStart === 'true',
+                    isBoss: row.dataset.ubIsPartyChar !== 'true'
+                        && row.dataset.isBattleStart !== 'true'
+                        && row.dataset.isBattleEnd !== 'true'
                 };
             }).filter((candidate) => candidate.name);
+        }
+
+        const BOSS_NAME_ALIASES = ['ボス', 'boss', '敵ub', '敵', 'ボスub', 'bossub', 'エネミー', 'enemy', 'enemyub', 'ボス行動', '敵行動'];
+
+        function isBossAliasName(name) {
+            const normalized = normalizeImportedName(name);
+            if (!normalized) {
+                return false;
+            }
+            return BOSS_NAME_ALIASES.some((alias) => {
+                const normalizedAlias = normalizeImportedName(alias);
+                return normalized === normalizedAlias
+                    || importedNameSimilarity(normalized, normalizedAlias) >= 0.7;
+            });
         }
 
         function findTimelogCandidate(row, candidates) {
             if (row.isBattleStart || !row.name) {
                 return null;
+            }
+
+            if (isBossAliasName(row.name)) {
+                const bossCandidates = candidates
+                    .map((candidate, index) => ({ candidate, index }))
+                    .filter(({ candidate }) => candidate.isBoss)
+                    .map(({ candidate, index }) => ({
+                        index,
+                        timeDifference: row.seconds === null || candidate.seconds === null
+                            ? Number.POSITIVE_INFINITY
+                            : Math.abs(row.seconds - candidate.seconds)
+                    }))
+                    .sort((left, right) => left.timeDifference - right.timeDifference);
+                if (bossCandidates.length > 0) {
+                    return bossCandidates[0].index;
+                }
             }
 
             const ranked = candidates.map((candidate, index) => ({
@@ -1193,11 +1231,22 @@
                 timeCell.textContent = row.time || '—';
                 const inputNameCell = document.createElement('td');
                 inputNameCell.textContent = row.name || '（名前なし）';
+                const commentCell = document.createElement('td');
+                const commentLabel = document.createElement('label');
+                const commentCheckbox = document.createElement('input');
+                commentCheckbox.type = 'checkbox';
+                commentCheckbox.checked = row.addComment;
+                commentCheckbox.setAttribute('aria-label', `${row.lineNumber}行目の入力行をコメントに追加`);
+                commentCheckbox.addEventListener('change', () => {
+                    row.addComment = commentCheckbox.checked;
+                });
+                commentLabel.append(commentCheckbox, ' 追加');
+                commentCell.appendChild(commentLabel);
                 const nameCell = document.createElement('td');
                 const statusCell = document.createElement('td');
                 statusCell.textContent = row.statuses.map((isSet) => isSet ? '○' : '×').join('');
                 const autoCell = document.createElement('td');
-                autoCell.textContent = row.auto === null ? '前の状態を維持' : row.auto ? 'ON' : 'OFF';
+                autoCell.textContent = row.auto === null ? '↓' : row.auto ? 'ON' : 'OFF';
                 const warningCell = document.createElement('td');
 
                 if (row.isBattleStart) {
@@ -1209,7 +1258,7 @@
                     select.setAttribute('aria-label', `${row.lineNumber}行目のUB名`);
                     const ignoreOption = document.createElement('option');
                     ignoreOption.value = 'ignore';
-                    ignoreOption.textContent = 'このキャラ名を無視';
+                    ignoreOption.textContent = 'この行を無視';
                     select.appendChild(ignoreOption);
 
                     candidates.forEach((candidate, index) => {
@@ -1225,6 +1274,9 @@
                     select.value = row.candidateIndex === null ? 'ignore' : String(row.candidateIndex);
                     select.addEventListener('change', () => {
                         row.candidateIndex = select.value === 'ignore' ? null : Number(select.value);
+                        if (select.value === 'ignore') {
+                            row.ignoreError = true;
+                        }
                         renderTimelogPreview(rows, candidates);
                     });
                     nameCell.appendChild(select);
@@ -1235,6 +1287,17 @@
                     warningLine.textContent = warning;
                     warningCell.appendChild(warningLine);
                 });
+                row.errors = [];
+                if (row.error) {
+                    row.errors.push(row.error);
+                }
+                if (row.candidateIndex !== null && (assignmentCounts.get(row.candidateIndex) || 0) > 1) {
+                    row.errors.push('複数の入力行が同じ既存行に対応しています。候補を変更してください');
+                }
+                if (!row.isBattleStart && row.candidateIndex === null) {
+                    row.errors.push('対応する行がありません');
+                }
+                row.isIgnored = row.errors.length > 0 && row.ignoreError;
                 if (row.candidateIndex !== null) {
                     const candidate = candidates[row.candidateIndex];
                     if (candidate && candidate.seconds !== null && row.seconds !== null && candidate.seconds !== row.seconds) {
@@ -1255,13 +1318,31 @@
                     errorLine.textContent = row.error;
                     warningCell.appendChild(errorLine);
                 }
+                if (row.errors.length > 0) {
+                    if (!row.isBattleStart && row.candidateIndex === null) {
+                        const noMatch = document.createElement('div');
+                        noMatch.className = 'board-timelog-error';
+                        noMatch.textContent = '対応する行がありません';
+                        warningCell.appendChild(noMatch);
+                    }
+                    const ignoreLabel = document.createElement('label');
+                    const ignoreCheckbox = document.createElement('input');
+                    ignoreCheckbox.type = 'checkbox';
+                    ignoreCheckbox.checked = row.ignoreError;
+                    ignoreCheckbox.addEventListener('change', () => {
+                        row.ignoreError = ignoreCheckbox.checked;
+                        renderTimelogPreview(rows, candidates);
+                    });
+                    ignoreLabel.append(ignoreCheckbox, ' エラー無視');
+                    warningCell.appendChild(ignoreLabel);
+                }
 
-                tableRow.append(lineCell, timeCell, inputNameCell, nameCell, statusCell, autoCell, warningCell);
+                tableRow.append(lineCell, timeCell, inputNameCell, commentCell, nameCell, statusCell, autoCell, warningCell);
                 body.appendChild(tableRow);
             });
 
             preview.hidden = false;
-            const hasErrors = rows.some((row) => row.error) || hasDuplicateAssignments;
+            const hasErrors = rows.some((row) => row.errors.length > 0 && !row.isIgnored);
             applyButton.disabled = hasErrors;
             status.textContent = hasErrors
                 ? '読み取れない行、または重複した対応があります。内容を修正してから反映してください。'
@@ -1276,13 +1357,30 @@
             }
 
             const desiredByRow = new Map();
+            const commentsByRow = new Map();
             rows.forEach((row) => {
                 if (row.candidateIndex === null) {
                     return;
                 }
                 const candidate = candidates[row.candidateIndex];
-                if (candidate) {
+                if (!candidate) {
+                    return;
+                }
+                const hasIgnoredError = row.errors.length > 0 && row.ignoreError;
+                if (!hasIgnoredError) {
                     desiredByRow.set(candidate.row, row);
+                }
+                const parts = [];
+                if (row.addComment && row.rawLine) {
+                    parts.push(row.rawLine);
+                }
+                if (hasIgnoredError) {
+                    parts.push(row.errors.join('\n'));
+                }
+                if (parts.length > 0) {
+                    const list = commentsByRow.get(candidate.row) || [];
+                    list.push(parts.join('\n'));
+                    commentsByRow.set(candidate.row, list);
                 }
             });
 
@@ -1334,6 +1432,24 @@
                 existingRow.dataset.activeIcons = JSON.stringify(activeIndexes);
                 if (autoIcon) {
                     existingRow.dataset.autoActive = isIconActive(autoIcon) ? 'true' : 'false';
+                }
+            });
+
+            commentsByRow.forEach((texts, targetRow) => {
+                let commentRow = getCommentRowFor(targetRow);
+                if (!commentRow) {
+                    commentRow = createCommentRow(targetRow);
+                    if (!commentRow) {
+                        return;
+                    }
+                    targetRow.insertAdjacentElement('afterend', commentRow);
+                    targetRow.classList.add('has-comment-row');
+                    setCommentButtonState(targetRow, true);
+                }
+                const commentInput = commentRow.querySelector('.ub-comment-input');
+                if (commentInput instanceof HTMLTextAreaElement) {
+                    commentInput.value = [commentInput.value, ...texts].filter((text) => text).join('\n');
+                    bindCommentInputAutoResize(commentInput);
                 }
             });
 
