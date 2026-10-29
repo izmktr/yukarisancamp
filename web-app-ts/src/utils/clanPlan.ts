@@ -1,6 +1,7 @@
 type History = {
   id: number; clanid?: string; memberid?: string; day?: string | number | null;
   sortie: number; sortiecount?: number; boss: number; attacklap: number | null; overtime: number;
+  damage?: number | null;
 };
 
 function selectMainAttacksWithoutLapFilter(histories: History[]): History[] {
@@ -37,7 +38,11 @@ export function buildClanPlan(histories: History[], members: { memberid: string;
     memberid: id,
     name: members.find(m => m.memberid === id)?.name || id,
     planned: Array.from({ length: 5 }, (_, i) => count(yesterday, i + 1, id)),
-    done: Array.from({ length: 5 }, (_, i) => count(today, i + 1, id))
+    done: Array.from({ length: 5 }, (_, i) => count(today, i + 1, id)),
+    maxDamage: Array.from({ length: 5 }, (_, i) => attacks.reduce<number | null>((max, attack) => {
+      if (attack.memberid !== id || attack.boss !== i + 1 || attack.damage == null) return max;
+      return max === null ? attack.damage : Math.max(max, attack.damage);
+    }, null))
   }));
   const predictableMembers = memberPlans.filter(m => !m.done.some((done, i) => done > m.planned[i]));
   const bosses = Array.from({ length: 5 }, (_, i) => {

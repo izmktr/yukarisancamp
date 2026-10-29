@@ -102,9 +102,12 @@
                 const planned = m.planned[i];
                 const count = summary.hasPrevious ? Math.max(planned, done) : 0;
                 const extra = summary.hasPrevious ? Math.max(0, done - planned) : 0;
-                const label = `${summary.hasPrevious ? `予定 ${planned}凸` : '予定 算出不可'}、${summary.inPeriod ? `実績 ${done}凸` : '実績 算出不可'}${extra > 0 ? `、予定より${extra}凸多い` : ''}`;
+                const maxDamage = m.maxDamage[i];
+                const damageText = maxDamage === null ? '-' : maxDamage.toLocaleString('ja-JP');
+                const label = `${summary.hasPrevious ? `予定 ${planned}凸` : '予定 算出不可'}、${summary.inPeriod ? `実績 ${done}凸` : '実績 算出不可'}${extra > 0 ? `、予定より${extra}凸多い` : ''}、最大ダメージ ${damageText}`;
               %>
                 <td data-pending="<%= summary.hasPrevious && planned > done ? 'true' : 'false' %>" aria-label="<%= label %>" title="<%= label %>">
+                  <div class="plan-member-status">
                   <% if (count > 0) { %>
                     <span class="plan-member-icons" style="--plan-icon-count: <%= count %>;" aria-hidden="true">
                       <% for (let slot = 0; slot < count; slot++) {
@@ -116,6 +119,8 @@
                   <% } else if (summary.inPeriod && !summary.hasPrevious) { %>
                     <span class="plan-member-unavailable">実績 <%= done %>凸</span>
                   <% } else { %><span aria-hidden="true">—</span><% } %>
+                  </div>
+                  <span class="plan-member-damage" aria-hidden="true"><%= damageText %></span>
                 </td>
               <% }); %>
             </tr>
@@ -124,6 +129,7 @@
       </table>
       </div>
       <p>ボス画像をクリックすると、そのボスの未消化予定があるメンバーを上に表示します。3凸済みのメンバーは常に一番下です。</p>
+      <p>チェックアイコンの下は、今開催の対象日までの23周目以降の本凸の最大ダメージです。記録がない場合は半角の「-」を表示します。</p>
       <script>
         (() => {
           const table = document.querySelector('.plan-members-table');

@@ -30,7 +30,7 @@ test('member plans preserve counts but exclude all pending attacks of members wi
     row({ id: 4, day: '2026-10-25' }), row({ id: 5, day: '2026-10-25', sortie: 2, boss: 3 })];
   const result = buildClanPlan(histories, [{ memberid: 'm', name: 'Member' }], [24, 24, 24, 24, 24], '2026-10-25', '2026-10-24', '2026-10-29');
   assert.deepEqual(result.memberPlans[0], {
-    memberid: 'm', name: 'Member', planned: [2, 0, 0, 0, 1], done: [1, 0, 1, 0, 0]
+    memberid: 'm', name: 'Member', planned: [2, 0, 0, 0, 1], done: [1, 0, 1, 0, 0], maxDamage: Array(5).fill(null)
   });
   assert.deepEqual(result.bosses.map(b => b.remaining), Array(5).fill(0));
   assert.equal(result.bosses[2].landing, null);
@@ -99,7 +99,12 @@ const planSummary = {
 };
 const renderPlan = (summary = planSummary, loadError = '', bossImageUrls = [], data = planData) => ejs.renderFile(
   path.join(__dirname, '../views/clan-plan.ejs'),
-  { data, summary, loadError, bossImageUrls }
+  {
+    data, summary: summary && {
+      ...summary,
+      memberPlans: summary.memberPlans.map(m => ({ maxDamage: Array(5).fill(null), ...m }))
+    }, loadError, bossImageUrls
+  }
 );
 const summaryRows = html => {
   const table = html.match(/<table class="plan-summary-table">[\s\S]*?<\/table>/)[0];
@@ -185,6 +190,32 @@ test('member plans include idle and unchanged members, keep identities and match
 });
 
 const memberTable = html => html.match(/<table class="plan-members-table"[\s\S]*?<\/table>/)[0];
+
+test('maximum damage is scoped to member, boss, current event and selected main attacks from lap 23', async () => {
+  const histories = [
+    row({ damage: 10000000 }),
+    row({ id: 2, sortie: 2, damage: 23456789 }),
+    row({ id: 3, sortie: 3, damage: null }),
+    row({ id: 4, day: '2026-10-25', attacklap: 22, damage: 999999999 }),
+    row({ id: 5, day: '2026-10-25', sortie: 2, boss: 2, damage: 0 }),
+    row({ id: 6, day: '2026-10-25', sortie: 3, boss: 3, sortiecount: 1, overtime: 60, damage: 999999999 }),
+    row({ id: 7, day: '2026-10-25', sortie: 3, boss: 4, sortiecount: 1, overtime: 0, damage: 34567890 }),
+    row({ id: 8, day: '2026-10-23', damage: 999999999 }),
+    row({ id: 9, day: '2026-10-26', damage: 999999999 }),
+    row({ id: 10, memberid: 'peer', damage: 76543210 })
+  ];
+  const members = [{ memberid: 'm', name: 'Member' }, { memberid: 'peer', name: 'Peer' }, { memberid: 'idle', name: 'Idle' }];
+  const result = buildClanPlan(histories, members, [24, 24, 24, 24, 24], '2026-10-25', '2026-10-24', '2026-10-29');
+  assert.deepEqual(result.memberPlans[0].maxDamage, [23456789, 0, null, 34567890, null]);
+  assert.deepEqual(result.memberPlans[1].maxDamage, [76543210, null, null, null, null]);
+  assert.deepEqual(result.memberPlans[2].maxDamage, Array(5).fill(null));
+  const table = memberTable(await renderPlan(result));
+  const member = table.match(/<tbody aria-label="Member">[\s\S]*?<\/tbody>/)[0];
+  assert.deepEqual([...member.matchAll(/class="plan-member-damage" aria-hidden="true">([^<]+)</g)].map(m => m[1]),
+    ['23,456,789', '0', '-', '34,567,890', '-']);
+  assert.match(member, /最大ダメージ 23,456,789/);
+  assert.match(member, /class="plan-member-status"[\s\S]*?class="plan-member-damage"/);
+});
 
 test('boss buttons sort pending members first, keep completed members last and reset ties to initial order', async () => {
   const html = await renderPlan();
@@ -288,9 +319,9 @@ test('member table combines pending, completed and extra SVGs in one row per mem
   assert.deepEqual(cells.map(states), [
     ['completed'], ['extra'], ['completed', 'pending'], ['completed', 'completed', 'completed'], []
   ]);
-  assert.match(cells[4], /aria-label="予定 0凸、実績 0凸"/);
+  assert.match(cells[4], /aria-label="予定 0凸、実績 0凸、最大ダメージ -"/);
   assert.match(cells[4], />—<\/span>/);
-  assert.match(cells[1], /aria-label="予定 0凸、実績 1凸、予定より1凸多い"/);
+  assert.match(cells[1], /aria-label="予定 0凸、実績 1凸、予定より1凸多い、最大ダメージ -"/);
   assert.match(cells[3], /--plan-icon-count: 3;/);
   assert.doesNotMatch(table, /plan-member-excess/);
   assert.doesNotMatch(table, /移動元|移動先/);
@@ -337,9 +368,9 @@ test('member table shows idle members, escapes names and distinguishes unavailab
     assert.equal((unavailable.match(/aria-label="予定 算出不可、/g) || []).length, 10);
     assert.doesNotMatch(unavailable, /src="\/images\/plan-/);
     if (!inPeriod) {
-      assert.equal((unavailable.match(/aria-label="予定 算出不可、実績 算出不可"/g) || []).length, 10);
+      assert.equal((unavailable.match(/aria-label="予定 算出不可、実績 算出不可、最大ダメージ -"/g) || []).length, 10);
     } else {
-      assert.match(unavailable, /aria-label="予定 算出不可、実績 1凸"/);
+      assert.match(unavailable, /aria-label="予定 算出不可、実績 1凸、最大ダメージ -"/);
       assert.match(unavailable, /class="plan-member-unavailable">実績 1凸/);
     }
   }

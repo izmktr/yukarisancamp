@@ -274,7 +274,9 @@
 .plan-members-table .plan-member-row.is-complete > * { background: #e9edf2; }
 .plan-member-name { display: block; }
 .plan-member-name { overflow-wrap: anywhere; }
-.plan-members-table td { white-space: nowrap; }
+.plan-members-table td { white-space: nowrap; vertical-align: top; }
+.plan-member-status { display: flex; align-items: center; justify-content: center; min-height: 48px; }
+.plan-member-damage { display: block; margin-top: 2px; font-size: 0.75rem; line-height: 1.4; font-variant-numeric: tabular-nums; white-space: normal; overflow-wrap: anywhere; }
 .plan-member-icons { display: grid; grid-template-columns: repeat(var(--plan-icon-count), minmax(0, 1fr)); width: calc(var(--plan-icon-count) * 48px); max-width: 100%; margin: 0 auto; align-items: center; }
 .plan-member-icons img { display: block; width: 100%; height: auto; }
 .plan-member-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 0.85rem; margin-bottom: 16px; }
